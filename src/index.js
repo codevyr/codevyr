@@ -1,5 +1,11 @@
 "use strict";
 
+import _ from 'lodash';
+import $ from 'jquery';
+import GoldenLayout from 'golden-layout';
+import * as monaco from 'monaco-editor';
+
+
 var config = {
     content: [{
         type: 'row',
@@ -32,6 +38,9 @@ var config = {
 };
 
 var layout = new GoldenLayout(config);
+require("golden-layout/src/css/goldenlayout-base.css");
+require("golden-layout/src/css/goldenlayout-dark-theme.css");
+
 // const graphqlClient = new ApolloClient({
 //   uri: window.location.origin
 // });
@@ -69,40 +78,34 @@ var queryEditor = {
 };
 
 layout.registerComponent('queryEditor', function(container, componentState) {
-    container.getElement().html('<div id="query-editor-container" style="width:100%;height:50%;border:1px solid grey"></div>');
-
-    require.config({paths: {'vs': '../node_modules/monaco-editor/min/vs'}});
-
-    require(['vs/editor/editor.main'], function() {
-        var editor = monaco.editor.create(document.getElementById('query-editor-container'), {
-            value: [
-                'test',
-            ].join('\n'),
-            language: 'graphql'
-        });
-
-        editor.addAction({
-            id: 'sendQuery',
-            label: 'Send query',
-
-            keybindings: [
-                monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-            ],
-
-            precondition: null,
-            keybindingContext: null,
-            contextMenuGroupId: 'commands',
-
-            contextMenuOrder: 1.5,
-
-            run: function(ed) {
-                queryEditor.sendQuery();
-            }
-        });
-
-        queryEditor.setEditor(editor);
+    var editor = monaco.editor.create(container.getElement()[0], {
+        value: [
+            'test',
+        ].join('\n'),
+        language: 'graphql',
+        automaticLayout: true
     });
 
+    editor.addAction({
+        id: 'sendQuery',
+        label: 'Send query',
+
+        keybindings: [
+            monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+        ],
+
+        precondition: null,
+        keybindingContext: null,
+        contextMenuGroupId: 'commands',
+
+        contextMenuOrder: 1.5,
+
+        run: function(ed) {
+            queryEditor.sendQuery();
+        }
+    });
+
+    queryEditor.setEditor(editor);
 });
 layout.registerComponent('cfgViewer', function(container, componentState) {
     container.getElement().html('<div id="cfg-viewer"></div>');

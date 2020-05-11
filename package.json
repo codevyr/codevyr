@@ -2,9 +2,11 @@
   "name": "ask",
   "version": "0.0.1",
   "description": "Frontend for ask server",
-  "main": "index.js",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "watch": "webpack --watch",
+    "build": "webpack"
   },
   "author": "Maksym Planeta",
   "license": "ISC",
@@ -14,7 +16,16 @@
     "golden-layout": "^1.5.9",
     "graphql": "^15.0.0",
     "jquery": "^3.5.1",
+    "lodash": "^4.17.15",
     "monaco-editor": "^0.20.0",
-    "underscore": "^1.10.2"
+    "monaco-editor-webpack-plugin": "^1.9.0"
+  },
+  "devDependencies": {
+    "babel-loader": "^8.1.0",
+    "css-loader": "^3.5.3",
+    "file-loader": "^6.0.0",
+    "style-loader": "^1.2.1",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.11"
   }
 }
