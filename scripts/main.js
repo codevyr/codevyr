@@ -25,13 +25,16 @@ var config = {
             }]
         }, {
             type: 'component',
-            componentName: 'testComponent',
+            componentName: 'cfgViewer',
             componentState: { label: 'D'}
         }]
     }]
 };
 
 var layout = new GoldenLayout(config);
+// const graphqlClient = new ApolloClient({
+//   uri: window.location.origin
+// });
 
 var queryEditor = {
     _editor: null,
@@ -50,14 +53,23 @@ var queryEditor = {
 
         console.log("Hello sths world");
         return this._editor.getValue();
+    },
+
+    sendQuery: function() {
+        var query = this.getText();
+        console.log(query);
+        // client
+        //     .query({
+        //         query: query,
+        //     })
+        //     .then(result =>
+        //           $("#cfg-viewer").text(result)
+        //          );
     }
 };
 
 layout.registerComponent('queryEditor', function(container, componentState) {
-    container.getElement().html('<div id="query-editor-container" style="width:100%;height:50%;border:1px solid grey"></div>'+
-                                '<p id="query-editor-container-text">' +
-                                                            queryEditor.getText() +
-                                                            '</p>' );
+    container.getElement().html('<div id="query-editor-container" style="width:100%;height:50%;border:1px solid grey"></div>');
 
     require.config({paths: {'vs': '../node_modules/monaco-editor/min/vs'}});
 
@@ -84,14 +96,16 @@ layout.registerComponent('queryEditor', function(container, componentState) {
             contextMenuOrder: 1.5,
 
             run: function(ed) {
-                $("#query-editor-container-text").text(queryEditor.getText());
-                return null;
+                queryEditor.sendQuery();
             }
         });
 
         queryEditor.setEditor(editor);
     });
 
+});
+layout.registerComponent('cfgViewer', function(container, componentState) {
+    container.getElement().html('<div id="cfg-viewer"></div>');
 });
 layout.registerComponent('testComponent', function(container, componentState) {
     container.getElement().html('<h2>' + componentState.label + '</h2>');
