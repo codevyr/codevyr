@@ -4,7 +4,9 @@ import _ from 'lodash';
 import $ from 'jquery';
 import GoldenLayout from 'golden-layout';
 import * as monaco from 'monaco-editor';
+import ApolloClient from 'apollo-boost';
 
+import { gql } from "apollo-boost";
 
 var config = {
     content: [{
@@ -41,9 +43,9 @@ var layout = new GoldenLayout(config);
 require("golden-layout/src/css/goldenlayout-base.css");
 require("golden-layout/src/css/goldenlayout-dark-theme.css");
 
-// const graphqlClient = new ApolloClient({
-//   uri: window.location.origin
-// });
+const graphqlClient = new ApolloClient({
+  uri: window.location.origin + '/graphql'
+});
 
 var queryEditor = {
     _editor: null,
@@ -67,13 +69,15 @@ var queryEditor = {
     sendQuery: function() {
         var query = this.getText();
         console.log(query);
-        // client
-        //     .query({
-        //         query: query,
-        //     })
-        //     .then(result =>
-        //           $("#cfg-viewer").text(result)
-        //          );
+        graphqlClient
+            .query({
+                query: gql(query),
+            })
+            .then(result => {
+                console.log(result);
+                var resp = JSON.stringify(result.data, null, 2);
+                $("#cfg-viewer").text(resp);
+            });
     }
 };
 
