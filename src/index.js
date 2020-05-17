@@ -116,6 +116,24 @@ var cfgViewer = {
         return links;
     },
 
+    /**
+     * Finds the root (the topmost) element of the request.
+     */
+    getRoot: function(data) {
+        if (data["name"] !== undefined) {
+            return data["name"];
+        } else {
+            return _.transform(data, _.bind(function(res, o) {
+                var root = this.getRoot(o);
+                if (root != undefined) {
+                    res.push(root);
+                    return false;
+                };
+                return true;
+            }, this), [undefined]).slice(-1)[0];
+        }
+    },
+
     updateCfg: function(data) {
         // const links = data.links.map(d => Object.create(d));
         // const nodes = data.nodes.map(d => Object.create(d));
@@ -123,15 +141,15 @@ var cfgViewer = {
         var links = Array.from(this.getLinks(data, new Set()));
 
         var nodes = Array.from(new Set([...links.map(l => l.data.source), ...links.map(l => l.data.target)])).map(i => {return {data: {id: i}};});
+        var root = this.getRoot(data);
 
         this.jq().css({
             width: 600,
             height: 600,
-            display: "block",
-            transform: "rotate(180)"
+            display: "block"
         });
 
-        console.log(links, nodes);
+        console.log(links, nodes, root);
         var cy = cytoscape({
             container: this.jq(),
             elements: [
@@ -164,7 +182,7 @@ var cfgViewer = {
                 rows: true,
                 avoidOverlap: true,
                 maximal: true,
-                roots: ["restore_wait_other_tasks"],
+                roots: [root],
                 nodeDimensionsIncludeLabels: true,
                 transform: (node, pos) => ({x: pos.x, y: -pos.y}),
             }
