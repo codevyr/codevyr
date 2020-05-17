@@ -5,7 +5,8 @@ import $ from 'jquery';
 import GoldenLayout from 'golden-layout';
 import * as monaco from 'monaco-editor';
 import ApolloClient from 'apollo-boost';
-import * as d3 from "d3";
+
+import cytoscape from "cytoscape";
 
 import { gql } from "apollo-boost";
 
@@ -82,39 +83,6 @@ var queryEditor = {
     }
 };
 
-function linkArc(d) {
-  const r = Math.hypot(d.target.x - d.source.x, d.target.y - d.source.y);
-  return `
-    M${d.source.x},${d.source.y}
-    A${r},${r} 0 0,1 ${d.target.x},${d.target.y}
-  `;
-}
-
-var drag = simulation => {
-
-    function dragstarted(d) {
-        if (!d3.event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-    }
-
-    function dragged(d) {
-        d.fx = d3.event.x;
-        d.fy = d3.event.y;
-    }
-
-    function dragended(d) {
-        if (!d3.event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-    }
-
-    return d3.drag()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended);
-}
-
 var cfgViewer = {
     name: 'cfgViwer',
     id: 'cfg-viewer',
@@ -132,8 +100,11 @@ var cfgViewer = {
                     var node_from = elem["name"];
 
                     links.add({
-                        source: node_from,
-                        target: node_to,
+                        data: {
+                            id: node_from + '-' + node_to,
+                            source: node_from,
+                            target: node_to,
+                        }
                     });
                     this.getLinks(elem, links);
                 }, this));
@@ -149,83 +120,54 @@ var cfgViewer = {
         // const links = data.links.map(d => Object.create(d));
         // const nodes = data.nodes.map(d => Object.create(d));
 
-        var links = Array.from(this.getLinks(data, new Set())).map(function(l) { return {source: l.source, target: l.target}; });;
+        var links = Array.from(this.getLinks(data, new Set()));
 
-        var nodes = Array.from(new Set([...links.map(l => l.source), ...links.map(l => l.target)])).map(i => {return {id: i};});
+        var nodes = Array.from(new Set([...links.map(l => l.data.source), ...links.map(l => l.data.target)])).map(i => {return {data: {id: i}};});
+
+        this.jq().css({
+            width: 600,
+            height: 600,
+            display: "block",
+            transform: "rotate(180)"
+        });
 
         console.log(links, nodes);
-
-        var width = 600,
-            height = 600;
-
-        d3.select('#' + this.id).selectAll('svg').remove();
-
-        var svg = d3
-            .select('#' + this.id)
-            .append("svg:svg")
-            .attr('width', width)
-            .attr('height', height);
-        var g = svg
-            .append("g")
-            .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
-
-        var simulation = d3.forceSimulation(nodes)
-            .force("charge", d3.forceManyBody().strength(-400))
-            .force("link", d3.forceLink(links).distance(200).strength(1).iterations(10).id(function(d) {return d.id; }))
-            .force("x", d3.forceX())
-            .force("y", d3.forceY())
-            .stop();
-
-        var loading = svg.append("text")
-            .attr("dy", "0.35em")
-            .attr("text-anchor", "middle")
-            .attr("font-family", "sans-serif")
-            .attr("font-size", 10)
-            .text("Simulating. One moment please…");
-
-        // Use a timeout to allow the rest of the page to load first.
-        d3.timeout(function() {
-            loading.remove();
-
-            // See https://github.com/d3/d3-force/blob/master/README.md#simulation_tick
-            for (var i = 0, n = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay())); i < n; ++i) {
-                simulation.tick();
-            }
-
-            g.append("g")
-                .attr("stroke", "#000")
-                .attr("stroke-width", 1.5)
-                .selectAll("line")
-                .data(Array.from(links))
-                .enter().append("line")
-                .attr("x1", function(d) { return d.source.x; })
-                .attr("y1", function(d) { return d.source.y; })
-                .attr("x2", function(d) { return d.target.x; })
-                .attr("y2", function(d) { return d.target.y; });
-
-            console.log(nodes);
-            var node = g
-                .selectAll(null)
-                .data(nodes)
-                .enter()
-                .append("g")
-                .each(d => console.log(d))
-                .attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
-
-            var circle = node
-                .append('circle')
-                .attr('stroke', 'black')
-                .attr('fill', 'white')
-                .attr("r", 10);
-
-            node
-                .append('text')
-                .text(
-                    function(d) {
-                        console.log(d);
-                        return d.id;
+        var cy = cytoscape({
+            container: this.jq(),
+            elements: [
+                ...nodes,
+                ...links,
+            ],
+            style: [ // the stylesheet for the graph
+                {
+                    selector: 'node',
+                    style: {
+                        'background-color': '#666',
+                        'label': 'data(id)'
                     }
-                );
+                },
+
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': 3,
+                        'line-color': '#ccc',
+                        'target-arrow-color': '#ccc',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier'
+                    }
+                }
+            ],
+
+            layout: {
+                name: 'breadthfirst',
+                rows: true,
+                avoidOverlap: true,
+                maximal: true,
+                roots: ["restore_wait_other_tasks"],
+                nodeDimensionsIncludeLabels: true,
+                transform: (node, pos) => ({x: pos.x, y: -pos.y}),
+            }
         });
     }
 };
