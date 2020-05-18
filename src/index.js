@@ -91,29 +91,35 @@ var cfgViewer = {
         return $('#' + this.id);
     },
 
-    getLinks: function(data, links) {
+    _getLinksNodes: function(data, links, nodes) {
         if (data["name"] !== undefined) {
             var node_to = data["name"];
+
+            nodes.add({
+                name: data["name"]
+            });
 
             if (data["parents"] !== undefined) {
                 _.map(data["parents"], _.bind(function(elem) {
                     var node_from = elem["name"];
 
                     links.add({
-                        data: {
-                            id: node_from + '-' + node_to,
-                            source: node_from,
-                            target: node_to,
-                        }
+                        source: node_from,
+                        target: node_to,
                     });
-                    this.getLinks(elem, links);
+                    this._getLinksNodes(elem, links, nodes);
                 }, this));
             }
         } else {
-            _.map(data, _.bind(this.getLinks, this, _, links));
+            _.map(data, _.bind(this._getLinksNodes, this, _, links, nodes));
         }
 
-        return links;
+        return [links, nodes];
+    },
+
+    getLinksNodes: function(data) {
+        var [links, nodes] = this._getLinksNodes(data, new Set(), new Set());
+        return [Array.from(links), Array.from(nodes)];
     },
 
     /**
@@ -138,9 +144,8 @@ var cfgViewer = {
         // const links = data.links.map(d => Object.create(d));
         // const nodes = data.nodes.map(d => Object.create(d));
 
-        var links = Array.from(this.getLinks(data, new Set()));
+        var [links, nodes] = this.getLinksNodes(data);
 
-        var nodes = Array.from(new Set([...links.map(l => l.data.source), ...links.map(l => l.data.target)])).map(i => {return {data: {id: i}};});
         var root = this.getRoot(data);
 
         this.jq().css({
@@ -153,8 +158,24 @@ var cfgViewer = {
         var cy = cytoscape({
             container: this.jq(),
             elements: [
-                ...nodes,
-                ...links,
+                ...nodes.map(function(n) {
+                    return {
+                        group: 'nodes',
+                        data: {
+                            id: n.name
+                        }
+                    };
+                }),
+                ...links.map(function(l) {
+                    return {
+                        group: 'edges',
+                        data: {
+                            id: l.source + '-' + l.target,
+                            source: l.source,
+                            target: l.target
+                        }
+                    };
+                })
             ],
             style: [ // the stylesheet for the graph
                 {
