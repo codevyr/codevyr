@@ -190,8 +190,8 @@ var cfgViewer = {
                     selector: 'edge',
                     style: {
                         'width': 3,
-                        'line-color': '#ccc',
-                        'target-arrow-color': '#ccc',
+                        'line-color': '#bbb',
+                        'target-arrow-color': '#555',
                         'target-arrow-shape': 'triangle',
                         'curve-style': 'bezier'
                     }
