@@ -21,17 +21,8 @@ var config = {
         }, {
             type: 'column',
             content: [{
-                type: 'component',
-                componentName: 'testComponent',
-                componentState: {
-                    label: 'B'
-                }
-            }, {
-                type: 'component',
-                componentName: 'testComponent',
-                componentState: {
-                    label: 'C'
-                }
+                type: 'stack',
+                id: 'codeViewer',
             }]
         }, {
             type: 'component',
@@ -48,6 +39,46 @@ require("golden-layout/src/css/goldenlayout-light-theme.css");
 const graphqlClient = new ApolloClient({
   uri: window.location.origin + '/graphql'
 });
+
+const codeViewer = {
+    uri: window.location.origin + '/source',
+    openFiles: new Map(),
+
+    getFile: function(filename) {
+        return $.post(this.uri + '/get', {
+            filename: filename
+        });
+    },
+
+    openFile: function(filename, start, end) {
+        if (this.openFiles.has(filename)) {
+            var item = layout.root.getItemsById(filename)[0];
+            layout.root
+                .getItemsById('codeViewer')[0]
+                .setActiveContentItem(item);
+            this.openFiles.get(filename).revealLines(start, end);
+        } else {
+            this.getFile(filename)
+                .done($.proxy(function(data) {
+                    layout.root
+                        .getItemsById('codeViewer')[0]
+                        .addChild({
+                            type: 'component',
+                            componentName: 'codeViewer',
+                            componentState: {
+                                ...data,
+                                start: start,
+                                end: end
+                            },
+                            id: filename
+                        });
+                }, this))
+                .fail(function(err) {
+                    console.log('Failed to fetch the file', err);
+                });
+        }
+    }
+};
 
 var queryEditor = {
     _editor: null,
@@ -96,7 +127,10 @@ var cfgViewer = {
             var node_to = data["name"];
 
             nodes.add({
-                name: data["name"]
+                name: data["name"],
+                filename: data["filename"],
+                start: data['range']['start']['line'],
+                end: data['range']['end']['line']
             });
 
             if (data["parents"] !== undefined) {
@@ -162,7 +196,8 @@ var cfgViewer = {
                     return {
                         group: 'nodes',
                         data: {
-                            id: n.name
+                            id: n.name,
+                            symbol: n
                         }
                     };
                 }),
@@ -208,6 +243,19 @@ var cfgViewer = {
                 transform: (node, pos) => ({x: pos.x, y: -pos.y}),
             }
         });
+
+        cy.nodes().on('tap', function(evt) {
+            var node = evt.target;
+            var symbol = node.data("symbol");
+            console.log('node', symbol);
+
+            codeViewer.openFile(symbol.filename, symbol.start, symbol.end);
+        });
+
+        cy.edges().on('tap', function(evt) {
+            var edge = evt.target;
+            console.log('edge', edge);
+        });
     }
 };
 
@@ -240,6 +288,17 @@ layout.registerComponent('queryEditor', function(container, componentState) {
     });
 
     queryEditor.setEditor(editor);
+});
+layout.registerComponent('codeViewer', function(container, componentState) {
+    container.setTitle(componentState.filename);
+    var editor = monaco.editor.create(container.getElement()[0], {
+        language: componentState.language,
+        automaticLayout: true,
+        value: componentState.contents
+    });
+    editor.revealLines(componentState.start, componentState.end);
+    console.log('set the editor the file', componentState);
+    codeViewer.openFiles.set(componentState.filename, editor);
 });
 layout.registerComponent('cfgViewer', function(container, componentState) {
     container.getElement().html('<div id="' + cfgViewer.id + '"></div>');
