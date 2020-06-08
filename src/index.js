@@ -5,6 +5,7 @@ import $ from 'jquery';
 import GoldenLayout from 'golden-layout';
 import * as monaco from 'monaco-editor';
 import ApolloClient from 'apollo-boost';
+import { visit } from 'graphql/language/visitor';
 
 import cytoscape from "cytoscape";
 
@@ -100,11 +101,95 @@ var queryEditor = {
     },
 
     sendQuery: function() {
-        var query = this.getText();
-        console.log(query);
+        // var parser = Parser;
+        // var gqlDoc = parser.Parser.parseValue(this.getText());
+        const LOC_FRAGMENT = `
+            fragment loc on Symbol {
+                name
+                filename
+                range {
+                    start {
+                        line
+                    }
+                    end {
+                        line
+                    }
+                }
+            }`;
+        var query = gql(this.getText() + LOC_FRAGMENT);
+
+        // Add selection sets to fields that don't have them
+        visit(query, {
+            Field: {
+                enter(node, key, parent, path) {
+                    // We add only to specific fields
+                    if (node.name.value !== 'parents') {
+                        return undefined;
+                    }
+
+                    if (typeof node.selectionSet !== 'undefined') {
+                        return undefined;
+                    }
+
+                    node.selectionSet = {
+                        kind: 'SelectionSet',
+                        selections: new Array()
+                    };
+
+                    return node;
+                }
+            }
+        });
+        visit(query, {
+            SelectionSet: {
+                enter(node, key, parent, path) {
+                    // Add location only to something that will return a symbol
+                    if (!(parent &&
+                          parent.kind === 'Field' &&
+                          (parent.name.value === 's' ||
+                           parent.name.value === 'parents')
+                         )) {
+                        return undefined;
+                    }
+
+                    // No changes if no selections
+                    const selections = node.selections;
+                    if (!selections) {
+                        return undefined;
+                    }
+
+                    // Skip if there is already something
+                    const skip = selections.some(selection => {
+                        return (selection.kind === 'Field' &&
+                                (selection.name.value === 'name' ||
+                                 selection.name.value === 'filename' ||
+                                 selection.name.value === 'range')
+                               );
+                    });
+                    if (skip) {
+                        return undefined;
+                    }
+
+                    const LOC_FRAGMENT = {
+                        kind: 'FragmentSpread',
+                        name: {
+                            kind: 'Name',
+                            value: 'loc'
+                        },
+                        directives: []
+                    };
+
+                    node.selections = [
+                        ...selections,
+                        LOC_FRAGMENT
+                    ];
+                    return node;
+                }
+            }
+        });
         graphqlClient
             .query({
-                query: gql(query),
+                query: query,
             })
             .then(result => {
                 console.log(result);
