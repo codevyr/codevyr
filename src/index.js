@@ -346,9 +346,17 @@ var cfgViewer = {
 
 layout.registerComponent('queryEditor', function(container, componentState) {
     var editor = monaco.editor.create(container.getElement()[0], {
-        value: [
-            'test',
-        ].join('\n'),
+        value: `{
+  s(name: "restore_wait_other_tasks") {
+      parents {
+      parents (nameFilter: "fork_with_pid") {
+          parents {
+              parents
+          }
+      }
+      }
+  }
+}`,
         language: 'graphql',
         automaticLayout: true
     });
