@@ -268,8 +268,8 @@ var cfgViewer = {
         var root = this.getRoot(data);
 
         this.jq().css({
-            width: 600,
-            height: 600,
+            width: "100%",
+            height: "100%",
             display: "block"
         });
 
@@ -301,19 +301,23 @@ var cfgViewer = {
                 {
                     selector: 'node',
                     style: {
-                        'background-color': '#666',
-                        'label': 'data(id)'
+                        'background-color': '#bbb',
+                        'label': 'data(id)',
+                        'font-size': 16
                     }
                 },
 
                 {
                     selector: 'edge',
                     style: {
-                        'width': 3,
+                        'width': 2,
                         'line-color': '#bbb',
-                        'target-arrow-color': '#555',
+                        'target-arrow-color': '#bbb',
+                        'border-color': 'black',
                         'target-arrow-shape': 'triangle',
-                        'curve-style': 'bezier'
+                        'curve-style': 'bezier',
+                        'target-arrow-shape': 'chevron',
+                        'arrow-scale': 2
                     }
                 }
             ],
@@ -324,7 +328,6 @@ var cfgViewer = {
                 avoidOverlap: true,
                 maximal: true,
                 roots: [root],
-                nodeDimensionsIncludeLabels: true,
                 transform: (node, pos) => ({x: pos.x, y: -pos.y}),
             }
         });
