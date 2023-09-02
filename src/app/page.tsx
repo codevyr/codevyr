@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import React from "react";
 import {Layout, Model, TabNode, IJsonModel} from 'flexlayout-react';
+import Editor from '@monaco-editor/react';
 
 var json : IJsonModel= {
   global: {"tabEnableFloat": true},
@@ -41,9 +42,10 @@ const model = Model.fromJson(json);
 
 const factory = (node: TabNode) => {
   const component = node.getComponent();
-  if (component === "tab1") {
-    return <div>Contents of Tab #1</div>;
-  } else if (component === "tab2") {
+  const name = node.getName();
+  if (name === "One") {
+    return <Editor height="90vh" defaultLanguage="javascript" defaultValue="// some comment" />;
+  } else if (name === "Two") {
     return <div>Contents of Tab #2</div>;
   }
   return null;
