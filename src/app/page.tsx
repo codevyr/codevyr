@@ -131,8 +131,7 @@ function GraphViewer({graph} : GraphProps) {
 }
 
 function GraphCode({graph} : GraphProps) {
-  return <>
-   </>;
+  return (<><ul>{graph.nodes.map(node => <li key={node.data.id}>{node.data.label}</li>)} </ul></>);
 }
 
 export default function Home() {
