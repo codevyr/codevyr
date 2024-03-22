@@ -1,13 +1,14 @@
 'use client';
 
 import Image from 'next/image'
-import React, { createRef, use } from "react";
+import React, { createRef, use, useRef } from "react";
 import { useCallback, useEffect, useState } from 'react';
 import { Layout, Model, TabNode, IJsonModel } from 'flexlayout-react';
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco, {editor} from 'monaco-editor';
 import {Uri} from 'monaco-editor/esm/vs/editor/editor.api';
 import CytoscapeComponent from 'react-cytoscapejs';
+import Cytoscape from 'cytoscape';
 
 var json: IJsonModel = {
   global: { "tabEnableFloat": true },
@@ -79,8 +80,10 @@ function EditorComponent({ query, setGraph }: EditorProps) {
       body: ed.getValue()
     }).then(response => response.json()
     ).then(data => {
-      // setGraph(data);
-      console.log(data);
+      setGraph({
+        nodes: data.nodes.map((node: string, index: number) => ({ data: { id: index, label: node } })),
+        edges: data.edges.map((edge: Array<number>) => ({ data: { source: edge[0], target: edge[1], label: edge[2] } }))
+      });
     });
   }, []);
 
@@ -96,26 +99,35 @@ function EditorComponent({ query, setGraph }: EditorProps) {
   return <Editor height="90vh" defaultLanguage="javascript" defaultValue={query} beforeMount={handleEditorWillMount} />;
 }
 
+interface Graph {
+  nodes: Array<{ data: { id: number, label: string } }>;
+  edges: Array<{ data: { source: number, target: number, label: string } }>;
+}
+
 interface GraphProps {
-  graph: string;
+  graph: Graph;
 }
 
 function GraphViewer({graph} : GraphProps) {
-  let cyRef = createRef<CytoscapeComponent>();
+  let cyRef = useRef(null);
 
-  const elements = [
-    { data: { id: 'one', label: 'Node 1' } },
-    { data: { id: 'two', label: 'Node 2' }},
-    { data: { source: 'one', target: 'two', label: 'Edge from Node1 to Node2' } }
-  ];
+  let layout = {
+    name: 'breadthfirst',
+    directed: true,
+    fit: true,
+    avoidOverlap: true,
+    nodeDimensionsIncludeLabels: true,
+    padding: 40
+  };
 
-  // useEffect(() => {
-  //   if (cyRef) {
-  //     console.log('cyRef', cyRef);
-  //   }
-  // }, [graph]);
+  useEffect(() => {
+    if (cyRef) {
+      console.log('cyRef is', cyRef.current);
+      cyRef.current.layout(layout).run();
+    }
+  }, [graph]);
 
-  return <CytoscapeComponent elements={elements} style={{ width: '100%', height: '100%' }} cy={(cy: any) => { cyRef = cy }} />;
+  return <CytoscapeComponent elements={CytoscapeComponent.normalizeElements(graph)} style={{ width: '100%', height: '100%' }} cy={(cy: any) => { cyRef.current = cy }} layout={layout}/>;
 }
 
 function GraphCode({graph} : GraphProps) {
