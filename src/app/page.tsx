@@ -5,8 +5,8 @@ import React, { createRef, use, useRef } from "react";
 import { useCallback, useEffect, useState } from 'react';
 import { Layout, Model, TabNode, IJsonModel } from 'flexlayout-react';
 import { Editor, Monaco } from '@monaco-editor/react';
-import monaco, {editor} from 'monaco-editor';
-import {Uri} from 'monaco-editor/esm/vs/editor/editor.api';
+import monaco, { editor } from 'monaco-editor';
+import { Uri } from 'monaco-editor/esm/vs/editor/editor.api';
 import CytoscapeComponent from 'react-cytoscapejs';
 import Cytoscape from 'cytoscape';
 
@@ -108,8 +108,8 @@ interface GraphProps {
   graph: Graph;
 }
 
-function GraphViewer({graph} : GraphProps) {
-  let cyRef = useRef(null);
+function GraphViewer({ graph }: GraphProps) {
+  let cyRef = useRef<Cytoscape.Core>(null);
 
   let layout = {
     name: 'breadthfirst',
@@ -121,22 +121,32 @@ function GraphViewer({graph} : GraphProps) {
   };
 
   useEffect(() => {
-    if (cyRef) {
+    if (cyRef.current) {
       console.log('cyRef is', cyRef.current);
       cyRef.current.layout(layout).run();
     }
   }, [graph]);
 
-  return <CytoscapeComponent elements={CytoscapeComponent.normalizeElements(graph)} style={{ width: '100%', height: '100%' }} cy={(cy: any) => { cyRef.current = cy }} layout={layout}/>;
+  function cytoscapeHandler(cy: Cytoscape.Core) {
+    cyRef.current = cy;
+
+    function on(event: string, handler: (event: any) => void) {
+      if (cyRef.current) {
+        cyRef.current.on(event, handler);
+      }
+    }
+  }
+
+  return <CytoscapeComponent elements={CytoscapeComponent.normalizeElements(graph)} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
 }
 
-function GraphCode({graph} : GraphProps) {
+function GraphCode({ graph }: GraphProps) {
   return (<><ul>{graph.nodes.map(node => <li key={node.data.id}>{node.data.label}</li>)} </ul></>);
 }
 
 export default function Home() {
   const [query, setQuery] = useState('"create_srq" {}');
-  const [graph, setGraph] = useState({"nodes": [], "edges": []});
+  const [graph, setGraph] = useState({ "nodes": [], "edges": [] });
 
   const factory = (node: TabNode) => {
     const component = node.getComponent();
@@ -146,7 +156,7 @@ export default function Home() {
     } else if (name === "graph-viewer") {
       return <GraphViewer graph={graph} />;
     } else {
-      return <GraphCode graph={graph}/>;
+      return <GraphCode graph={graph} />;
     }
   };
 
