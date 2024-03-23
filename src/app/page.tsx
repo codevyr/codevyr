@@ -64,10 +64,10 @@ const model = Model.fromJson(json);
 
 interface EditorProps {
   query: string;
-  setGraph: (graph: any) => void;
+  onGraphChange: (graph: any) => void;
 }
 
-function EditorComponent({ query, setGraph }: EditorProps) {
+function EditorComponent({ query, onGraphChange }: EditorProps) {
   const askldUrl = 'api'
 
   const queryGraph = useCallback((ed: monaco.editor.ICodeEditor) => {
@@ -80,7 +80,7 @@ function EditorComponent({ query, setGraph }: EditorProps) {
       body: ed.getValue()
     }).then(response => response.json()
     ).then(data => {
-      setGraph({
+      onGraphChange({
         nodes: data.nodes.map((node: string, index: number) => ({ data: { id: index, label: node } })),
         edges: data.edges.map((edge: Array<number>) => ({ data: { source: edge[0], target: edge[1], label: edge[2] } }))
       });
@@ -152,7 +152,7 @@ export default function Home() {
     const component = node.getComponent();
     const name = node.getName();
     if (name === "query-editor") {
-      return <EditorComponent query={query} setGraph={setGraph} />;
+      return <EditorComponent query={query} onGraphChange={setGraph} />;
     } else if (name === "graph-viewer") {
       return <GraphViewer graph={graph} />;
     } else {
