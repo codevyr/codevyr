@@ -1,8 +1,7 @@
 'use client';
 
 import Image from 'next/image'
-import React, { createRef, use, useRef } from "react";
-import { useCallback, useEffect, useState } from 'react';
+import React, { createRef, use, useMemo, useRef, useEffect, useState } from 'react';
 import { Layout, Model, TabNode, IJsonModel } from 'flexlayout-react';
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco, { editor } from 'monaco-editor';
@@ -72,21 +71,21 @@ interface GraphProps {
 function GraphViewer({ graph }: GraphProps) {
   let cyRef = useRef<Cytoscape.Core | null>(null);
 
-  let layout = {
+  const layout = useMemo(() => ({
     name: 'breadthfirst',
     directed: true,
     fit: true,
     avoidOverlap: true,
     nodeDimensionsIncludeLabels: true,
     padding: 40
-  };
+  }), []);
 
   useEffect(() => {
     if (cyRef.current) {
       console.log('cyRef is', cyRef.current);
       cyRef.current.layout(layout).run();
     }
-  }, [graph]);
+  }, [graph, layout]);
 
   function cytoscapeHandler(cy: Cytoscape.Core) {
     cyRef.current = cy;
