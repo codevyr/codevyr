@@ -70,7 +70,7 @@ interface GraphProps {
 }
 
 function GraphViewer({ graph }: GraphProps) {
-  let cyRef = useRef<Cytoscape.Core>(null);
+  let cyRef = useRef<Cytoscape.Core | null>(null);
 
   let layout = {
     name: 'breadthfirst',
