@@ -8,7 +8,7 @@ import { Editor, Monaco } from '@monaco-editor/react';
 import monaco, { editor } from 'monaco-editor';
 import { Uri } from 'monaco-editor/esm/vs/editor/editor.api';
 import CytoscapeComponent from 'react-cytoscapejs';
-import Cytoscape from 'cytoscape';
+import Cytoscape, { ElementDefinition } from 'cytoscape';
 
 import { EditorComponent } from './editor';
 import { Graph } from './graph';
@@ -66,7 +66,7 @@ var json: IJsonModel = {
 const model = Model.fromJson(json);
 
 interface GraphProps {
-  graph: Graph;
+  graph: ElementDefinition[];
 }
 
 function GraphViewer({ graph }: GraphProps) {
