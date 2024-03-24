@@ -80,10 +80,11 @@ function EditorComponent({ query, onGraphChange }: EditorProps) {
       body: ed.getValue()
     }).then(response => response.json()
     ).then(data => {
-      onGraphChange({
-        nodes: data.nodes.map((node: string, index: number) => ({ data: { id: index, label: node } })),
-        edges: data.edges.map((edge: Array<number>) => ({ data: { source: edge[0], target: edge[1], label: edge[2] } }))
-      });
+      console.log('data is', data);
+      onGraphChange(
+        data.nodes.map((node: Node) => ({ data: { id: node.id, label: node.label } })).concat(
+        data.edges.map((edge: Edge) => ({ data: { source: edge.from, target: edge.to } })))
+      );
     });
   }, []);
 
@@ -99,9 +100,22 @@ function EditorComponent({ query, onGraphChange }: EditorProps) {
   return <Editor height="90vh" defaultLanguage="javascript" defaultValue={query} beforeMount={handleEditorWillMount} />;
 }
 
+interface Node {
+  id: string;
+  label: string;
+  uri: string;
+  loc: string;
+}
+
+interface Edge {
+  from: string;
+  to: string;
+  from_loc: string;
+}
+
 interface Graph {
-  nodes: Array<{ data: { id: number, label: string } }>;
-  edges: Array<{ data: { source: number, target: number, label: string } }>;
+  nodes: Array<Node>;
+  edges: Array<Edge>;
 }
 
 interface GraphProps {
@@ -136,16 +150,33 @@ function GraphViewer({ graph }: GraphProps) {
     });
   }
 
+  console.log('graph is', graph);
   return <CytoscapeComponent elements={CytoscapeComponent.normalizeElements(graph)} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
 }
 
 function GraphCode({ graph }: GraphProps) {
-  return (<><ul>{graph.nodes.map(node => <li key={node.data.id}>{node.data.label}</li>)} </ul></>);
+  function get_id(data: any) {
+    if ('id' in data) {
+      return data.id;
+    } else {
+      return data.source + '-' + data.target;
+    }
+  }
+
+  function get_str(data: any) {
+    if ('label' in data) {
+      return data.label;
+    } else {
+      return data.source + ' -> ' + data.target;
+    }
+  }
+
+  return (<><ul>{graph.map(node => <li key={get_id(node.data)}>{get_str(node.data)}</li>)} </ul></>);
 }
 
 export default function Home() {
   const [query, setQuery] = useState('"create_srq" {}');
-  const [graph, setGraph] = useState({ "nodes": [], "edges": [] });
+  const [graph, setGraph] = useState([]);
 
   const factory = (node: TabNode) => {
     const component = node.getComponent();
