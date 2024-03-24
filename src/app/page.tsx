@@ -130,11 +130,10 @@ function GraphViewer({ graph }: GraphProps) {
   function cytoscapeHandler(cy: Cytoscape.Core) {
     cyRef.current = cy;
 
-    function on(event: string, handler: (event: any) => void) {
-      if (cyRef.current) {
-        cyRef.current.on(event, handler);
-      }
-    }
+    cy.on('tap', 'node', function (evt) {
+      var node = evt.target;
+      console.log('tapped ' + node.id());
+    });
   }
 
   return <CytoscapeComponent elements={CytoscapeComponent.normalizeElements(graph)} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
