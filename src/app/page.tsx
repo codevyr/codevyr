@@ -10,6 +10,9 @@ import { Uri } from 'monaco-editor/esm/vs/editor/editor.api';
 import CytoscapeComponent from 'react-cytoscapejs';
 import Cytoscape from 'cytoscape';
 
+import { EditorComponent } from './editor';
+import { Graph } from './graph';
+
 var json: IJsonModel = {
   global: { "tabEnableFloat": true },
   borders: [],
@@ -61,62 +64,6 @@ var json: IJsonModel = {
 };
 
 const model = Model.fromJson(json);
-
-interface EditorProps {
-  query: string;
-  onGraphChange: (graph: any) => void;
-}
-
-function EditorComponent({ query, onGraphChange }: EditorProps) {
-  const askldUrl = 'api'
-
-  const queryGraph = useCallback((ed: monaco.editor.ICodeEditor) => {
-    console.log('submit-query');
-    fetch(`${askldUrl}/query`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain'
-      },
-      body: ed.getValue()
-    }).then(response => response.json()
-    ).then(data => {
-      console.log('data is', data);
-      onGraphChange(
-        data.nodes.map((node: Node) => ({ data: { id: node.id, label: node.label } })).concat(
-        data.edges.map((edge: Edge) => ({ data: { source: edge.from, target: edge.to } })))
-      );
-    });
-  }, []);
-
-  const handleEditorWillMount = (monaco: Monaco) => {
-    monaco.editor.addEditorAction({
-      id: 'submit-query',
-      label: 'Submit Query',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      run: queryGraph
-    });
-  };
-
-  return <Editor height="90vh" defaultLanguage="javascript" defaultValue={query} beforeMount={handleEditorWillMount} />;
-}
-
-interface Node {
-  id: string;
-  label: string;
-  uri: string;
-  loc: string;
-}
-
-interface Edge {
-  from: string;
-  to: string;
-  from_loc: string;
-}
-
-interface Graph {
-  nodes: Array<Node>;
-  edges: Array<Edge>;
-}
 
 interface GraphProps {
   graph: Graph;
