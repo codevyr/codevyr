@@ -1,3 +1,4 @@
+import { use, useEffect, useState } from 'react';
 
 export interface Node {
     id: string;
@@ -13,6 +14,6 @@ export interface Edge {
 }
 
 export interface Graph {
-    nodes: Array<Node>;
-    edges: Array<Edge>;
+    nodes: Set<Node>;
+    edges: Set<Edge>;
 }

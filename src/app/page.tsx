@@ -10,7 +10,7 @@ import CytoscapeComponent from 'react-cytoscapejs';
 import Cytoscape, { ElementDefinition } from 'cytoscape';
 
 import { EditorComponent } from './editor';
-import { Graph } from './graph';
+import { Graph, Node, Edge } from './graph';
 
 var json: IJsonModel = {
   global: { "tabEnableFloat": true },
@@ -55,6 +55,11 @@ var json: IJsonModel = {
             type: "tab",
             name: "Two",
             component: "button",
+          },
+          {
+            type: "tab",
+            name: "code-viewer",
+            component: "button",
           }
         ]
       }
@@ -65,7 +70,7 @@ var json: IJsonModel = {
 const model = Model.fromJson(json);
 
 interface GraphProps {
-  graph: ElementDefinition[];
+  graph: Graph;
 }
 
 function GraphViewer({ graph }: GraphProps) {
@@ -91,13 +96,37 @@ function GraphViewer({ graph }: GraphProps) {
     cyRef.current = cy;
 
     cy.on('tap', 'node', function (evt) {
-      var node = evt.target;
-      console.log('tapped ' + node.id());
+      var node_id = evt.target.id();
+      var node : Node | null = null;
+      graph.nodes.forEach((n: Node) => {
+        if (n.id === node_id) {
+          node = n;
+        }
+      });
+
+      console.log('event is', evt);
+      if (node) {
+        console.log('node is', node);
+      }
     });
   }
 
+  function cytoscapeElements(graph: Graph): ElementDefinition[] {
+    console.log('graph is', graph);
+    let elements: ElementDefinition[] = [];
+    graph.nodes.forEach((node: Node) => {
+      elements.push({ data: { id: node.id, label: node.label } });
+    });
+
+    graph.edges.forEach((edge: Edge) => {
+      elements.push({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
+    });
+
+    return elements;
+  }
+
   console.log('graph is', graph);
-  return <CytoscapeComponent elements={CytoscapeComponent.normalizeElements(graph)} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
+  return <CytoscapeComponent elements={cytoscapeElements(graph)} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
 }
 
 function GraphCode({ graph }: GraphProps) {
@@ -105,7 +134,7 @@ function GraphCode({ graph }: GraphProps) {
     if ('id' in data) {
       return data.id;
     } else {
-      return data.source + '-' + data.target;
+      return data.from + '-' + data.to;
     }
   }
 
@@ -113,26 +142,33 @@ function GraphCode({ graph }: GraphProps) {
     if ('label' in data) {
       return data.label;
     } else {
-      return data.source + ' -> ' + data.target;
+      return data.from + ' -> ' + data.to;
     }
   }
 
-  return (<><ul>{graph.map(node => <li key={get_id(node.data)}>{get_str(node.data)}</li>)} </ul></>);
+  return (<>
+  <ul>
+    {Array.from(graph.nodes).map((node: Node) => <li key={get_id(node)}>{get_str(node)}</li>)}
+  </ul>
+  <ul>
+    {Array.from(graph.edges.values()).map((edge: Edge) => <li key={get_id(edge)}>{get_str(edge)}</li>)}
+  </ul>
+  </>);
 }
 
 export default function Home() {
   const [query, setQuery] = useState('"create_srq" {}');
-  const [graph, setGraph] = useState([]);
+  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Set(), edges: new Set() });
 
   const factory = (node: TabNode) => {
     const component = node.getComponent();
     const name = node.getName();
     if (name === "query-editor") {
-      return <EditorComponent query={query} onGraphChange={setGraph} />;
+      return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
     } else if (name === "graph-viewer") {
-      return <GraphViewer graph={graph} />;
+      return <GraphViewer graph={queryGraph} />;
     } else {
-      return <GraphCode graph={graph} />;
+      return <GraphCode graph={queryGraph} />;
     }
   };
 

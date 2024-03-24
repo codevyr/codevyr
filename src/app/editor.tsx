@@ -25,8 +25,7 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
         ).then(data => {
             console.log('data is', data);
             onGraphChange(
-                data.nodes.map((node: Node) => ({ data: { id: node.id, label: node.label } })).concat(
-                    data.edges.map((edge: Edge) => ({ data: { source: edge.from, target: edge.to } })))
+                { nodes: data.nodes, edges: data.edges}
             );
         });
     };
