@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image'
-import React, { createRef, use, useMemo, useRef, useEffect, useState } from 'react';
+import React, { createRef, use, useMemo, useRef, useEffect, useState, useReducer } from 'react';
 import { Layout, Model, TabNode, IJsonModel } from 'flexlayout-react';
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco, { editor } from 'monaco-editor';
@@ -11,6 +11,8 @@ import Cytoscape, { ElementDefinition } from 'cytoscape';
 
 import { EditorComponent } from './editor';
 import { Graph, Node, Edge } from './graph';
+import { CodeViewer, CodeFocus } from './code_viewer';
+import { on } from 'events';
 
 var json: IJsonModel = {
   global: { "tabEnableFloat": true },
@@ -53,12 +55,12 @@ var json: IJsonModel = {
         children: [
           {
             type: "tab",
-            name: "Two",
+            name: "code-viewer",
             component: "button",
           },
           {
             type: "tab",
-            name: "code-viewer",
+            name: "Two",
             component: "button",
           }
         ]
@@ -71,9 +73,10 @@ const model = Model.fromJson(json);
 
 interface GraphProps {
   graph: Graph;
+  onFocus: any;
 }
 
-function GraphViewer({ graph }: GraphProps) {
+function GraphViewer({ graph, onFocus }: GraphProps) {
   let cyRef = useRef<Cytoscape.Core | null>(null);
 
   const layout = useMemo(() => ({
@@ -93,21 +96,25 @@ function GraphViewer({ graph }: GraphProps) {
   }, [graph, layout]);
 
   function cytoscapeHandler(cy: Cytoscape.Core) {
+
     cyRef.current = cy;
 
+    cy.off('tap', 'node');
     cy.on('tap', 'node', function (evt) {
       var node_id = evt.target.id();
       var node : Node | null = null;
+      var count = 0;
       graph.nodes.forEach((n: Node) => {
+        count += 1;
         if (n.id === node_id) {
           node = n;
+          onFocus({
+            uri: n.uri,
+            loc: n.loc
+          });
+          console.log('node is', n, count);
         }
       });
-
-      console.log('event is', evt);
-      if (node) {
-        console.log('node is', node);
-      }
     });
   }
 
@@ -159,6 +166,7 @@ function GraphCode({ graph }: GraphProps) {
 export default function Home() {
   const [query, setQuery] = useState('"create_srq" {}');
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Set(), edges: new Set() });
+  const [codeFocus, setCodeFocus] = useState<CodeFocus|null>(null);
 
   const factory = (node: TabNode) => {
     const component = node.getComponent();
@@ -167,9 +175,11 @@ export default function Home() {
     case "query-editor":
       return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
     case "graph-viewer":
-      return <GraphViewer graph={queryGraph} />;
+      return <GraphViewer graph={queryGraph} onFocus={setCodeFocus} />;
+    case "code-viewer":
+      return <CodeViewer codeFocus={codeFocus}/>;
     default:
-      return <GraphCode graph={queryGraph} />;
+      return <GraphCode graph={queryGraph} onFocus={codeFocus} />;
     }
   };
 

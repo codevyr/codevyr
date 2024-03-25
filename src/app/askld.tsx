@@ -9,3 +9,14 @@ export function fetchQuery(query: string) : Promise<Response> {
         body: query
     })
 }
+
+export function fetchSource(uri: string) : Promise<Response> {
+    // Remove scheme from uri
+    uri = new URL(uri).pathname;
+    return fetch(`${askldUrl}/source/${uri}`, {
+        method: 'GET',
+        headers:{
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+    })
+}
