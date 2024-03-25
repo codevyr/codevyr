@@ -163,11 +163,12 @@ export default function Home() {
   const factory = (node: TabNode) => {
     const component = node.getComponent();
     const name = node.getName();
-    if (name === "query-editor") {
+    switch (name) {
+    case "query-editor":
       return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
-    } else if (name === "graph-viewer") {
+    case "graph-viewer":
       return <GraphViewer graph={queryGraph} />;
-    } else {
+    default:
       return <GraphCode graph={queryGraph} />;
     }
   };
