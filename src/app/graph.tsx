@@ -8,9 +8,11 @@ export interface Node {
 }
 
 export interface Edge {
+    id: string;
     from: string;
     to: string;
-    from_loc: string;
+    from_file: string;
+    from_line: string;
 }
 
 export interface Graph {

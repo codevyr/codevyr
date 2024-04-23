@@ -1,6 +1,7 @@
 export const askldUrl = 'api'
 
 export function fetchQuery(query: string) : Promise<Response> {
+    console.log("asdf", query);
     return fetch(`${askldUrl}/query`, {
         method: 'POST',
         headers: {

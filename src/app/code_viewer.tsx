@@ -46,6 +46,7 @@ export function CodeViewer({ codeFocus }: CodeViewerProps) {
         if (editorRef.current !== null) {
             editorRef.current.setValue(currentFile.value);
             editorRef.current.revealLineInCenter(parseInt(currentFile.loc));
+            editorRef.current.setPosition({'lineNumber': parseInt(currentFile.loc), column: 1});
             editorRef.current.focus();
             editorRef.current.layout();
         }

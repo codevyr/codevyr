@@ -6,12 +6,12 @@ import { Layout, Model, TabNode, IJsonModel } from 'flexlayout-react';
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco, { editor } from 'monaco-editor';
 import { Uri } from 'monaco-editor/esm/vs/editor/editor.api';
-import CytoscapeComponent from 'react-cytoscapejs';
-import Cytoscape, { ElementDefinition } from 'cytoscape';
+
 
 import { EditorComponent } from './editor';
 import { Graph, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus } from './code_viewer';
+import { GraphViewer, GraphProps } from './graph_viewer';
 import { on } from 'events';
 
 var json: IJsonModel = {
@@ -70,71 +70,6 @@ var json: IJsonModel = {
 };
 
 const model = Model.fromJson(json);
-
-interface GraphProps {
-  graph: Graph;
-  onFocus: any;
-}
-
-function GraphViewer({ graph, onFocus }: GraphProps) {
-  let cyRef = useRef<Cytoscape.Core | null>(null);
-
-  const layout = useMemo(() => ({
-    name: 'breadthfirst',
-    directed: true,
-    fit: true,
-    avoidOverlap: true,
-    nodeDimensionsIncludeLabels: true,
-    padding: 40
-  }), []);
-
-  useEffect(() => {
-    if (cyRef.current) {
-      console.log('cyRef is', cyRef.current);
-      cyRef.current.layout(layout).run();
-    }
-  }, [graph, layout]);
-
-  function cytoscapeHandler(cy: Cytoscape.Core) {
-
-    cyRef.current = cy;
-
-    cy.off('tap', 'node');
-    cy.on('tap', 'node', function (evt) {
-      var node_id = evt.target.id();
-      var node : Node | null = null;
-      var count = 0;
-      graph.nodes.forEach((n: Node) => {
-        count += 1;
-        if (n.id === node_id) {
-          node = n;
-          onFocus({
-            uri: n.uri,
-            loc: n.loc
-          });
-          console.log('node is', n, count);
-        }
-      });
-    });
-  }
-
-  function cytoscapeElements(graph: Graph): ElementDefinition[] {
-    console.log('graph is', graph);
-    let elements: ElementDefinition[] = [];
-    graph.nodes.forEach((node: Node) => {
-      elements.push({ data: { id: node.id, label: node.label } });
-    });
-
-    graph.edges.forEach((edge: Edge) => {
-      elements.push({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
-    });
-
-    return elements;
-  }
-
-  console.log('graph is', graph);
-  return <CytoscapeComponent elements={cytoscapeElements(graph)} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
-}
 
 function GraphCode({ graph }: GraphProps) {
   function get_id(data: any) {
