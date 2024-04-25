@@ -1,5 +1,6 @@
 import CytoscapeComponent from 'react-cytoscapejs';
 import Cytoscape, { ElementDefinition } from 'cytoscape';
+import dagre from 'cytoscape-dagre';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Edge, Graph, Node } from './graph';
 
@@ -8,11 +9,13 @@ export interface GraphProps {
     onFocus: any;
 }
 
+Cytoscape.use(dagre)
+
 export function GraphViewer({ graph, onFocus }: GraphProps) {
     let cyRef = useRef<Cytoscape.Core | null>(null);
 
     const layout = useMemo(() => ({
-        name: 'breadthfirst',
+        name: 'dagre',
         directed: true,
         fit: true,
         avoidOverlap: true,
@@ -20,9 +23,32 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         padding: 40
     }), []);
 
+    const stylesheet = useMemo(() =>
+        [
+            {
+                selector: 'node',
+                style: {
+                    'content': 'data(label)',
+                    'text-valign': 'center',
+                    'color': 'black',
+                    'background-color': '#91c7fe'
+                }
+            },
+
+            {
+                selector: 'edge',
+                style: {
+                    'width': 4,
+                    'target-arrow-shape': 'triangle',
+                    'line-color': '#9dbaea',
+                    'target-arrow-color': '#9dbaea',
+                    'curve-style': 'bezier'
+                }
+            }
+        ], []);
+
     useEffect(() => {
         if (cyRef.current) {
-            console.log('cyRef is', cyRef.current);
             cyRef.current.layout(layout).run();
         }
     }, [graph, layout]);
@@ -62,7 +88,6 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
     }
 
     function cytoscapeElements(graph: Graph): ElementDefinition[] {
-        console.log('graph is', graph);
         let elements: ElementDefinition[] = [];
         graph.nodes.forEach((node: Node) => {
             elements.push({ data: { id: node.id, label: node.label } });
@@ -75,6 +100,6 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         return elements;
     }
 
-    console.log('graph is', graph);
-    return <CytoscapeComponent elements={cytoscapeElements(graph)} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
+    console.log('Regenerate is', graph, stylesheet);
+    return <CytoscapeComponent elements={cytoscapeElements(graph)} stylesheet={stylesheet} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
 }
