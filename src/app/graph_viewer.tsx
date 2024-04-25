@@ -1,5 +1,5 @@
 import CytoscapeComponent from 'react-cytoscapejs';
-import Cytoscape, { ElementDefinition } from 'cytoscape';
+import Cytoscape, { ElementDefinition, NodeSingular } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Edge, Graph, Node } from './graph';
@@ -47,10 +47,66 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
         ], []);
 
+    function cytoscapeElements(graph: Graph): ElementDefinition[] {
+        let elements: ElementDefinition[] = [];
+        graph.nodes.forEach((node: Node) => {
+            elements.push({ data: { id: node.id, label: node.label } });
+        });
+
+        graph.edges.forEach((edge: Edge) => {
+            elements.push({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
+        });
+
+        return elements;
+    }
+
     useEffect(() => {
-        if (cyRef.current) {
-            cyRef.current.layout(layout).run();
+        if (!cyRef.current) {
+            return
         }
+
+        let cy = cyRef.current
+        let removed_collection = cy.collection()
+        cyRef.current.nodes().forEach((ele: NodeSingular) => {
+            var exists = false
+            let id = ele.data('id')
+            graph.nodes.forEach((node: Node) => {
+                if (id === node.id) {
+                    exists = true
+                }
+            })
+
+            if (!exists) {
+                removed_collection = removed_collection.union(ele)
+            }
+        })
+        cyRef.current.remove(removed_collection)
+
+        let new_nodes: Node[] = []
+        let new_node_coll = cy.collection()
+        graph.nodes.forEach((node: Node) => {
+
+            if (cy.nodes('#' + node.id).empty()) {
+                new_node_coll = new_node_coll.union(cy.add({ data: { id: node.id, label: node.label } }))
+                new_nodes.push(node)
+            }
+        });
+
+        graph.edges.forEach((edge: Edge) => {
+            new_nodes.forEach((node: Node) => {
+                if ((edge.from === node.id) || (edge.to === node.id)) {
+                    if (cy.edges('#' + edge.from + '-' + edge.to).empty()) {
+                        cy.add({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
+                    }
+                }
+            })
+        });
+
+        cy.nodes().difference(new_node_coll).lock()
+
+        console.log("layout", new_node_coll)
+        cy.layout(layout).run();
+        cy.nodes().difference(new_node_coll).unlock()
     }, [graph, layout]);
 
     function cytoscapeHandler(cy: Cytoscape.Core) {
@@ -87,19 +143,6 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         });
     }
 
-    function cytoscapeElements(graph: Graph): ElementDefinition[] {
-        let elements: ElementDefinition[] = [];
-        graph.nodes.forEach((node: Node) => {
-            elements.push({ data: { id: node.id, label: node.label } });
-        });
-
-        graph.edges.forEach((edge: Edge) => {
-            elements.push({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
-        });
-
-        return elements;
-    }
-
     console.log('Regenerate is', graph, stylesheet);
-    return <CytoscapeComponent elements={cytoscapeElements(graph)} stylesheet={stylesheet} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
+    return <CytoscapeComponent elements={[]} stylesheet={stylesheet} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
 }
