@@ -68,15 +68,9 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         let cy = cyRef.current
         let removed_collection = cy.collection()
         cyRef.current.nodes().forEach((ele: NodeSingular) => {
-            var exists = false
             let id = ele.data('id')
-            graph.nodes.forEach((node: Node) => {
-                if (id === node.id) {
-                    exists = true
-                }
-            })
 
-            if (!exists) {
+            if (graph.nodes.has(id)) {
                 removed_collection = removed_collection.union(ele)
             }
         })
@@ -116,14 +110,17 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         cy.off('tap', 'node');
         cy.on('tap', 'node', function (evt) {
             var node_id = evt.target.id();
-            graph.nodes.forEach((n: Node) => {
-                if (n.id === node_id) {
-                    console.log('node is', n, n.loc);
-                    onFocus({
-                        uri: n.uri,
-                        loc: n.loc
-                    });
-                }
+            console.log('node is', node_id, graph.nodes);
+            console.log(typeof(node_id))
+            let node = graph.nodes.get(node_id);
+            if (!node) {
+                console.log("Node is undefined")
+                return;
+            }
+            console.log('node is', node, node.loc);
+            onFocus({
+                uri: node.uri,
+                loc: node.loc
             });
         });
 
@@ -133,6 +130,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             var edge_id = evt.target.id();
             console.log(edge_id);
             graph.edges.forEach((e: Edge) => {
+                console.log("EDGE", e)
                 if (e.id === edge_id) {
                     onFocus({
                         uri: e.from_file,

@@ -16,6 +16,6 @@ export interface Edge {
 }
 
 export interface Graph {
-    nodes: Set<Node>;
+    nodes: Map<string, Node>;
     edges: Set<Edge>;
 }

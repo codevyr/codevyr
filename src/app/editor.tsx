@@ -19,8 +19,13 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
         ).then(response => response.json()
         ).then(data => {
             console.log('data is', data);
+            let nodes = new Map<string, Node>()
+            for (let node of data.nodes) {
+                console.log(typeof(node.id))
+                nodes.set(node.id, node)
+            }
             onGraphChange(
-                { nodes: data.nodes, edges: data.edges }
+                { nodes: nodes, edges: data.edges }
             );
         });
     };

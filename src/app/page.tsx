@@ -90,7 +90,7 @@ function GraphCode({ graph }: GraphProps) {
 
   return (<>
   <ul>
-    {Array.from(graph.nodes).map((node: Node) => <li key={get_id(node)}>{get_str(node)}</li>)}
+    {Array.from(graph.nodes.entries()).map(([id, node] : [string, Node]) => <li key={id}>{get_str(node)}</li>)}
   </ul>
   <ul>
     {Array.from(graph.edges.values()).map((edge: Edge) => <li key={get_id(edge)}>{get_str(edge)}</li>)}
@@ -100,7 +100,7 @@ function GraphCode({ graph }: GraphProps) {
 
 export default function Home() {
   const [query, setQuery] = useState('"create_srq" {}');
-  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Set(), edges: new Set() });
+  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Set() });
   const [codeFocus, setCodeFocus] = useState<CodeFocus|null>(null);
 
   const factory = (node: TabNode) => {
