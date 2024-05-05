@@ -3,8 +3,8 @@ import { use, useEffect, useState } from 'react';
 export interface Node {
     id: string;
     label: string;
-    uri: string;
-    loc: string;
+    file_id: string;
+    line: string;
 }
 
 export interface Edge {

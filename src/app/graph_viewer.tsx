@@ -110,17 +110,16 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         cy.off('tap', 'node');
         cy.on('tap', 'node', function (evt) {
             var node_id = evt.target.id();
-            console.log('node is', node_id, graph.nodes);
             console.log(typeof(node_id))
             let node = graph.nodes.get(node_id);
             if (!node) {
                 console.log("Node is undefined")
                 return;
             }
-            console.log('node is', node, node.loc);
+            console.log('node is', node, node.line);
             onFocus({
-                uri: node.uri,
-                loc: node.loc
+                file_id: node.file_id,
+                line: node.line
             });
         });
 
@@ -130,11 +129,11 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             var edge_id = evt.target.id();
             console.log(edge_id);
             graph.edges.forEach((e: Edge) => {
-                console.log("EDGE", e)
                 if (e.id === edge_id) {
+                    console.log("EDGE", e)
                     onFocus({
-                        uri: e.from_file,
-                        loc: e.from_line
+                        file_id: e.from_file,
+                        line: e.from_line
                     });
                 }
             });

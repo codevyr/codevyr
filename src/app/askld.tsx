@@ -11,10 +11,9 @@ export function fetchQuery(query: string) : Promise<Response> {
     })
 }
 
-export function fetchSource(uri: string) : Promise<Response> {
+export function fetchSource(file_id: string) : Promise<Response> {
     // Remove scheme from uri
-    uri = new URL(uri).pathname;
-    return fetch(`${askldUrl}/source/${uri}`, {
+    return fetch(`${askldUrl}/source/${file_id}`, {
         method: 'GET',
         headers:{
             'Content-Type': 'application/x-www-form-urlencoded'

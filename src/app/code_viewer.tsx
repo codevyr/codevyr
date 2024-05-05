@@ -4,8 +4,8 @@ import { Editor, Monaco } from "@monaco-editor/react";
 import monaco from 'monaco-editor';
 
 export interface CodeFocus {
-    uri: string;
-    loc: string;
+    file_id: string;
+    line: string;
 }
 
 export interface CodeViewerProps {
@@ -23,7 +23,7 @@ export function CodeViewer({ codeFocus }: CodeViewerProps) {
         if (codeFocus === null) {
             return;
         }
-        editorRef.current.revealLineInCenter(parseInt(codeFocus.loc));
+        editorRef.current.revealLineInCenter(parseInt(codeFocus.line));
         editorRef.current.focus();
     }
 
@@ -32,12 +32,12 @@ export function CodeViewer({ codeFocus }: CodeViewerProps) {
             return;
         }
 
-        fetchSource(codeFocus.uri).then(response => response.text()).then(data => {
+        fetchSource(codeFocus.file_id).then(response => response.text()).then(data => {
             setCurrentFile({
-                'path': codeFocus.uri,
+                'path': codeFocus.file_id,
                 'language': 'c',
                 'value': data,
-                'loc': codeFocus.loc
+                'loc': codeFocus.line
             })
         })
     }, [codeFocus]);
