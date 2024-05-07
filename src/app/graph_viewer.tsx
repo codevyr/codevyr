@@ -64,14 +64,24 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         if (!cyRef.current) {
             return
         }
+        // When running layout, we should not move the existing nodes, because
+        // the user may have put them in some sensible position.
+        //
+        // So, when receiving the new graph, we need to find what existing nodes
+        // belong to the new graph and lock them (overlapped_collection). Then,
+        // we need to remove the nodes which are not in the new graph
+        // (removed_collection). And, finally, add the new nodes.
 
         let cy = cyRef.current
         let removed_collection = cy.collection()
+        let overlapped_collection = cy.collection()
         cyRef.current.nodes().forEach((ele: NodeSingular) => {
             let id = ele.data('id')
 
-            if (graph.nodes.has(id)) {
+            if (!graph.nodes.has(id)) {
                 removed_collection = removed_collection.union(ele)
+            } else {
+                overlapped_collection = overlapped_collection.union(ele)
             }
         })
         cyRef.current.remove(removed_collection)
