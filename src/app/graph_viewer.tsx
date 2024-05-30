@@ -126,10 +126,13 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
                 console.log("Node is undefined")
                 return;
             }
-            console.log('node is', node, node.line);
+            
+            let decl = node.declarations[0];
+            console.log('node declaration', decl);
+
             onFocus({
-                file_id: node.file_id,
-                line: node.line
+                file_id: decl.file_id,
+                line: decl.line_start
             });
         });
 

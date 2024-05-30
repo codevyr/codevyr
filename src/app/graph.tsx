@@ -1,10 +1,20 @@
 import { use, useEffect, useState } from 'react';
 
+export interface Declaration {
+    id: string;
+    symbol: number;
+    file_id: string;
+    symbol_type: string;
+    line_start: string;
+    col_start: string;
+    line_end: string;
+    col_end: string;
+}
+
 export interface Node {
     id: string;
     label: string;
-    file_id: string;
-    line: string;
+    declarations: Array<Declaration>
 }
 
 export interface Edge {
