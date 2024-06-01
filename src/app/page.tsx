@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import React, { createRef, use, useMemo, useRef, useEffect, useState, useReducer } from 'react';
 import { Layout, Model, TabNode, IJsonModel } from 'flexlayout-react';
+import 'flexlayout-react/style/light.css';
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco, { editor } from 'monaco-editor';
 import { Uri } from 'monaco-editor/esm/vs/editor/editor.api';
