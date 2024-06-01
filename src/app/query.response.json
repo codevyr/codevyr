@@ -1,0 +1,257 @@
+{
+    "nodes": [
+        {
+            "id": "2085",
+            "label": "print_on_level",
+            "declarations": [
+                {
+                    "id": "3421",
+                    "symbol": 2085,
+                    "file_id": "205",
+                    "symbol_type": "Declaration",
+                    "line_start": 27,
+                    "col_start": 1,
+                    "line_end": 28,
+                    "col_end": 46
+                },
+                {
+                    "id": "3470",
+                    "symbol": 2085,
+                    "file_id": "209",
+                    "symbol_type": "Definition",
+                    "line_start": 364,
+                    "col_start": 1,
+                    "line_end": 379,
+                    "col_end": 1
+                },
+                {
+                    "id": "4555",
+                    "symbol": 2085,
+                    "file_id": "275",
+                    "symbol_type": "Declaration",
+                    "line_start": 27,
+                    "col_start": 1,
+                    "line_end": 28,
+                    "col_end": 46
+                },
+                {
+                    "id": "12195",
+                    "symbol": 2085,
+                    "file_id": "481",
+                    "symbol_type": "Definition",
+                    "line_start": 390,
+                    "col_start": 1,
+                    "line_end": 397,
+                    "col_end": 1
+                }
+            ]
+        },
+        {
+            "id": "9040",
+            "label": "open_handle",
+            "declarations": [
+                {
+                    "id": "10897",
+                    "symbol": 9040,
+                    "file_id": "452",
+                    "symbol_type": "Definition",
+                    "line_start": 195,
+                    "col_start": 1,
+                    "line_end": 224,
+                    "col_end": 1
+                }
+            ]
+        },
+        {
+            "id": "9037",
+            "label": "decode_handle",
+            "declarations": [
+                {
+                    "id": "10894",
+                    "symbol": 9037,
+                    "file_id": "452",
+                    "symbol_type": "Definition",
+                    "line_start": 90,
+                    "col_start": 1,
+                    "line_end": 98,
+                    "col_end": 1
+                }
+            ]
+        },
+        {
+            "id": "5443",
+            "label": "__userns_call",
+            "declarations": [
+                {
+                    "id": "7106",
+                    "symbol": 5443,
+                    "file_id": "365",
+                    "symbol_type": "Declaration",
+                    "line_start": 219,
+                    "col_start": 1,
+                    "line_end": 219,
+                    "col_end": 111
+                },
+                {
+                    "id": "13300",
+                    "symbol": 5443,
+                    "file_id": "490",
+                    "symbol_type": "Definition",
+                    "line_start": 1369,
+                    "col_start": 1,
+                    "line_end": 1443,
+                    "col_end": 1
+                }
+            ]
+        },
+        {
+            "id": "304",
+            "label": "close",
+            "declarations": [
+                {
+                    "id": "389",
+                    "symbol": 304,
+                    "file_id": "15",
+                    "symbol_type": "Declaration",
+                    "line_start": 358,
+                    "col_start": 1,
+                    "line_end": 358,
+                    "col_end": 27
+                }
+            ]
+        },
+        {
+            "id": "5305",
+            "label": "mnt_is_dir",
+            "declarations": [
+                {
+                    "id": "6968",
+                    "symbol": 5305,
+                    "file_id": "364",
+                    "symbol_type": "Declaration",
+                    "line_start": 169,
+                    "col_start": 1,
+                    "line_end": 169,
+                    "col_end": 44
+                },
+                {
+                    "id": "13025",
+                    "symbol": 5305,
+                    "file_id": "489",
+                    "symbol_type": "Definition",
+                    "line_start": 1146,
+                    "col_start": 1,
+                    "line_end": 1165,
+                    "col_end": 1
+                }
+            ]
+        },
+        {
+            "id": "5304",
+            "label": "__open_mountpoint",
+            "declarations": [
+                {
+                    "id": "6967",
+                    "symbol": 5304,
+                    "file_id": "364",
+                    "symbol_type": "Declaration",
+                    "line_start": 168,
+                    "col_start": 1,
+                    "line_end": 168,
+                    "col_end": 51
+                },
+                {
+                    "id": "13028",
+                    "symbol": 5304,
+                    "file_id": "489",
+                    "symbol_type": "Definition",
+                    "line_start": 1217,
+                    "col_start": 1,
+                    "line_end": 1237,
+                    "col_end": 1
+                }
+            ]
+        },
+        {
+            "id": "9038",
+            "label": "open_by_handle",
+            "declarations": [
+                {
+                    "id": "10895",
+                    "symbol": 9038,
+                    "file_id": "452",
+                    "symbol_type": "Definition",
+                    "line_start": 100,
+                    "col_start": 1,
+                    "line_end": 103,
+                    "col_end": 1
+                }
+            ]
+        }
+    ],
+    "edges": [
+        {
+            "id": "9040-9037",
+            "from": "9040",
+            "to": "9037",
+            "from_file": "452",
+            "from_line": 201
+        },
+        {
+            "id": "9040-5443",
+            "from": "9040",
+            "to": "5443",
+            "from_file": "452",
+            "from_line": 215
+        },
+        {
+            "id": "9040-9038",
+            "from": "9040",
+            "to": "9038",
+            "from_file": "452",
+            "from_line": 215
+        },
+        {
+            "id": "9040-5304",
+            "from": "9040",
+            "to": "5304",
+            "from_file": "452",
+            "from_line": 209
+        },
+        {
+            "id": "9040-304",
+            "from": "9040",
+            "to": "304",
+            "from_file": "452",
+            "from_line": 217
+        },
+        {
+            "id": "9040-5305",
+            "from": "9040",
+            "to": "5305",
+            "from_file": "452",
+            "from_line": 206
+        },
+        {
+            "id": "9040-304",
+            "from": "9040",
+            "to": "304",
+            "from_file": "452",
+            "from_line": 220
+        },
+        {
+            "id": "9040-2085",
+            "from": "9040",
+            "to": "2085",
+            "from_file": "452",
+            "from_line": 211
+        },
+        {
+            "id": "9040-2085",
+            "from": "9040",
+            "to": "2085",
+            "from_file": "452",
+            "from_line": 203
+        }
+    ]
+}

@@ -13,6 +13,13 @@ import { Graph, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus } from './code_viewer';
 import { GraphViewer, GraphProps } from './graph_viewer';
 import { on } from 'events';
+import { makeServer } from "./mirage"
+
+console.log(process.env.NODE_ENV, process.env.NEXT_PUBLIC_MIRAGE_DISABLE)
+if (process.env.NODE_ENV === "development" && !process.env.NEXT_PUBLIC_MIRAGE_DISABLE) {
+  console.log("Create mirage server")
+  makeServer({ environment: "development" })
+}
 
 var json: IJsonModel = {
   global: { "tabEnableFloat": true },
@@ -89,32 +96,32 @@ function GraphCode({ graph }: GraphProps) {
   }
 
   return (<>
-  <ul>
-    {Array.from(graph.nodes.entries()).map(([id, node] : [string, Node]) => <li key={id}>{get_str(node)}</li>)}
-  </ul>
-  <ul>
-    {Array.from(graph.edges.values()).map((edge: Edge) => <li key={get_id(edge)}>{get_str(edge)}</li>)}
-  </ul>
+    <ul>
+      {Array.from(graph.nodes.entries()).map(([id, node]: [string, Node]) => <li key={id}>{get_str(node)}</li>)}
+    </ul>
+    <ul>
+      {Array.from(graph.edges.values()).map((edge: Edge) => <li key={get_id(edge)}>{get_str(edge)}</li>)}
+    </ul>
   </>);
 }
 
 export default function Home() {
-  const [query, setQuery] = useState('"create_srq" {}');
+  const [query, setQuery] = useState('"open_handle" {}');
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Set() });
-  const [codeFocus, setCodeFocus] = useState<CodeFocus|null>(null);
+  const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
 
   const factory = (node: TabNode) => {
     const component = node.getComponent();
     const name = node.getName();
     switch (name) {
-    case "query-editor":
-      return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
-    case "graph-viewer":
-      return <GraphViewer graph={queryGraph} onFocus={setCodeFocus} />;
-    case "code-viewer":
-      return <CodeViewer codeFocus={codeFocus}/>;
-    default:
-      return <GraphCode graph={queryGraph} onFocus={codeFocus} />;
+      case "query-editor":
+        return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
+      case "graph-viewer":
+        return <GraphViewer graph={queryGraph} onFocus={setCodeFocus} />;
+      case "code-viewer":
+        return <CodeViewer codeFocus={codeFocus} />;
+      default:
+        return <GraphCode graph={queryGraph} onFocus={codeFocus} />;
     }
   };
 
