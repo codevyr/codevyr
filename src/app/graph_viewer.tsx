@@ -58,11 +58,11 @@ function tippyFactory(ref: RefElement, content: HTMLElement, options?: PopperOpt
 
 Cytoscape.use(cytoscapePopper(tippyFactory));
 
-const createContentFromComponent = (component: ReactNode) => {
+const createContentFromComponent = (id: string, component: ReactNode) => {
     const div = document.createElement('div');
 
     console.log("Create hover")
-    const root = createRoot(div);
+    const root = createRoot(div, {identifierPrefix: id});
     root.render(component);
     // div.classList.add('popper-div');
     document.body.appendChild(div);
@@ -179,11 +179,11 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
 
             var tip = node.popper({
-                content: () => createContentFromComponent(<NodeHover node={graph_node} setCodeFocus={onFocus} />),
+                content: () => createContentFromComponent(node_id, <NodeHover node={graph_node} setCodeFocus={onFocus} />),
             });
 
-            cy.off('tap', 'node');
-            cy.on('tap', 'node', function (evt) {
+            node.off('tap');
+            node.on('tap', function (evt) {
                 var node_id = evt.target.id();
 
                 // If we show the tip already, only need to hide
