@@ -79,7 +79,11 @@ var json: IJsonModel = {
 
 const model = Model.fromJson(json);
 
-function GraphCode({ graph }: GraphProps) {
+export interface GraphCodeProps {
+  graph: Graph;
+}
+
+function GraphCode({ graph }: GraphCodeProps) {
   function get_id(data: any) {
     if ('id' in data) {
       return data.id;
@@ -122,7 +126,7 @@ export default function Home() {
       case "code-viewer":
         return <CodeViewer codeFocus={codeFocus} />;
       default:
-        return <GraphCode graph={queryGraph} onFocus={codeFocus} />;
+        return <GraphCode graph={queryGraph} />;
     }
   };
 

@@ -14,11 +14,12 @@ import {
 import { NodeHover } from './node_hover';
 import { createRoot } from 'react-dom/client';
 import tippy, { followCursor, sticky, Instance, Props } from 'tippy.js';
+import { CodeFocus } from './code_viewer';
 
 
 export interface GraphProps {
     graph: Graph;
-    onFocus: any;
+    onFocus: (type: CodeFocus | null) => void;
 }
 
 Cytoscape.use(dagre)
@@ -170,21 +171,20 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         cy.nodes().difference(new_node_coll).unlock()
 
         cy.nodes().forEach(function (node) {
+            const node_id: string = node.data("id");
+            const graph_node: Node | undefined = graph.nodes.get(node_id);
+            if (!graph_node) {
+                console.error("Did not find node: ", node_id);
+                return;
+            }
+
             var tip = node.popper({
-                content: () => {
-                    let content = document.createElement('div');
-
-                    content.innerHTML = 'Tippy content';
-                    content.classList.add('popper-div');
-
-                    return content;
-                },
+                content: () => createContentFromComponent(<NodeHover node={graph_node} setCodeFocus={onFocus} />),
             });
 
             cy.off('tap', 'node');
             cy.on('tap', 'node', function (evt) {
                 var node_id = evt.target.id();
-                console.log(typeof (node_id))
 
                 // If we show the tip already, only need to hide
                 if (tip.state.isVisible) {

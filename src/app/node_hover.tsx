@@ -1,34 +1,62 @@
-import { useState } from 'react';
-import { useHover, useInteractions, useFloating } from '@floating-ui/react';
+import { CodeFocus } from './code_viewer';
+import { Edge, Declaration, Node } from './graph';
 
-export function NodeHover() {
-    const [isOpen, setIsOpen] = useState(false);
+interface DeclarationHoverProps {
+    declaration: Declaration
+    setCodeFocus: (type: CodeFocus) => void;
+}
 
-    const { refs, floatingStyles, context } = useFloating({
-        open: isOpen,
-        onOpenChange: setIsOpen,
-    });
-
-    const hover = useHover(context);
-
-    const { getReferenceProps, getFloatingProps } = useInteractions([
-        hover,
-    ]);
+function DeclarationHover({ declaration, setCodeFocus }: DeclarationHoverProps) {
+    function clickDeclaration(event: React.MouseEvent<HTMLElement>) {
+        setCodeFocus({
+            file_id: declaration.file_id,
+            line: declaration.line_start
+        })
+    }
 
     return (
         <>
-            <div ref={refs.setReference} {...getReferenceProps()}>
-                Reference element
-            </div>
-            {isOpen && (
-                <div
-                    ref={refs.setFloating}
-                    style={floatingStyles}
-                    {...getFloatingProps()}
-                >
-                    Floating element
-                </div>
-            )}
+            <tr onClick={clickDeclaration} className='declaration-hover'>
+                <td>{declaration.file_id}</td>
+                <td>{declaration.line_start}:{declaration.col_start}</td>
+            </tr>
         </>
+    );
+}
+
+interface NodeHoverSectionProps {
+    sectionName: string;
+    node: Node;
+    setCodeFocus: (type: CodeFocus) => void;
+}
+
+function NodeHoverSection({ sectionName, node, setCodeFocus }: NodeHoverSectionProps) {
+    const declarations = node.declarations.filter((d) => d.symbol_type === sectionName)
+    return (
+        <div>
+            <tr>
+                <th>{sectionName}</th>
+            </tr>
+
+            {declarations.map(declaration =>
+                <DeclarationHover key={declaration.id} declaration={declaration} setCodeFocus={setCodeFocus} />
+            )}
+        </div>
+    );
+}
+
+export interface NodeHoverProps {
+    node: Node;
+    setCodeFocus: (type: CodeFocus) => void;
+}
+
+export function NodeHover({ node, setCodeFocus }: NodeHoverProps) {
+    return (
+        <div className="node-hover">
+            <table>
+                <NodeHoverSection sectionName="Definition" node={node} setCodeFocus={setCodeFocus} />
+                <NodeHoverSection sectionName="Declaration" node={node} setCodeFocus={setCodeFocus} />
+            </table>
+        </div>
     );
 }
