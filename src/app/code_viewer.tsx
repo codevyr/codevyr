@@ -34,7 +34,7 @@ export function CodeViewer({ codeFocus }: CodeViewerProps) {
 
         fetchSource(codeFocus.file_id).then(response => response.text()).then(data => {
             setCurrentFile({
-                'path': codeFocus.file_id,
+                'path': String(codeFocus.file_id),
                 'language': 'c',
                 'value': data,
                 'loc': codeFocus.line

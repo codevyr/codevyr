@@ -2,7 +2,7 @@ import { use, useEffect, useState } from 'react';
 
 export interface Declaration {
     id: string;
-    symbol: number;
+    symbol: string;
     file_id: string;
     symbol_type: string;
     line_start: string;
@@ -28,4 +28,5 @@ export interface Edge {
 export interface Graph {
     nodes: Map<string, Node>;
     edges: Set<Edge>;
+    files: Map<string, string>;
 }

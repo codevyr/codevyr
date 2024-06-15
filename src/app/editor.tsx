@@ -3,13 +3,19 @@ import React from "react";
 import useCallback from 'react';
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco from 'monaco-editor';
-import { Node, Edge } from './graph';
+import { Node, Edge, Graph } from './graph';
 
 import { fetchQuery } from './askld';
 
 interface EditorProps {
     query: string;
-    onGraphChange: (graph: any) => void;
+    onGraphChange: (graph: Graph) => void;
+}
+
+interface RustGraph {
+    nodes: Map<string, Node>;
+    edges: Set<Edge>;
+    files: Array<[string, string]>;
 }
 
 export function EditorComponent({ query, onGraphChange }: EditorProps) {
@@ -17,15 +23,21 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
         console.log('submit-query');
         fetchQuery(ed.getValue()
         ).then(response => response.json()
-        ).then(data => {
+        ).then((data: RustGraph) => {
             console.log('data is', data);
             let nodes = new Map<string, Node>()
-            for (let node of data.nodes) {
-                console.log(typeof(node.id))
+            data.nodes.forEach((node) => {
                 nodes.set(node.id, node)
-            }
+            })
+
+            let files = new Map<string, string>()
+            data.files.forEach(([file_id, file_path])=> {
+                files.set(file_id, file_path)
+            });
+
+            console.log("FILES", files)
             onGraphChange(
-                { nodes: nodes, edges: data.edges }
+                { nodes: nodes, edges: data.edges, files: files }
             );
         });
     };

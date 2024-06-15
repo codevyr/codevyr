@@ -108,7 +108,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
     function cytoscapeElements(graph: Graph): ElementDefinition[] {
         let elements: ElementDefinition[] = [];
         graph.nodes.forEach((node: Node) => {
-            elements.push({ data: { id: node.id, label: node.label } });
+            elements.push({ data: { id: String(node.id), label: node.label } });
         });
 
         graph.edges.forEach((edge: Edge) => {
@@ -149,7 +149,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         graph.nodes.forEach((node: Node) => {
 
             if (cy.nodes('#' + node.id).empty()) {
-                new_node_coll = new_node_coll.union(cy.add({ data: { id: node.id, label: node.label } }))
+                new_node_coll = new_node_coll.union(cy.add({ data: { id: String(node.id), label: node.label } }))
                 new_nodes.push(node)
             }
         });
@@ -171,7 +171,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
         cy.nodes().difference(new_node_coll).unlock()
 
         cy.nodes().forEach(function (node) {
-            const node_id: string = node.data("id");
+            const node_id = node.data("id");
             const graph_node: Node | undefined = graph.nodes.get(node_id);
             if (!graph_node) {
                 console.error("Did not find node: ", node_id);
@@ -179,7 +179,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
 
             var tip = node.popper({
-                content: () => createContentFromComponent(node_id, <NodeHover node={graph_node} setCodeFocus={onFocus} />),
+                content: () => createContentFromComponent(node_id, <NodeHover node={graph_node} graph={graph} setCodeFocus={onFocus} />),
             });
 
             node.off('tap');

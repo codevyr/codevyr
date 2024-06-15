@@ -112,7 +112,7 @@ function GraphCode({ graph }: GraphCodeProps) {
 
 export default function Home() {
   const [query, setQuery] = useState('"open_handle" {}');
-  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Set() });
+  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Set(), files: new Map() });
   const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
 
   const factory = (node: TabNode) => {
