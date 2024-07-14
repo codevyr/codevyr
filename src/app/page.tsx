@@ -100,19 +100,29 @@ function GraphCode({ graph }: GraphCodeProps) {
     }
   }
 
+  function get_loc(edge: Edge): string {
+    return edge.from_file + ":" + edge.from_line
+  }
+
   return (<>
     <ul>
       {Array.from(graph.nodes.entries()).map(([id, node]: [string, Node]) => <li key={id}>{get_str(node)}</li>)}
     </ul>
     <ul>
-      {Array.from(graph.edges.values()).map((edge: Edge) => <li key={get_id(edge)}>{get_str(edge)}</li>)}
+      {
+        Array.from(graph.edges.values()).map((edgeArray: Array<Edge>) =>
+          <li key={get_id(edgeArray[0])}>{get_str(edgeArray[0])}
+            <ul>
+              {edgeArray.map((edge: Edge) => <li key={get_loc(edge)}> {get_loc(edge)} </li>)}
+            </ul>
+          </li>)}
     </ul>
   </>);
 }
 
 export default function Home() {
   const [query, setQuery] = useState('"open_handle" {}');
-  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Set(), files: new Map() });
+  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
   const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
 
   const factory = (node: TabNode) => {

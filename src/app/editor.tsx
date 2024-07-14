@@ -35,9 +35,18 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
                 files.set(file_id, file_path)
             });
 
-            console.log("FILES", files)
+            const edgeMap: Map<string, Array<Edge>> = new Map();
+
+            data.edges.forEach(edge => {
+                if (!edgeMap.has(edge.id)) {
+                  edgeMap.set(edge.id, []);
+                }
+                edgeMap.get(edge.id)!.push(edge);
+              });
+
+            console.log("FILES", files, edgeMap, nodes)
             onGraphChange(
-                { nodes: nodes, edges: data.edges, files: files }
+                { nodes: nodes, edges: edgeMap, files: files }
             );
         });
     };

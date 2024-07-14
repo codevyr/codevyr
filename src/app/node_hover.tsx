@@ -69,3 +69,48 @@ export function NodeHover({ node, setCodeFocus, graph }: NodeHoverProps) {
         </div>
     );
 }
+
+interface EdgeHoverProps {
+    edge: Edge
+    graph: Graph;
+    setCodeFocus: (type: CodeFocus) => void;
+}
+
+function EdgeHover({ edge, graph, setCodeFocus }: EdgeHoverProps) {
+    function clickDeclaration(event: React.MouseEvent<HTMLElement>) {
+        setCodeFocus({
+            file_id: edge.from_file,
+            line: edge.from_line
+        })
+    }
+
+    const file_path = graph.files.get(edge.from_file) ?? "Undefined";
+    return (
+        <>
+            <tr onClick={clickDeclaration} className='declaration-hover'>
+                <td>{file_path}</td>
+                <td>{edge.from_line}</td>
+            </tr>
+        </>
+    );
+}
+
+export interface EdgesHoverProps {
+    edges: Array<Edge>;
+    graph: Graph;
+    setCodeFocus: (type: CodeFocus) => void;
+}
+
+export function EdgesHover({ edges, setCodeFocus, graph }: EdgesHoverProps) {
+    return (
+        <div className="node-hover">
+            <table>
+                <tbody>
+                    {edges.map((edge: Edge) =>
+                        <EdgeHover key={edge.id} edge={edge} graph={graph} setCodeFocus={setCodeFocus} />
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+}

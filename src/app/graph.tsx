@@ -27,6 +27,6 @@ export interface Edge {
 
 export interface Graph {
     nodes: Map<string, Node>;
-    edges: Set<Edge>;
+    edges: Map<string, Array<Edge>>;
     files: Map<string, string>;
 }

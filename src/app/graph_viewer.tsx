@@ -11,7 +11,7 @@ import {
     limitShift,
     ComputePositionConfig,
 } from '@floating-ui/dom';
-import { NodeHover } from './node_hover';
+import { EdgesHover, NodeHover } from './node_hover';
 import { createRoot } from 'react-dom/client';
 import tippy, { followCursor, sticky, Instance, Props } from 'tippy.js';
 import { CodeFocus } from './code_viewer';
@@ -62,7 +62,7 @@ const createContentFromComponent = (id: string, component: ReactNode) => {
     const div = document.createElement('div');
 
     console.log("Create hover")
-    const root = createRoot(div, {identifierPrefix: id});
+    const root = createRoot(div, { identifierPrefix: id });
     root.render(component);
     // div.classList.add('popper-div');
     document.body.appendChild(div);
@@ -111,8 +111,10 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             elements.push({ data: { id: String(node.id), label: node.label } });
         });
 
-        graph.edges.forEach((edge: Edge) => {
-            elements.push({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
+        graph.edges.forEach((edgeArray: Array<Edge>) => {
+            edgeArray.forEach((edge: Edge) => {
+                elements.push({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
+            })
         });
 
         return elements;
@@ -154,13 +156,15 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
         });
 
-        graph.edges.forEach((edge: Edge) => {
-            new_nodes.forEach((node: Node) => {
-                if ((edge.from === node.id) || (edge.to === node.id)) {
-                    if (cy.edges('#' + edge.from + '-' + edge.to).empty()) {
-                        cy.add({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
+        graph.edges.forEach((edgeArray: Array<Edge>) => {
+            edgeArray.forEach((edge: Edge) => {
+                new_nodes.forEach((node: Node) => {
+                    if ((edge.from === node.id) || (edge.to === node.id)) {
+                        if (cy.edges('#' + edge.from + '-' + edge.to).empty()) {
+                            cy.add({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
+                        }
                     }
-                }
+                })
             })
         });
 
@@ -191,7 +195,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
                     tip.hide()
                     return
                 }
-                
+
                 let node = graph.nodes.get(node_id);
                 if (!node) {
                     console.log("Node is undefined")
@@ -219,29 +223,60 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
                 tip.show();
             });
         })
-    }, [onFocus, graph, layout]);
 
-    function cytoscapeHandler(cy: Cytoscape.Core) {
+        cy.edges().forEach(function (edge) {
+            const edge_id = edge.data("id");
+            const graph_edges: Array<Edge> | undefined = graph.edges.get(edge_id);
+            if (!graph_edges) {
+                console.error("Did not find node: ", edge_id);
+                return;
+            }
 
-        cyRef.current = cy;
+            var tip = edge.popper({
+                content: () => createContentFromComponent(edge_id, <EdgesHover edges={graph_edges} graph={graph} setCodeFocus={onFocus} />),
+            });
 
+            edge.off('tap');
+            edge.on('tap', function (evt) {
+                var edge_id = evt.target.id();
 
+                // If we show the tip already, only need to hide
+                if (tip.state.isVisible) {
+                    tip.hide()
+                    return
+                }
 
-        cy.off('tap', 'edge');
-        cy.on('tap', 'edge', function (evt) {
-            console.log(evt);
-            var edge_id = evt.target.id();
-            console.log(edge_id);
-            graph.edges.forEach((e: Edge) => {
-                if (e.id === edge_id) {
-                    console.log("EDGE", e)
+                let edges = graph.edges.get(edge_id);
+                if (!edges) {
+                    console.log("Node is undefined")
+                    return;
+                }
+
+                // There are no declarations. Maybe some fake node?
+                if (edges.length == 0) {
+                    console.warn("Node without declarations")
+                    return;
+                }
+
+                // Only one declaration, just jump to the location
+                if (edges.length == 1) {
+                    let e = edges[0];
+
                     onFocus({
                         file_id: e.from_file,
                         line: e.from_line
                     });
+                    return;
                 }
+
+                // If more than one node, then need to show the tip
+                tip.show();
             });
-        });
+        })
+    }, [onFocus, graph, layout]);
+
+    function cytoscapeHandler(cy: Cytoscape.Core) {
+        cyRef.current = cy;
     }
 
     console.log('Regenerate is', graph, stylesheet);
