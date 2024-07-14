@@ -105,21 +105,6 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
         ], []);
 
-    function cytoscapeElements(graph: Graph): ElementDefinition[] {
-        let elements: ElementDefinition[] = [];
-        graph.nodes.forEach((node: Node) => {
-            elements.push({ data: { id: String(node.id), label: node.label } });
-        });
-
-        graph.edges.forEach((edgeArray: Array<Edge>) => {
-            edgeArray.forEach((edge: Edge) => {
-                elements.push({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
-            })
-        });
-
-        return elements;
-    }
-
     useEffect(() => {
         if (!cyRef.current) {
             return
