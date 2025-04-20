@@ -22,7 +22,7 @@
     "cytoscape-popper": "^4.0.0",
     "eslint": "8.47.0",
     "eslint-config-next": "14.2.3",
-    "flexlayout-react": "^0.7.15",
+    "flexlayout-react": "0.8",
     "next": "^14.2.3",
     "postcss": "^8.4.38",
     "react": "^18.3.1",
