@@ -141,15 +141,12 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
         });
 
-        graph.edges.forEach((edgeArray: Array<Edge>) => {
+        graph.edges.forEach((edgeArray: Array<Edge>, edgeId: string) => {
+            console.log("EDGE ARRAY", edgeArray)
             edgeArray.forEach((edge: Edge) => {
-                new_nodes.forEach((node: Node) => {
-                    if ((edge.from === node.id) || (edge.to === node.id)) {
-                        if (cy.edges('#' + edge.from + '-' + edge.to).empty()) {
-                            cy.add({ data: { id: edge.from + '-' + edge.to, source: edge.from, target: edge.to } });
-                        }
-                    }
-                })
+                if (cy.edges('#' + edgeId).empty()) {
+                    cy.add({ data: { id: edgeId, source: edge.from, target: edge.to } });
+                }
             })
         });
 
