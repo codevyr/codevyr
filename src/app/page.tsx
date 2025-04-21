@@ -23,7 +23,7 @@ if (process.env.NODE_ENV === "development" && !process.env.NEXT_PUBLIC_MIRAGE_DI
 }
 
 var json: IJsonModel = {
-  global: { "tabEnableFloat": true },
+  global: { tabEnableDrag: true },
   borders: [],
   layout: {
     type: "row",
@@ -39,7 +39,8 @@ var json: IJsonModel = {
             children: [
               {
                 type: "tab",
-                name: "query-editor",
+                id: "query-editor",
+                name: "Query",
                 component: "button",
               }
             ]
@@ -50,7 +51,14 @@ var json: IJsonModel = {
             children: [
               {
                 type: "tab",
-                name: "graph-viewer",
+                id: "graph-viewer",
+                name: "Graph",
+                component: "button",
+              },
+              {
+                type: "tab",
+                id: "Two",
+                name: "Nodes",
                 component: "button",
               }
             ]
@@ -63,14 +71,10 @@ var json: IJsonModel = {
         children: [
           {
             type: "tab",
-            name: "code-viewer",
+            id: "code-viewer",
+            name: "Code",
             component: "button",
           },
-          {
-            type: "tab",
-            name: "Two",
-            component: "button",
-          }
         ]
       }
     ]
@@ -126,9 +130,7 @@ export default function Home() {
   const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
 
   const factory = (node: TabNode) => {
-    const component = node.getComponent();
-    const name = node.getName();
-    switch (name) {
+    switch (node.getId()) {
       case "query-editor":
         return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
       case "graph-viewer":
