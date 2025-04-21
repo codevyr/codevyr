@@ -19,7 +19,6 @@ import { CodeFocus } from './code_viewer';
 
 export interface GraphProps {
     graph: Graph;
-    onFocus: (type: CodeFocus | null) => void;
     selectFile: (codeFocus: CodeFocus) => void;
 }
 
@@ -70,7 +69,7 @@ const createContentFromComponent = (id: string, component: ReactNode) => {
     return div;
 };
 
-export function GraphViewer({ graph, onFocus, selectFile }: GraphProps) {
+export function GraphViewer({ graph, selectFile }: GraphProps) {
     let cyRef = useRef<Cytoscape.Core | null>(null);
 
     const layout = useMemo(() => ({

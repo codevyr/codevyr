@@ -107,7 +107,7 @@ export function EdgesHover({ edges, setCodeFocus, graph }: EdgesHoverProps) {
             <table>
                 <tbody>
                     {edges.map((edge: Edge) =>
-                        <EdgeHover key={edge.id} edge={edge} graph={graph} setCodeFocus={setCodeFocus} />
+                        <EdgeHover key={edge.id+'-'+edge.from_line} edge={edge} graph={graph} setCodeFocus={setCodeFocus} />
                     )}
                 </tbody>
             </table>

@@ -24,12 +24,12 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
     function handleEditorDidMount(editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) {
         editorRef.current = editor;
 
-        console.log('editor mounted');
         editorRef.current.revealLineInCenter(parseInt(editorParams.loc));
         editorRef.current.focus();
     }
 
     useEffect(() => {
+        console.log('update editor');
         if (editorRef.current !== null) {
             editorRef.current.setValue(editorParams.value);
             editorRef.current.revealLineInCenter(parseInt(editorParams.loc));

@@ -21,34 +21,34 @@ interface RustGraph {
 export function EditorComponent({ query, onGraphChange }: EditorProps) {
     const queryGraph = (ed: monaco.editor.ICodeEditor) => {
         console.log('submit-query');
-        fetchQuery(ed.getValue()
-        ).then(response => response.json()
-        ).then((data: RustGraph) => {
-            console.log('data is', data);
-            let nodes = new Map<string, Node>()
-            data.nodes.forEach((node) => {
-                nodes.set(node.id, node)
-            })
+        fetchQuery(ed.getValue())
+            .then(response => response.json())
+            .then((data: RustGraph) => {
+                console.log('data is', data);
+                let nodes = new Map<string, Node>()
+                data.nodes.forEach((node) => {
+                    nodes.set(node.id, node)
+                })
 
-            let files = new Map<string, string>()
-            data.files.forEach(([file_id, file_path])=> {
-                files.set(file_id, file_path)
+                let files = new Map<string, string>()
+                data.files.forEach(([file_id, file_path]) => {
+                    files.set(file_id, file_path)
+                });
+
+                const edgeMap: Map<string, Array<Edge>> = new Map();
+
+                data.edges.forEach(edge => {
+                    if (!edgeMap.has(edge.id)) {
+                        edgeMap.set(edge.id, []);
+                    }
+                    edgeMap.get(edge.id)!.push(edge);
+                });
+
+                console.log("FILES", files, edgeMap, nodes)
+                onGraphChange(
+                    { nodes: nodes, edges: edgeMap, files: files }
+                );
             });
-
-            const edgeMap: Map<string, Array<Edge>> = new Map();
-
-            data.edges.forEach(edge => {
-                if (!edgeMap.has(edge.id)) {
-                  edgeMap.set(edge.id, []);
-                }
-                edgeMap.get(edge.id)!.push(edge);
-              });
-
-            console.log("FILES", files, edgeMap, nodes)
-            onGraphChange(
-                { nodes: nodes, edges: edgeMap, files: files }
-            );
-        });
     };
 
     const handleEditorWillMount = (monaco: Monaco) => {

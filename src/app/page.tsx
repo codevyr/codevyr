@@ -126,20 +126,38 @@ function GraphCode({ graph }: GraphCodeProps) {
 }
 
 export default function Home() {
-  const [query, setQuery] = useState('"open_handle" {}');
+  const [query, setQuery] = useState('"devicemanager.Allocate" {}');
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
   const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
   const [currentFile, setCurrentFile] = useState<EditorParams>(new EditorParams());
+  const [openFiles, setOpenFiles] = useState<Map<string, EditorParams>>(new Map());
 
   function handleSelectFile(codeFocus: CodeFocus) {
-    fetchSource(codeFocus.file_id).then(response => response.text()).then(data => {
+    let known_file = openFiles.get(codeFocus.file_id)
+    if (known_file !== undefined) {
+      console.log("File is known", codeFocus.file_id, known_file)
       setCurrentFile({
-          'path': String(codeFocus.file_id),
-          'language': 'c',
-          'value': data,
-          'loc': codeFocus.line
+        language: known_file.language,
+        loc: codeFocus.line,
+        path: known_file.path,
+        value: known_file.value,
       })
-  })
+      openFiles.set(codeFocus.file_id, known_file)
+      return;
+    }
+
+    fetchSource(codeFocus.file_id).then(response => response.text()).then(data => {
+      const editor_params: EditorParams = {
+        path: String(codeFocus.file_id),
+        language: 'c',
+        value: data,
+        loc: codeFocus.line
+      };
+
+
+      setCurrentFile(editor_params)
+      openFiles.set(codeFocus.file_id, editor_params)
+    })
   }
 
   const factory = (node: TabNode) => {
@@ -147,7 +165,7 @@ export default function Home() {
       case "query-editor":
         return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
       case "graph-viewer":
-        return <GraphViewer graph={queryGraph} onFocus={setCodeFocus} selectFile={handleSelectFile} />;
+        return <GraphViewer graph={queryGraph} selectFile={handleSelectFile} />;
       case "code-viewer":
         return <CodeViewer editorParams={currentFile} />;
       default:
