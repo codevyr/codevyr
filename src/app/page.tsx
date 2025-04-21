@@ -11,10 +11,11 @@ import { Uri } from 'monaco-editor/esm/vs/editor/editor.api';
 
 import { EditorComponent } from './editor';
 import { Graph, Node, Edge } from './graph';
-import { CodeViewer, CodeFocus } from './code_viewer';
+import { CodeViewer, CodeFocus, EditorParams } from './code_viewer';
 import { GraphViewer, GraphProps } from './graph_viewer';
 import { on } from 'events';
 import { makeServer } from "./mirage"
+import { fetchSource } from "./askld";
 
 console.log(process.env.NODE_ENV, process.env.NEXT_PUBLIC_MIRAGE_DISABLE)
 if (process.env.NODE_ENV === "development" && !process.env.NEXT_PUBLIC_MIRAGE_DISABLE) {
@@ -128,15 +129,27 @@ export default function Home() {
   const [query, setQuery] = useState('"open_handle" {}');
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
   const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
+  const [currentFile, setCurrentFile] = useState<EditorParams>(new EditorParams());
+
+  function handleSelectFile(codeFocus: CodeFocus) {
+    fetchSource(codeFocus.file_id).then(response => response.text()).then(data => {
+      setCurrentFile({
+          'path': String(codeFocus.file_id),
+          'language': 'c',
+          'value': data,
+          'loc': codeFocus.line
+      })
+  })
+  }
 
   const factory = (node: TabNode) => {
     switch (node.getId()) {
       case "query-editor":
         return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
       case "graph-viewer":
-        return <GraphViewer graph={queryGraph} onFocus={setCodeFocus} />;
+        return <GraphViewer graph={queryGraph} onFocus={setCodeFocus} selectFile={handleSelectFile} />;
       case "code-viewer":
-        return <CodeViewer codeFocus={codeFocus} />;
+        return <CodeViewer editorParams={currentFile} />;
       default:
         return <GraphCode graph={queryGraph} />;
     }

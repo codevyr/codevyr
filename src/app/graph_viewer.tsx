@@ -20,6 +20,7 @@ import { CodeFocus } from './code_viewer';
 export interface GraphProps {
     graph: Graph;
     onFocus: (type: CodeFocus | null) => void;
+    selectFile: (codeFocus: CodeFocus) => void;
 }
 
 Cytoscape.use(dagre)
@@ -69,7 +70,7 @@ const createContentFromComponent = (id: string, component: ReactNode) => {
     return div;
 };
 
-export function GraphViewer({ graph, onFocus }: GraphProps) {
+export function GraphViewer({ graph, onFocus, selectFile }: GraphProps) {
     let cyRef = useRef<Cytoscape.Core | null>(null);
 
     const layout = useMemo(() => ({
@@ -165,7 +166,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
 
             var tip = node.popper({
-                content: () => createContentFromComponent(node_id, <NodeHover node={graph_node} graph={graph} setCodeFocus={onFocus} />),
+                content: () => createContentFromComponent(node_id, <NodeHover node={graph_node} graph={graph} setCodeFocus={selectFile} />),
             });
 
             node.off('tap');
@@ -194,7 +195,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
                 if (node.declarations.length == 1) {
                     let decl = node.declarations[0];
 
-                    onFocus({
+                    selectFile({
                         file_id: decl.file_id,
                         line: decl.line_start
                     });
@@ -215,7 +216,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
             }
 
             var tip = edge.popper({
-                content: () => createContentFromComponent(edge_id, <EdgesHover edges={graph_edges} graph={graph} setCodeFocus={onFocus} />),
+                content: () => createContentFromComponent(edge_id, <EdgesHover edges={graph_edges} graph={graph} setCodeFocus={selectFile} />),
             });
 
             edge.off('tap');
@@ -244,7 +245,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
                 if (edges.length == 1) {
                     let e = edges[0];
 
-                    onFocus({
+                    selectFile({
                         file_id: e.from_file,
                         line: e.from_line
                     });
@@ -255,7 +256,7 @@ export function GraphViewer({ graph, onFocus }: GraphProps) {
                 tip.show();
             });
         })
-    }, [onFocus, graph, layout]);
+    }, [selectFile, graph, layout]);
 
     function cytoscapeHandler(cy: Cytoscape.Core) {
         cyRef.current = cy;

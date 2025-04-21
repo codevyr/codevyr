@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchSource } from "./askld";
 import { Editor, Monaco } from "@monaco-editor/react";
 import monaco from 'monaco-editor';
 
@@ -9,48 +8,36 @@ export interface CodeFocus {
 }
 
 export interface CodeViewerProps {
-    codeFocus: CodeFocus | null;
+    editorParams: EditorParams;
 }
 
-export function CodeViewer({ codeFocus }: CodeViewerProps) {
+export class EditorParams {
+    path: string = "";
+    language: string = "";
+    value: string = "";
+    loc: string = "";
+}
+
+export function CodeViewer({ editorParams }: CodeViewerProps) {
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-    const [currentFile, setCurrentFile] = useState({ 'path': '', 'language': '', 'value': '', 'loc': '0' });
 
     function handleEditorDidMount(editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) {
         editorRef.current = editor;
 
         console.log('editor mounted');
-        if (codeFocus === null) {
-            return;
-        }
-        editorRef.current.revealLineInCenter(parseInt(codeFocus.line));
+        editorRef.current.revealLineInCenter(parseInt(editorParams.loc));
         editorRef.current.focus();
     }
 
     useEffect(() => {
-        if (codeFocus === null) {
-            return;
-        }
-
-        fetchSource(codeFocus.file_id).then(response => response.text()).then(data => {
-            setCurrentFile({
-                'path': String(codeFocus.file_id),
-                'language': 'c',
-                'value': data,
-                'loc': codeFocus.line
-            })
-        })
-    }, [codeFocus]);
-
-    useEffect(() => {
         if (editorRef.current !== null) {
-            editorRef.current.setValue(currentFile.value);
-            editorRef.current.revealLineInCenter(parseInt(currentFile.loc));
-            editorRef.current.setPosition({'lineNumber': parseInt(currentFile.loc), column: 1});
+            editorRef.current.setValue(editorParams.value);
+            editorRef.current.revealLineInCenter(parseInt(editorParams.loc));
+            editorRef.current.setPosition({'lineNumber': parseInt(editorParams.loc), column: 1});
             editorRef.current.focus();
             editorRef.current.layout();
         }
-    }, [currentFile]);
+    }, [editorParams]);
 
-    return <Editor height="100%" onMount={handleEditorDidMount} value={currentFile.value} language={currentFile.language} path={currentFile.path} />;
+    return <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} />;
 }
