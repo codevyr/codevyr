@@ -178,7 +178,9 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
         cy.nodes().difference(new_node_coll).lock()
 
         console.log("layout", new_node_coll)
-        cy.layout(layout).run();
+        if (!new_node_coll.empty()) {
+            cy.layout(layout).run();
+        }
         cy.nodes().difference(new_node_coll).unlock()
 
         cy.nodes().forEach(function (node) {
