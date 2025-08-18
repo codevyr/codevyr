@@ -58,19 +58,31 @@ function tippyFactory(ref: RefElement, content: HTMLElement, options?: PopperOpt
 
 Cytoscape.use(cytoscapePopper(tippyFactory));
 
-const createContentFromComponent = (id: string, component: ReactNode) => {
-    const div = document.createElement('div');
+const createContentFromComponent = (id: string, component: ReactNode, onCleanupReady: (cleanup: () => void) => void) => {
+    const divElement = document.createElement('div');
 
     console.log("Create hover")
-    const root = createRoot(div, { identifierPrefix: id });
+    const root = createRoot(divElement, { identifierPrefix: id });
     root.render(component);
-    // div.classList.add('popper-div');
-    document.body.appendChild(div);
-    return div;
+    document.body.appendChild(divElement);
+    
+    // Create cleanup function and pass it to the callback
+    const cleanup = () => {
+        root.unmount();
+        if (divElement.parentNode) {
+            divElement.parentNode.removeChild(divElement);
+        }
+    };
+    
+    onCleanupReady(cleanup);
+    
+    return divElement;
 };
 
 export function GraphViewer({ graph, selectFile }: GraphProps) {
     let cyRef = useRef<Cytoscape.Core | null>(null);
+    let activeTipRef = useRef<PopperInstance | null>(null);
+    let activeTipCleanupRef = useRef<(() => void) | null>(null);
 
     const layout = useMemo(() => ({
         name: 'dagre',
@@ -86,8 +98,8 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
             {
                 selector: 'node',
                 style: {
-                    'content': 'data(label)',
-                    'text-valign': 'center',
+                    'content': 'data(label)' as any,
+                    'text-valign': 'center' as any,
                     'color': 'black',
                     'background-color': '#91c7fe'
                 }
@@ -97,10 +109,10 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                 selector: 'edge',
                 style: {
                     'width': 4,
-                    'target-arrow-shape': 'triangle',
+                    'target-arrow-shape': 'triangle' as any,
                     'line-color': '#9dbaea',
                     'target-arrow-color': '#9dbaea',
-                    'curve-style': 'bezier'
+                    'curve-style': 'bezier' as any
                 }
             }
         ], []);
@@ -118,6 +130,19 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
         // (removed_collection). And, finally, add the new nodes.
 
         let cy = cyRef.current
+        
+        // Hide any active tip when graph changes
+        if (activeTipRef.current) {
+            activeTipRef.current.hide();
+            activeTipRef.current = null;
+        }
+        
+        // Clean up any active tip content
+        if (activeTipCleanupRef.current) {
+            activeTipCleanupRef.current();
+            activeTipCleanupRef.current = null;
+        }
+        
         let removed_collection = cy.collection()
         let overlapped_collection = cy.collection()
         cyRef.current.nodes().forEach((ele: NodeSingular) => {
@@ -164,18 +189,35 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                 return;
             }
 
+            let tipCleanup: (() => void) | null = null;
+            
             var tip = node.popper({
-                content: () => createContentFromComponent(node_id, <NodeHover node={graph_node} graph={graph} setCodeFocus={selectFile} />),
+                content: () => createContentFromComponent(
+                    `node-${node_id}`, 
+                    <NodeHover node={graph_node} graph={graph} setCodeFocus={selectFile} />,
+                    (cleanup) => { tipCleanup = cleanup; }
+                ),
             });
 
             node.off('tap');
             node.on('tap', function (evt) {
                 var node_id = evt.target.id();
 
-                // If we show the tip already, only need to hide
+                // Hide any currently active tip and clean up its content
+                if (activeTipRef.current) {
+                    activeTipRef.current.hide();
+                    activeTipRef.current = null;
+                }
+                
+                if (activeTipCleanupRef.current) {
+                    activeTipCleanupRef.current();
+                    activeTipCleanupRef.current = null;
+                }
+
+                // If this is the same tip that was showing, don't show it again
                 if (tip.state.isVisible) {
-                    tip.hide()
-                    return
+                    tip.hide();
+                    return;
                 }
 
                 let node = graph.nodes.get(node_id);
@@ -203,6 +245,8 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
 
                 // If more than one node, then need to show the tip
                 tip.show();
+                activeTipRef.current = tip;
+                activeTipCleanupRef.current = tipCleanup;
             });
         })
 
@@ -214,18 +258,35 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                 return;
             }
 
+            let tipCleanup: (() => void) | null = null;
+            
             var tip = edge.popper({
-                content: () => createContentFromComponent(edge_id, <EdgesHover edges={graph_edges} graph={graph} setCodeFocus={selectFile} />),
+                content: () => createContentFromComponent(
+                    `edge-${edge_id}`, 
+                    <EdgesHover edges={graph_edges} graph={graph} setCodeFocus={selectFile} />,
+                    (cleanup) => { tipCleanup = cleanup; }
+                ),
             });
 
             edge.off('tap');
             edge.on('tap', function (evt) {
                 var edge_id = evt.target.id();
 
-                // If we show the tip already, only need to hide
+                // Hide any currently active tip and clean up its content
+                if (activeTipRef.current) {
+                    activeTipRef.current.hide();
+                    activeTipRef.current = null;
+                }
+                
+                if (activeTipCleanupRef.current) {
+                    activeTipCleanupRef.current();
+                    activeTipCleanupRef.current = null;
+                }
+
+                // If this is the same tip that was showing, don't show it again
                 if (tip.state.isVisible) {
-                    tip.hide()
-                    return
+                    tip.hide();
+                    return;
                 }
 
                 let edges = graph.edges.get(edge_id);
@@ -253,9 +314,27 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
 
                 // If more than one node, then need to show the tip
                 tip.show();
+                activeTipRef.current = tip;
+                activeTipCleanupRef.current = tipCleanup;
             });
         })
     }, [selectFile, graph, layout]);
+
+    // Cleanup function to hide active tip on unmount
+    useEffect(() => {
+        return () => {
+            if (activeTipRef.current) {
+                activeTipRef.current.hide();
+                activeTipRef.current = null;
+            }
+            
+            // Clean up any remaining tip content
+            if (activeTipCleanupRef.current) {
+                activeTipCleanupRef.current();
+                activeTipCleanupRef.current = null;
+            }
+        };
+    }, []);
 
     function cytoscapeHandler(cy: Cytoscape.Core) {
         cyRef.current = cy;
