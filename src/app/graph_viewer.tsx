@@ -341,5 +341,5 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
     }
 
     console.log('Regenerate is', graph, stylesheet);
-    return <CytoscapeComponent elements={[]} stylesheet={stylesheet} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} />;
+    return <CytoscapeComponent elements={[]} stylesheet={stylesheet} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} wheelSensitivity={0.5} />;
 }
