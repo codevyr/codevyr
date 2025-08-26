@@ -1,0 +1,8 @@
+.git
+.next/cache
+node_modules
+npm-debug.log
+yarn-error.log
+.env*
+Dockerfile
+docker-compose*.yml
