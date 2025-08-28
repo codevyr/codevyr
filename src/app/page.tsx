@@ -16,6 +16,7 @@ import { GraphViewer, GraphProps } from './graph_viewer';
 import { on } from 'events';
 import { makeServer } from "./mirage"
 import { fetchSource } from "./askld";
+import { DEFAULT_QUERY } from './default-queries';
 
 console.log(process.env.NODE_ENV, process.env.NEXT_PUBLIC_MIRAGE_DISABLE)
 if (process.env.NODE_ENV === "development" && !process.env.NEXT_PUBLIC_MIRAGE_DISABLE) {
@@ -126,7 +127,7 @@ function GraphCode({ graph }: GraphCodeProps) {
 }
 
 export default function Home() {
-  const [query, setQuery] = useState('"devicemanager.Allocate" {}');
+  const [query, setQuery] = useState(DEFAULT_QUERY);
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
   const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
   const [currentFile, setCurrentFile] = useState<EditorParams>(new EditorParams());
