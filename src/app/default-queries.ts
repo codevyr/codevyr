@@ -21,6 +21,6 @@ export const DEFAULT_QUERY = `@preamble
  */
 
 "main" {
-    "cli.run" {}
+    "cli.Run" {}
 };
 `;
