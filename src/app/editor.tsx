@@ -6,6 +6,7 @@ import monaco from 'monaco-editor';
 import { Node, Edge, Graph } from './graph';
 
 import { fetchQuery } from './askld';
+import { registerAskl } from './monaco-askl-language';
 
 interface EditorProps {
     query: string;
@@ -58,7 +59,9 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
             run: queryGraph
         });
+
+        registerAskl(monaco);
     };
 
-    return <Editor height="90vh" defaultLanguage="javascript" defaultValue={query} beforeMount={handleEditorWillMount} />;
+    return <Editor height="90vh" defaultLanguage="askl" defaultValue={query} beforeMount={handleEditorWillMount} />;
 }
