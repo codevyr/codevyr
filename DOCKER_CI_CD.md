@@ -28,7 +28,6 @@ This repository includes a comprehensive GitHub Actions workflow for building an
 - **Filesystem Scan**: Trivy scans source code for security issues
 - **Container Scan**: Trivy scans the final Docker image
 - **SARIF Upload**: Results uploaded to GitHub Security tab
-- **Multi-arch Support**: Builds for `linux/amd64` and `linux/arm64`
 
 ### 🚀 **Performance Optimizations**
 - **Build Cache**: GitHub Actions cache for Docker layers
