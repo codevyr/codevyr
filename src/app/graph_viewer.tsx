@@ -1,7 +1,7 @@
 import CytoscapeComponent from 'react-cytoscapejs';
 import Cytoscape, { ElementDefinition, NodeSingular } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
-import React, { ReactNode, useEffect, useMemo, useRef } from 'react';
+import React, { ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Edge, Graph, Node } from './graph';
 import cytoscapePopper, { RefElement, PopperOptions, PopperInstance } from 'cytoscape-popper';
 import {
@@ -15,6 +15,7 @@ import { EdgesHover, NodeHover } from './node_hover';
 import { createRoot } from 'react-dom/client';
 import tippy, { followCursor, sticky, Instance, Props } from 'tippy.js';
 import { CodeFocus } from './code_viewer';
+import { GraphToolbar } from './graph_toolbar';
 
 
 export interface GraphProps {
@@ -342,6 +343,63 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
         cyRef.current = cy;
     }
 
+    // Graph control functions
+    const handleRerunLayout = useCallback(() => {
+        if (cyRef.current) {
+            const cy = cyRef.current;
+            // Hide any active tips first
+            if (activeTipRef.current) {
+                activeTipRef.current.hide();
+                activeTipRef.current = null;
+            }
+            if (activeTipCleanupRef.current) {
+                activeTipCleanupRef.current();
+                activeTipCleanupRef.current = null;
+            }
+
+            // Rerun the layout on all nodes
+            cy.layout(layout).run();
+        }
+    }, [layout]);
+
+    const handleCenterGraph = useCallback(() => {
+        if (cyRef.current) {
+            cyRef.current.center();
+        }
+    }, []);
+
+    const handleFitToView = useCallback(() => {
+        if (cyRef.current) {
+            cyRef.current.fit(undefined, 50); // 50px padding
+        }
+    }, []);
+
+    const handleResetZoom = useCallback(() => {
+        if (cyRef.current) {
+            cyRef.current.zoom(1);
+            cyRef.current.center();
+        }
+    }, []);
+
     console.log('Regenerate is', graph, stylesheet);
-    return <CytoscapeComponent elements={[]} stylesheet={stylesheet} style={{ width: '100%', height: '100%' }} cy={cytoscapeHandler} layout={layout} wheelSensitivity={0.5} />;
+    return (
+        <div className="flex flex-col h-full">
+            <GraphToolbar
+                onRerunLayout={handleRerunLayout}
+                onCenterGraph={handleCenterGraph}
+                onFitToView={handleFitToView}
+                onResetZoom={handleResetZoom}
+            />
+            <div className="flex-1">
+                <CytoscapeComponent
+                    elements={[]}
+                    stylesheet={stylesheet}
+                    style={{ width: '100%', height: '100%' }}
+                    cy={cytoscapeHandler}
+                    layout={layout}
+                    wheelSensitivity={0.5}
+                />
+            </div>
+        </div>
+    );
 }
