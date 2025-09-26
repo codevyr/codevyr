@@ -14,6 +14,7 @@ on:
       - 'tailwind.config.ts'
       - 'postcss.config.js'
       - 'tsconfig.json'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - main
@@ -27,6 +28,7 @@ on:
       - 'tailwind.config.ts'
       - 'postcss.config.js'
       - 'tsconfig.json'
+      - '.github/workflows/**'
 
 env:
   REGISTRY: ghcr.io
@@ -164,6 +166,7 @@ jobs:
     steps:
       - name: Delete old container images
         uses: actions/delete-package-versions@v4
+        continue-on-error: true
         with:
           package-name: 'askl-react'
           package-type: 'container'
