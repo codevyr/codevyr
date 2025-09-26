@@ -53,3 +53,24 @@ body {
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
+
+/* Graph Toolbar Components */
+.toolbar-container {
+  @apply flex items-center gap-2 p-2 bg-gray-100 border-b border-gray-300 shadow-sm;
+}
+
+.toolbar-button-group {
+  @apply flex items-center gap-2;
+}
+
+.toolbar-btn {
+  @apply flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 
+         bg-white border border-gray-300 rounded-md 
+         hover:bg-gray-50 hover:border-gray-400 
+         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent 
+         transition-colors;
+}
+
+.toolbar-label {
+  @apply flex items-center text-xs text-gray-500;
+}
