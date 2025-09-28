@@ -42,7 +42,7 @@ No additional secrets required - uses `GITHUB_TOKEN` for registry access.
 
 ### Registry Configuration
 - **Registry**: GitHub Container Registry (ghcr.io)
-- **Image Name**: `ghcr.io/codevyr/askl-react`
+- **Image Name**: `ghcr.io/codevyr/codevyr`
 - **Permissions**: Automatically granted through `GITHUB_TOKEN`
 
 ### Cleanup Policy
@@ -55,28 +55,28 @@ No additional secrets required - uses `GITHUB_TOKEN` for registry access.
 ### Pull the Latest Image
 ```bash
 # Latest stable version (main branch)
-docker pull ghcr.io/codevyr/askl-react:latest
+docker pull ghcr.io/codevyr/codevyr:latest
 
 # Specific PR version
-docker pull ghcr.io/codevyr/askl-react:pr-123
+docker pull ghcr.io/codevyr/codevyr:pr-123
 
 # Specific commit
-docker pull ghcr.io/codevyr/askl-react:main-abc1234
+docker pull ghcr.io/codevyr/codevyr:main-abc1234
 ```
 
 ### Run the Container
 ```bash
 # Basic run
-docker run -p 3000:3000 ghcr.io/codevyr/askl-react:latest
+docker run -p 3000:3000 ghcr.io/codevyr/codevyr:latest
 
 # With environment variables
 docker run -p 3000:3000 \
   -e NODE_ENV=production \
-  ghcr.io/codevyr/askl-react:latest
+  ghcr.io/codevyr/codevyr:latest
 
 # With health checks
 docker run -p 3000:3000 --health-interval=30s \
-  ghcr.io/codevyr/askl-react:latest
+  ghcr.io/codevyr/codevyr:latest
 ```
 
 ## Local Development
@@ -84,10 +84,10 @@ docker run -p 3000:3000 --health-interval=30s \
 ### Build Locally
 ```bash
 # Build the image
-docker build -t askl-react:local .
+docker build -t codevyr:local .
 
 # Run locally built image
-docker run -p 3000:3000 askl-react:local
+docker run -p 3000:3000 codevyr:local
 ```
 
 ### Test the Workflow Locally
@@ -132,7 +132,7 @@ on:
 ```yaml
 env:
   REGISTRY: your-registry.com
-  IMAGE_NAME: your-org/askl-react
+  IMAGE_NAME: your-org/codevyr
 ```
 
 ### Adjust Security Scanning
@@ -161,14 +161,14 @@ env:
 ### Debug Commands
 ```bash
 # Check image details
-docker inspect ghcr.io/codevyr/askl-react:latest
+docker inspect ghcr.io/codevyr/codevyr:latest
 
 # View image history
-docker history ghcr.io/codevyr/askl-react:latest
+docker history ghcr.io/codevyr/codevyr:latest
 
 # Scan image locally
 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  aquasec/trivy:latest image ghcr.io/codevyr/askl-react:latest
+  aquasec/trivy:latest image ghcr.io/codevyr/codevyr:latest
 ```
 
 ## Best Practices Implemented
