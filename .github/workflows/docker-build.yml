@@ -32,7 +32,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/askl-react
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   lint-and-test:
@@ -168,7 +168,7 @@ jobs:
         uses: actions/delete-package-versions@v4
         continue-on-error: true
         with:
-          package-name: 'askl-react'
+          package-name: 'codevyr'
           package-type: 'container'
           min-versions-to-keep: 10
           delete-only-untagged-versions: true
