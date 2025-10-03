@@ -74,3 +74,14 @@ body {
 .toolbar-label {
   @apply flex items-center text-xs text-gray-500;
 }
+
+.step-badge{
+  width:34px;height:34px;border-radius:9999px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:0.95rem;
+  background: var(--bs-primary); color:#fff;
+  box-shadow:0 0 0 2px rgba(0,0,0,.15), 0 0 0 4px rgba(255,255,255,.75);
+}
+@media (prefers-color-scheme: dark){
+  .step-badge{ box-shadow:0 0 0 2px rgba(255,255,255,.25), 0 0 0 4px rgba(0,0,0,.6); }
+}
