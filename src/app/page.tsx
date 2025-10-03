@@ -1,19 +1,12 @@
 'use client';
 
-import Image from 'next/image'
-import React, { createRef, use, useMemo, useRef, useEffect, useState, useReducer } from 'react';
-import { Layout, Model, TabNode, IJsonModel } from 'flexlayout-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Layout, Model, TabNode, IJsonModel, Actions, DockLocation, Action } from 'flexlayout-react';
 import 'flexlayout-react/style/light.css';
-import { Editor, Monaco } from '@monaco-editor/react';
-import monaco, { editor } from 'monaco-editor';
-import { Uri } from 'monaco-editor/esm/vs/editor/editor.api';
-
-
 import { EditorComponent } from './editor';
 import { Graph, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus, EditorParams } from './code_viewer';
-import { GraphViewer, GraphProps } from './graph_viewer';
-import { on } from 'events';
+import { GraphViewer } from './graph_viewer';
 import { makeServer } from "./mirage"
 import { fetchSource } from "./askld";
 import { DEFAULT_QUERY } from './default-queries';
@@ -24,7 +17,10 @@ if (process.env.NODE_ENV === "development" && !process.env.NEXT_PUBLIC_MIRAGE_DI
   makeServer({ environment: "development" })
 }
 
-var json: IJsonModel = {
+const CODE_TABSET_ID = "code-tabset";
+const CODE_PLACEHOLDER_TAB_ID = "code-placeholder";
+
+const initialLayout: IJsonModel = {
   global: { tabEnableDrag: true },
   borders: [],
   layout: {
@@ -69,21 +65,22 @@ var json: IJsonModel = {
       },
       {
         type: "tabset",
+        id: CODE_TABSET_ID,
         weight: 50,
+        enableDeleteWhenEmpty: false,
         children: [
           {
             type: "tab",
-            id: "code-viewer",
+            id: CODE_PLACEHOLDER_TAB_ID,
             name: "Code",
-            component: "button",
-          },
+            component: "code-placeholder",
+            enableClose: false,
+          }
         ]
       }
     ]
   }
 };
-
-const model = Model.fromJson(json);
 
 export interface GraphCodeProps {
   graph: Graph;
@@ -126,57 +123,185 @@ function GraphCode({ graph }: GraphCodeProps) {
   </>);
 }
 
+const codeTabId = (fileId: string) => `code-tab-${fileId}`;
+
+interface CodeTabEntry {
+  fileId: string;
+  title: string;
+  editorParams: EditorParams;
+}
+
+function getTabTitle(filePathOrId: string): string {
+  const normalized = filePathOrId.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter(Boolean);
+  const lastSegment = segments.length > 0 ? segments[segments.length - 1] : normalized;
+  const [basename] = lastSegment.split(':');
+  return basename || lastSegment || filePathOrId;
+}
+
 export default function Home() {
+  const [model] = useState(() => Model.fromJson(initialLayout));
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
-  const [codeFocus, setCodeFocus] = useState<CodeFocus | null>(null);
-  const [currentFile, setCurrentFile] = useState<EditorParams>(new EditorParams());
-  const [openFiles, setOpenFiles] = useState<Map<string, EditorParams>>(new Map());
+  const [codeTabs, setCodeTabs] = useState<Map<string, CodeTabEntry>>(() => new Map());
+  const codeTabsRef = useRef<Map<string, CodeTabEntry>>(codeTabs);
 
-  function handleSelectFile(codeFocus: CodeFocus) {
-    let known_file = openFiles.get(codeFocus.file_id)
-    if (known_file !== undefined) {
-      console.log("File is known", codeFocus.file_id, known_file)
-      setCurrentFile({
-        language: known_file.language,
-        loc: codeFocus.line,
-        path: known_file.path,
-        value: known_file.value,
-      })
-      openFiles.set(codeFocus.file_id, known_file)
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const activeFileIdRef = useRef<string | null>(activeFileId);
+  useEffect(() => {
+    activeFileIdRef.current = activeFileId;
+  }, [activeFileId]);
+
+  const handleSelectFile = useCallback((focus: CodeFocus) => {
+    const { file_id: fileId, line } = focus;
+    const tabId = codeTabId(fileId);
+    const existingEntry = codeTabsRef.current.get(tabId);
+    const filePath = queryGraph.files.get(fileId) ?? fileId;
+    const tabTitle = getTabTitle(filePath);
+
+    if (existingEntry) {
+      setCodeTabs(prev => {
+        const existing = prev.get(tabId);
+        if (!existing) {
+          return prev;
+        }
+
+        const updated = new Map(prev);
+        updated.set(tabId, {
+          fileId: existing.fileId,
+          title: tabTitle,
+          editorParams: {
+            ...existing.editorParams,
+            path: filePath,
+            loc: line,
+          },
+        });
+        codeTabsRef.current = updated;
+        return updated;
+      });
+
+      model.doAction(Actions.updateNodeAttributes(tabId, { name: tabTitle }));
+      model.doAction(Actions.selectTab(tabId));
+      setActiveFileId(fileId);
       return;
     }
 
-    fetchSource(codeFocus.file_id).then(response => response.text()).then(data => {
-      const editor_params: EditorParams = {
-        path: String(codeFocus.file_id),
-        language: 'c',
-        value: data,
-        loc: codeFocus.line
-      };
+    fetchSource(fileId)
+      .then(response => response.text())
+      .then(data => {
+        const newTabId = tabId;
+        const editorParams: EditorParams = {
+          path: String(filePath),
+          language: 'c',
+          value: data,
+          loc: line,
+        };
 
+        setCodeTabs(prev => {
+          const next = new Map(prev);
+          next.set(tabId, { fileId, title: tabTitle, editorParams });
+          codeTabsRef.current = next;
+          return next;
+        });
 
-      setCurrentFile(editor_params)
-      openFiles.set(codeFocus.file_id, editor_params)
-    })
-  }
+        setActiveFileId(fileId);
 
-  const factory = (node: TabNode) => {
+        const newTab = {
+          type: "tab",
+          id: tabId,
+          name: tabTitle,
+          component: "code-viewer",
+          config: { fileId },
+        };
+
+        model.doAction(Actions.addNode(newTab, CODE_TABSET_ID, DockLocation.CENTER, -1, true));
+
+        if (model.getNodeById(CODE_PLACEHOLDER_TAB_ID)) {
+          model.doAction(Actions.deleteTab(CODE_PLACEHOLDER_TAB_ID));
+        }
+      })
+      .catch(error => {
+        console.error('Failed to load source file', error);
+      });
+  }, [model, queryGraph]);
+
+  const handleModelChange = useCallback((_: Model, action: Action) => {
+    if (action.type === Actions.SELECT_TAB) {
+      const tabId = action.data.tabNode;
+      if (typeof tabId === 'string') {
+        const entry = codeTabsRef.current.get(tabId);
+        if (entry) {
+          setActiveFileId(entry.fileId);
+        } else if (tabId === CODE_PLACEHOLDER_TAB_ID) {
+          setActiveFileId(null);
+        }
+      }
+    }
+
+    if (action.type === Actions.DELETE_TAB) {
+      const tabId = action.data.node;
+      if (typeof tabId === 'string') {
+        const entry = codeTabsRef.current.get(tabId);
+        if (entry) {
+          setCodeTabs(prev => {
+            if (!prev.has(tabId)) {
+              return prev;
+            }
+            const next = new Map(prev);
+            next.delete(tabId);
+            if (next.size === 0 && !model.getNodeById(CODE_PLACEHOLDER_TAB_ID)) {
+              const placeholderTab = {
+                type: "tab",
+                id: CODE_PLACEHOLDER_TAB_ID,
+                name: "Code",
+                component: "code-placeholder",
+                enableClose: false,
+              };
+              model.doAction(Actions.addNode(placeholderTab, CODE_TABSET_ID, DockLocation.CENTER, -1, false));
+            }
+            codeTabsRef.current = next;
+            return next;
+          });
+
+          if (activeFileIdRef.current === entry.fileId) {
+            setActiveFileId(null);
+          }
+        }
+      }
+    }
+  }, [model]);
+
+  const factory = useCallback((node: TabNode) => {
+    const component = node.getComponent();
+    if (component === "code-viewer") {
+      const entry = codeTabs.get(node.getId()) ?? codeTabsRef.current.get(node.getId());
+      if (!entry) {
+        return <div className="p-4 text-sm text-muted">Loading file…</div>;
+      }
+      return <CodeViewer editorParams={entry.editorParams} />;
+    }
+
+    if (component === "code-placeholder") {
+      return (
+        <div className="p-6 text-sm text-muted">
+          Select a node from the graph to open its source code.
+        </div>
+      );
+    }
+
     switch (node.getId()) {
       case "query-editor":
         return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
       case "graph-viewer":
         return <GraphViewer graph={queryGraph} selectFile={handleSelectFile} />;
-      case "code-viewer":
-        return <CodeViewer editorParams={currentFile} />;
       default:
         return <GraphCode graph={queryGraph} />;
     }
-  };
+  }, [codeTabs, query, queryGraph, handleSelectFile]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <Layout model={model} factory={factory} />
+      <Layout model={model} factory={factory} onModelChange={handleModelChange} />
     </main>
-  )
+  );
 }

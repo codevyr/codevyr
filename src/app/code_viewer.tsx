@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Editor, Monaco } from "@monaco-editor/react";
 import monaco from 'monaco-editor';
 
@@ -7,37 +7,43 @@ export interface CodeFocus {
     line: string;
 }
 
-export interface CodeViewerProps {
-    editorParams: EditorParams;
+export interface EditorParams {
+    path: string;
+    language: string;
+    value: string;
+    loc: string;
 }
 
-export class EditorParams {
-    path: string = "";
-    language: string = "";
-    value: string = "";
-    loc: string = "";
+export interface CodeViewerProps {
+    editorParams: EditorParams;
 }
 
 export function CodeViewer({ editorParams }: CodeViewerProps) {
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
 
-    function handleEditorDidMount(editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) {
+    function handleEditorDidMount(editor: monaco.editor.IStandaloneCodeEditor, _monaco: Monaco) {
         editorRef.current = editor;
+        const lineNumber = parseInt(editorParams.loc, 10);
 
-        editorRef.current.revealLineInCenter(parseInt(editorParams.loc));
+        if (!Number.isNaN(lineNumber)) {
+            editorRef.current.revealLineInCenter(lineNumber);
+            editorRef.current.setPosition({ lineNumber, column: 1 });
+        }
         editorRef.current.focus();
     }
 
     useEffect(() => {
-        console.log('update editor');
         if (editorRef.current !== null) {
+            const lineNumber = parseInt(editorParams.loc, 10);
             editorRef.current.setValue(editorParams.value);
-            editorRef.current.revealLineInCenter(parseInt(editorParams.loc));
-            editorRef.current.setPosition({'lineNumber': parseInt(editorParams.loc), column: 1});
+            if (!Number.isNaN(lineNumber)) {
+                editorRef.current.revealLineInCenter(lineNumber);
+                editorRef.current.setPosition({ lineNumber, column: 1 });
+            }
             editorRef.current.focus();
             editorRef.current.layout();
         }
-    }, [editorParams]);
+    }, [editorParams.language, editorParams.loc, editorParams.path, editorParams.value]);
 
     return <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} />;
 }
