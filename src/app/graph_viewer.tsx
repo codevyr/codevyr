@@ -3,14 +3,16 @@ import Cytoscape, { ElementDefinition, NodeSingular } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import React, { ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Edge, Graph, Node } from './graph';
-import cytoscapePopper, { RefElement, PopperOptions, PopperInstance } from 'cytoscape-popper';
+import cytoscapePopper, { PopperOptions, PopperInstance } from 'cytoscape-popper';
 import {
+    ReferenceElement,
     computePosition,
     flip,
     shift,
     limitShift,
     ComputePositionConfig,
 } from '@floating-ui/dom';
+import popper from 'cytoscape-popper';
 import { EdgesHover, NodeHover } from './node_hover';
 import { createRoot } from 'react-dom/client';
 import tippy, { followCursor, sticky, Instance, Props } from 'tippy.js';
@@ -23,7 +25,6 @@ export interface GraphProps {
     selectFile: (codeFocus: CodeFocus) => void;
 }
 
-Cytoscape.use(dagre)
 
 declare module 'cytoscape-popper' {
     interface PopperOptions extends ComputePositionConfig {
@@ -32,7 +33,7 @@ declare module 'cytoscape-popper' {
     }
 }
 
-function tippyFactory(ref: RefElement, content: HTMLElement, options?: PopperOptions): PopperInstance {
+function tippyFactory(ref: ReferenceElement, content: HTMLElement, options?: PopperOptions): PopperInstance {
     // Since tippy constructor requires DOM element/elements, create a placeholder
     var dummyDomEle = document.createElement('div');
 
@@ -57,7 +58,18 @@ function tippyFactory(ref: RefElement, content: HTMLElement, options?: PopperOpt
     return tip;
 }
 
-Cytoscape.use(cytoscapePopper(tippyFactory));
+const initCytoscape = (() => {
+  let done = false;
+  return () => {
+    if (done) return;
+    cytoscape.use(dagre);
+    cytoscape.use(popper);
+    done = true;
+  };
+})();
+
+// Call at top of your component (or before creating the instance)
+initCytoscape();
 
 const createContentFromComponent = (id: string, component: ReactNode, onCleanupReady: (cleanup: () => void) => void) => {
     const divElement = document.createElement('div');
