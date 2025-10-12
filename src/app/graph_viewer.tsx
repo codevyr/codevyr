@@ -285,11 +285,18 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
     useEffect(() => {
         return () => {
             hideActiveTip();
+            if (typeof window !== 'undefined' && (window as any).__asklCy === cyRef.current) {
+                delete (window as any).__asklCy;
+            }
+            cyRef.current = null;
         };
     }, [hideActiveTip]);
 
     function cytoscapeHandler(cy: cytoscape.Core) {
         cyRef.current = cy;
+        if (typeof window !== 'undefined') {
+            (window as any).__asklCy = cy;
+        }
     }
 
     // Graph control functions
@@ -345,4 +352,3 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
         </div>
     );
 }
-
