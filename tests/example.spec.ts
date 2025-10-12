@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { findAllTabSets } from './helpers';
 
 test('has title', async ({ page }) => {
   await page.goto('./');
@@ -7,12 +8,9 @@ test('has title', async ({ page }) => {
   await expect(page).toHaveTitle(/Codevyr/);
 });
 
-test('get started link', async ({ page }) => {
+test('get started', async ({ page }) => {
   await page.goto('./');
 
-  // Click the get started link.
-  await page.getByRole('link', { name: 'Get started' }).click();
-
-  // Expects page to have a heading with the name of Installation.
-  await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
+    const tabSets = await findAllTabSets(page);
+    expect(await tabSets.count()).toEqual(3);
 });
