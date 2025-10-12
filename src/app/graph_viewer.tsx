@@ -285,18 +285,12 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
     useEffect(() => {
         return () => {
             hideActiveTip();
-            if (typeof window !== 'undefined' && (window as any).__asklCy === cyRef.current) {
-                delete (window as any).__asklCy;
-            }
             cyRef.current = null;
         };
     }, [hideActiveTip]);
 
     function cytoscapeHandler(cy: cytoscape.Core) {
         cyRef.current = cy;
-        if (typeof window !== 'undefined') {
-            (window as any).__asklCy = cy;
-        }
     }
 
     // Graph control functions
@@ -331,8 +325,18 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
     }, []);
 
     console.log('Regenerate is', graph, stylesheet);
+    const shouldExposeMetadata = process.env.NODE_ENV !== 'production';
+
     return (
         <div className="flex flex-col h-full">
+            {shouldExposeMetadata && (
+                <div
+                    aria-hidden="true"
+                    data-testid="graph-metadata"
+                    data-node-count={graph.nodes.size}
+                    style={{ display: 'none' }}
+                />
+            )}
             <GraphToolbar
                 onRerunLayout={handleRerunLayout}
                 onCenterGraph={handleCenterGraph}

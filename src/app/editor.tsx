@@ -1,6 +1,4 @@
-
-import React from "react";
-import useCallback from 'react';
+import React, { useCallback, useEffect, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco from 'monaco-editor';
 import { Node, Edge, Graph } from './graph';
@@ -20,6 +18,7 @@ interface RustGraph {
 }
 
 export function EditorComponent({ query, onGraphChange }: EditorProps) {
+    const testCleanupRef = useRef<(() => void) | null>(null);
     const queryGraph = (ed: monaco.editor.ICodeEditor) => {
         console.log('submit-query');
         fetchQuery(ed.getValue())
@@ -63,5 +62,38 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
         registerAskl(monaco);
     };
 
-    return <Editor height="90vh" defaultLanguage="askl" defaultValue={query} beforeMount={handleEditorWillMount} />;
+    const handleEditorDidMount = useCallback((editorInstance: monaco.editor.IStandaloneCodeEditor) => {
+        if (process.env.NODE_ENV === 'production' || typeof window === 'undefined') {
+            return;
+        }
+
+        const setQueryForTests = (value: string) => {
+            editorInstance.setValue(value);
+        };
+
+        const getQueryForTests = () => editorInstance.getValue();
+
+        (window as any).__asklSetQuery = setQueryForTests;
+        (window as any).__asklGetQuery = getQueryForTests;
+
+        testCleanupRef.current = () => {
+            if ((window as any).__asklSetQuery === setQueryForTests) {
+                delete (window as any).__asklSetQuery;
+            }
+            if ((window as any).__asklGetQuery === getQueryForTests) {
+                delete (window as any).__asklGetQuery;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (testCleanupRef.current) {
+                testCleanupRef.current();
+                testCleanupRef.current = null;
+            }
+        };
+    }, []);
+
+    return <Editor height="90vh" defaultLanguage="askl" defaultValue={query} beforeMount={handleEditorWillMount} onMount={handleEditorDidMount} />;
 }
