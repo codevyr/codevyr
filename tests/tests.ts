@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { findAllTabSets } from './helpers';
+import { findAllTabSets } from './helpers-flex';
 
 test('has title', async ({ page }) => {
   await page.goto('./');
