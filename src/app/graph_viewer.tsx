@@ -17,6 +17,7 @@ import { createRoot } from 'react-dom/client';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
 import { Instance as PopperInstance } from '@popperjs/core';
+import { setupGraphTestApis } from './testing/graph_test_utils';
 
 export interface GraphProps {
     graph: Graph;
@@ -64,6 +65,7 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
     let cyRef = useRef<cytoscape.Core | null>(null);
     let activeTipRef = useRef<PopperInstance | null>(null);
     let activeTipCleanupRef = useRef<(() => void) | null>(null);
+    let graphTestCleanupRef = useRef<(() => void) | null>(null);
 
     const hideActiveTip = useCallback(() => {
         if (activeTipRef.current) {
@@ -286,11 +288,23 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
         return () => {
             hideActiveTip();
             cyRef.current = null;
+            if (graphTestCleanupRef.current) {
+                graphTestCleanupRef.current();
+                graphTestCleanupRef.current = null;
+            }
         };
     }, [hideActiveTip]);
 
     function cytoscapeHandler(cy: cytoscape.Core) {
         cyRef.current = cy;
+        if (graphTestCleanupRef.current) {
+            graphTestCleanupRef.current();
+            graphTestCleanupRef.current = null;
+        }
+        const cleanup = setupGraphTestApis(cy);
+        if (cleanup) {
+            graphTestCleanupRef.current = cleanup;
+        }
     }
 
     // Graph control functions
