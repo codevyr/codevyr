@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
 import monaco from 'monaco-editor';
 import { Node, Edge, Graph } from './graph';
+import { setupEditorTestApis } from './testing/editor_test_utils';
 
 import { fetchQuery } from './askld';
 import { registerAskl } from './monaco-askl-language';
@@ -63,27 +64,8 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
     };
 
     const handleEditorDidMount = useCallback((editorInstance: monaco.editor.IStandaloneCodeEditor) => {
-        if (process.env.NODE_ENV === 'production' || typeof window === 'undefined') {
-            return;
-        }
-
-        const setQueryForTests = (value: string) => {
-            editorInstance.setValue(value);
-        };
-
-        const getQueryForTests = () => editorInstance.getValue();
-
-        (window as any).__asklSetQuery = setQueryForTests;
-        (window as any).__asklGetQuery = getQueryForTests;
-
-        testCleanupRef.current = () => {
-            if ((window as any).__asklSetQuery === setQueryForTests) {
-                delete (window as any).__asklSetQuery;
-            }
-            if ((window as any).__asklGetQuery === getQueryForTests) {
-                delete (window as any).__asklGetQuery;
-            }
-        };
+        const cleanup = setupEditorTestApis(editorInstance);
+        testCleanupRef.current = cleanup;
     }, []);
 
     useEffect(() => {
