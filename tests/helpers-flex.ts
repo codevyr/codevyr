@@ -12,18 +12,30 @@
         return findPath(page, `${path}/tb${index}`);
     };
     
-    export const checkTab = async (page: Page, path: string, index: number, selected: boolean, tabName: string, text: string) => {
+    export const checkTab = async (
+        page: Page,
+        path: string,
+        index: number,
+        selected: boolean,
+        tabName: string,
+        contentText?: string,
+    ) => {
         const tabButton = findTabButton(page, path, index);
         const tabContent = findPath(page, `${path}/t${index}`);
-    
+
         await expect(tabButton).toBeVisible();
         await expect(tabButton).toHaveClass(new RegExp(selected ? 'flexlayout__tab_button--selected' : 'flexlayout__tab_button--unselected'));
         await expect(tabButton.locator('.flexlayout__tab_button_content')).toContainText(tabName);
-    
-        console.log('Checking tab button',  `${path}/t${index}`, tabContent);
-        console.log('Checking tab content', { selected, text: tabName, tabContent });
-        await expect(tabContent).toBeVisible({ visible: selected });
-        await expect(tabContent).toContainText(text);
+
+        if (selected) {
+            await expect(tabContent).toBeVisible();
+        } else {
+            await expect(tabContent).not.toBeVisible();
+        }
+
+        if (contentText !== undefined) {
+            await expect(tabContent).toContainText(contentText);
+        }
     };
     
     export const checkBorderTab = async (page: Page, path: string, index: number, selected: boolean, text: string) => {

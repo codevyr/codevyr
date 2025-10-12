@@ -103,5 +103,5 @@ test('query editor submits and renders three graph nodes', async ({ page }) => {
   await sourceResponse;
 
   await expect(page.locator('[data-testid="graph-metadata"]')).toHaveAttribute('data-node-count', '3');
-  await checkTab(page, '/ts1', 0, true, 'kubelet.go', 'package main');
+  await checkTab(page, "/ts1", 0, true, 'kubelet.go', 'func main()');
 });
