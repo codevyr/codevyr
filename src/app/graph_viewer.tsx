@@ -44,6 +44,7 @@ const createContentFromComponent = (
     onCleanupReady: (cleanup: () => void) => void,
 ) => {
     const divElement = document.createElement('div');
+    divElement.setAttribute('data-testid', `popper-${id}`);
     const root = createRoot(divElement, { identifierPrefix: id });
     root.render(component);
     document.body.appendChild(divElement);

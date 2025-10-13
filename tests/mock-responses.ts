@@ -12,6 +12,10 @@ export const BASE_QUERY = `"main" {
     "cli.Run" {}
 };`;
 
+export const INIT_LOGS_QUERY = `"main" {
+    "cli.Run" {{"InitLogs"}}
+};`;
+
 RESPONSES[normalizeQuery(BASE_QUERY)] = {
   nodes: [
     {
@@ -85,7 +89,119 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
   ],
 };
 
+RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
+  nodes: [
+    {
+      id: '22',
+      label: 'k8s.io/component-base/cli.run',
+      declarations: [
+        {
+          id: '22',
+          symbol: '22',
+          file_id: '4',
+          symbol_type: 'Declaration',
+          line_start: '86',
+          col_start: '1',
+          line_end: '145',
+          col_end: '2',
+        },
+      ],
+    },
+    {
+      id: '201',
+      label: 'k8s.io/component-base/logs.InitLogs',
+      declarations: [
+        {
+          id: '201',
+          symbol: '201',
+          file_id: '11',
+          symbol_type: 'Declaration',
+          line_start: '161',
+          col_start: '1',
+          line_end: '173',
+          col_end: '2',
+        },
+      ],
+    },
+    {
+      id: '4',
+      label: 'k8s.io/component-base/cli.Run',
+      declarations: [
+        {
+          id: '4',
+          symbol: '4',
+          file_id: '4',
+          symbol_type: 'Declaration',
+          line_start: '43',
+          col_start: '1',
+          line_end: '77',
+          col_end: '2',
+        },
+      ],
+    },
+    {
+      id: '1',
+      label: 'k8s.io/kubernetes/cmd/kubelet.main',
+      declarations: [
+        {
+          id: '1',
+          symbol: '1',
+          file_id: '1',
+          symbol_type: 'Declaration',
+          line_start: '34',
+          col_start: '1',
+          line_end: '38',
+          col_end: '2',
+        },
+      ],
+    },
+  ],
+  edges: [
+    {
+      id: '22-201',
+      from: '22',
+      to: '201',
+      from_file: '4',
+      from_line: '132',
+    },
+    {
+      id: '22-201',
+      from: '22',
+      to: '201',
+      from_file: '4',
+      from_line: '138',
+    },
+    {
+      id: '22-201',
+      from: '22',
+      to: '201',
+      from_file: '4',
+      from_line: '125',
+    },
+    {
+      id: '4-22',
+      from: '4',
+      to: '22',
+      from_file: '4',
+      from_line: '44',
+    },
+    {
+      id: '1-4',
+      from: '1',
+      to: '4',
+      from_file: '1',
+      from_line: '36',
+    },
+  ],
+  files: [
+    ['4', 'mock/run.go'],
+    ['11', 'mock/logs.go'],
+    ['1', 'mock/kubelet.go'],
+  ],
+};
+
 export const getMockResponseForQuery = (query: string): MockGraphResponse | undefined =>
   RESPONSES[normalizeQuery(query)];
 
 export const SUBMIT_QUERY = BASE_QUERY;
+export const SUBMIT_QUERY_INIT_LOGS = INIT_LOGS_QUERY;
