@@ -67,6 +67,7 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
     let activeTipRef = useRef<PopperInstance | null>(null);
     let activeTipCleanupRef = useRef<(() => void) | null>(null);
     let graphTestCleanupRef = useRef<(() => void) | null>(null);
+    let activeElementIdRef = useRef<string | null>(null);
 
     const hideActiveTip = useCallback(() => {
         if (activeTipRef.current) {
@@ -78,6 +79,7 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
             activeTipCleanupRef.current();
             activeTipCleanupRef.current = null;
         }
+        activeElementIdRef.current = null;
     }, []);
 
     const showTipForElement = useCallback(
@@ -107,6 +109,7 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                     tipCleanup = null;
                 }
             };
+            activeElementIdRef.current = id;
         },
         [],
     );
@@ -208,6 +211,12 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
             node.off('tap');
             node.on('tap', function (evt) {
                 var tappedNodeId = evt.target.id();
+                const elementId = `node-${node_id}`;
+
+                if (activeElementIdRef.current === elementId) {
+                    hideActiveTip();
+                    return;
+                }
 
                 hideActiveTip();
 
@@ -234,7 +243,7 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
 
                 showTipForElement(
                     evt.target,
-                    `node-${node_id}`,
+                    elementId,
                     () => <NodeHover node={nodeData} graph={graph} setCodeFocus={selectFile} />,
                 );
             });
@@ -251,6 +260,12 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
             edge.off('tap');
             edge.on('tap', function (evt) {
                 var tappedEdgeId = evt.target.id();
+                const elementId = `edge-${edge_id}`;
+
+                if (activeElementIdRef.current === elementId) {
+                    hideActiveTip();
+                    return;
+                }
 
                 hideActiveTip();
 
@@ -277,7 +292,7 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
 
                 showTipForElement(
                     evt.target,
-                    `edge-${edge_id}`,
+                    elementId,
                     () => <EdgesHover edges={edges} graph={graph} setCodeFocus={selectFile} />,
                 );
             });
