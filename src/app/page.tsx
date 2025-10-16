@@ -11,11 +11,6 @@ import { makeServer } from "./mirage"
 import { fetchSource } from "./askld";
 import { DEFAULT_QUERY } from './default-queries';
 
-console.log(process.env.NODE_ENV, process.env.NEXT_PUBLIC_MIRAGE_DISABLE)
-if (process.env.NODE_ENV === "development" && !process.env.NEXT_PUBLIC_MIRAGE_DISABLE) {
-  console.log("Create mirage server")
-  makeServer({ environment: "development" })
-}
 
 const CODE_TABSET_ID = "code-tabset";
 const CODE_PLACEHOLDER_TAB_ID = "code-placeholder";
