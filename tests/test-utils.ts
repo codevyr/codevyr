@@ -18,7 +18,7 @@ export async function interceptGraphEndpoints(page: Page) {
     const mockResponse = getMockResponseForQuery(body);
 
     if (!mockResponse) {
-      await route.continue();
+      await route.fulfill({ status: 404, body: 'Mock query not found' });
       return;
     }
 
