@@ -75,9 +75,8 @@ export async function setEditorQuery(page: Page, query: string) {
 }
 
 export async function submitQuery(page: Page) {
-  const submitShortcut = process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter';
   const queryResponse = page.waitForResponse('**/api/query');
-  await page.keyboard.press(submitShortcut);
+  await page.keyboard.press('ControlOrMeta+Enter');
   await queryResponse;
 }
 
