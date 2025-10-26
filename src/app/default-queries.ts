@@ -1,15 +1,16 @@
 // Default queries for the application
 
 export const DEFAULT_QUERY = `@preamble
-@ignore("builtin")
-@ignore("runtime")
-@ignore("fmt")
-@ignore("context")
-@ignore("os")
-@ignore("klog")
-@ignore("log")
-@ignore("ioutil")
-@ignore("golang.protobuf");
+@ignore(package="builtin")
+@ignore(package="fmt")
+@ignore(package="context")
+@ignore(package="os")
+@ignore(package="log")
+@ignore(package="runtime")
+@ignore(package="internal")
+@ignore(package="ioutil")
+@ignore(package="golang")
+@ignore(package="k8s.io/klog");
 
 /*
  * Below is a simple query that requests:
