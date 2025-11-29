@@ -380,7 +380,6 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                     style={{ width: '100%', height: '100%' }}
                     cy={cytoscapeHandler}
                     layout={layout}
-                    wheelSensitivity={0.5}
                 />
             </div>
         </div>
