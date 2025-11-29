@@ -121,3 +121,107 @@ export async function waitForPopperToClose(page: Page, id: string) {
     return document.querySelector(`[data-testid="${testId}"]`) === null;
   }, id);
 }
+
+type CenteringProbeArgs = {
+  fragment: string;
+  line: number;
+};
+
+type CenteringProbeResult =
+  | { status: 'pending'; reason: string }
+  | {
+      status: 'ready';
+      path: string;
+      visible: boolean;
+      ratio: number;
+      startLineNumber: number;
+      endLineNumber: number;
+    };
+
+export interface LineCenteringOptions {
+  minFractionFromEdge?: number;
+  timeout?: number;
+  message?: string;
+}
+
+export async function expectLineRoughlyCentered(
+  page: Page,
+  filePathFragment: string,
+  lineNumber: number,
+  options?: LineCenteringOptions,
+) {
+  const minFractionFromEdge = Math.min(0.4, Math.max(0, options?.minFractionFromEdge ?? 0.2));
+  const normalizedFragment = filePathFragment.replace(/\\/g, '/').toLowerCase();
+  const normalizedLineNumber = Math.max(1, Math.round(lineNumber));
+
+  const checkResult = async () => {
+    const probe = await page.evaluate<CenteringProbeResult, CenteringProbeArgs>(
+      ({ fragment, line }) => {
+        const monacoInstance = (window as any).monaco;
+        if (!monacoInstance?.editor?.getEditors) {
+          return { status: 'pending', reason: 'monaco-unavailable' };
+        }
+
+        const editors = monacoInstance.editor.getEditors();
+        for (const editor of editors) {
+          const model = editor.getModel?.();
+          if (!model) {
+            continue;
+          }
+
+          const uri = model.uri;
+          const fullPath = (uri?.path ?? uri?.toString() ?? '').replace(/\\/g, '/');
+          const normalizedPath = fullPath.toLowerCase();
+          if (fragment && !normalizedPath.endsWith(fragment) && !normalizedPath.includes(fragment)) {
+            continue;
+          }
+
+          const ranges = editor.getVisibleRanges?.();
+          if (!ranges || ranges.length === 0) {
+            return { status: 'pending', reason: 'no-visible-range' };
+          }
+
+          const { startLineNumber, endLineNumber } = ranges[0];
+          const visible = line >= startLineNumber && line <= endLineNumber;
+          const span = endLineNumber - startLineNumber;
+          const ratio = span <= 0 ? 0.5 : (line - startLineNumber) / span;
+
+          return {
+            status: 'ready',
+            path: fullPath || uri?.toString() || '',
+            visible,
+            ratio,
+            startLineNumber,
+            endLineNumber,
+          };
+        }
+
+        return { status: 'pending', reason: 'editor-not-found' };
+      },
+      { fragment: normalizedFragment, line: normalizedLineNumber },
+    );
+
+    if (probe.status !== 'ready') {
+      return `pending:${probe.reason}`;
+    }
+
+    if (!probe.visible) {
+      return `not-visible:${probe.startLineNumber}-${probe.endLineNumber}`;
+    }
+
+    const lowerBound = minFractionFromEdge;
+    const upperBound = 1 - minFractionFromEdge;
+    if (probe.ratio < lowerBound || probe.ratio > upperBound) {
+      return `near-edge:${probe.ratio.toFixed(2)}`;
+    }
+
+    return 'ok';
+  };
+
+  await expect
+    .poll(checkResult, {
+      timeout: options?.timeout ?? 5000,
+      message: options?.message ?? `line ${normalizedLineNumber} not centered for ${filePathFragment}`,
+    })
+    .toBe('ok');
+}

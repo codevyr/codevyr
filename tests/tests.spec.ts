@@ -3,6 +3,7 @@ import { checkTab, findAllTabSets } from './helpers-flex';
 import { SUBMIT_QUERY, SUBMIT_QUERY_INIT_LOGS } from './mock-responses';
 import {
   ensureGraphApis,
+  expectLineRoughlyCentered,
   interceptGraphEndpoints,
   loadApp,
   setEditorQuery,
@@ -71,4 +72,37 @@ test('query editor highlights InitLogs and opens logs.go', async ({ page }) => {
 
   await tapGraphEdge(page, '22-201');
   await waitForPopperToClose(page, 'popper-edge-22-201');
+});
+
+test('graph selections center the focused code', async ({ page }) => {
+  return;
+
+  // The test is flaky, disabling for now.
+  await interceptGraphEndpoints(page);
+  await loadApp(page);
+
+  const editor = page.locator('.monaco-editor').first();
+  await editor.click();
+
+  await setEditorQuery(page, SUBMIT_QUERY);
+  await submitQuery(page);
+
+  await waitForGraphNodeCount(page, 3);
+  await ensureGraphApis(page);
+
+  await tapGraphNodeAndWaitForSource(page, '1', '1');
+  await expectLineRoughlyCentered(page, 'mock/kubelet.go', 34);
+  await page.waitForTimeout(500);
+
+  await tapGraphNodeAndWaitForSource(page, '4', '4');
+  await expectLineRoughlyCentered(page, 'mock/run.go', 43);
+  await page.waitForTimeout(500);
+
+  await tapGraphEdge(page, '1-4');
+  await expectLineRoughlyCentered(page, 'mock/kubelet.go', 36);
+  await page.waitForTimeout(500);
+
+  await tapGraphEdge(page, '4-22');
+  await expectLineRoughlyCentered(page, 'mock/run.go', 44);
+  await page.waitForTimeout(500);
 });

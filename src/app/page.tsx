@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Layout, Model, TabNode, IJsonModel, Actions, DockLocation, Action } from 'flexlayout-react';
+import { Layout, Model, TabNode, IJsonModel, Actions, DockLocation, Action, TabSetNode } from 'flexlayout-react';
 import 'flexlayout-react/style/light.css';
 import { EditorComponent } from './editor';
 import { Graph, Node, Edge } from './graph';
@@ -134,6 +134,14 @@ function getTabTitle(filePathOrId: string): string {
   return basename || lastSegment || filePathOrId;
 }
 
+function isTabVisible(model: Model, tabId: string): boolean {
+    const node = model.getNodeById(tabId);
+    if (!node || node.getType() !== "tab") return false;
+
+    const tab = node as TabNode;
+    return tab.isVisible();
+}
+
 export default function Home() {
   const [model] = useState(() => Model.fromJson(initialLayout));
   const [query, setQuery] = useState(DEFAULT_QUERY);
@@ -162,6 +170,7 @@ export default function Home() {
         }
 
         const updated = new Map(prev);
+        const isVisibleNow = isTabVisible(model, tabId);
         updated.set(tabId, {
           fileId: existing.fileId,
           title: tabTitle,
@@ -169,6 +178,8 @@ export default function Home() {
             ...existing.editorParams,
             path: filePath,
             loc: line,
+            isVisible: () => isVisibleNow,
+            // && isTabVisible(model, tabId)
           },
         });
         codeTabsRef.current = updated;
@@ -181,15 +192,17 @@ export default function Home() {
       return;
     }
 
+    const isVisibleNow = isTabVisible(model, tabId);
     fetchSource(fileId)
       .then(response => response.text())
       .then(data => {
-        const newTabId = tabId;
         const editorParams: EditorParams = {
           path: String(filePath),
           language: 'c',
           value: data,
           loc: line,
+          isVisible: () => isVisibleNow,
+          // && isTabVisible(model, tabId)
         };
 
         setCodeTabs(prev => {
