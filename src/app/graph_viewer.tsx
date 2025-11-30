@@ -1,6 +1,6 @@
 import CytoscapeComponent from 'react-cytoscapejs';
 import cytoscape, { NodeSingular, SingularElementReturnValue } from 'cytoscape';
-import dagre from 'cytoscape-dagre';
+import fcose from 'cytoscape-fcose';
 import React, { ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Edge, Graph, Node } from './graph';
 import {
@@ -24,12 +24,35 @@ export interface GraphProps {
     selectFile: (codeFocus: CodeFocus) => void;
 }
 
+type FixedNodeConstraint = {
+    nodeId: string;
+    position: { x: number; y: number };
+};
+
+type RelativePlacementConstraint = {
+    top?: string;
+    bottom?: string;
+    left?: string;
+    right?: string;
+    gap?: number;
+};
+
+const EDGE_VERTICAL_GAP = 60;
+
+type FcoseLayoutOptions = cytoscape.LayoutOptions & {
+    name: 'fcose';
+    quality?: 'draft' | 'default' | 'proof';
+    randomize?: boolean;
+    packComponents?: boolean;
+    fixedNodeConstraint?: FixedNodeConstraint[];
+    relativePlacementConstraint?: RelativePlacementConstraint[];
+};
 
 const initCytoscape = (() => {
   let done = false;
   return () => {
     if (done) return;
-    cytoscape.use(dagre);
+    cytoscape.use(fcose);
     cytoscape.use(popper);
     done = true;
   };
@@ -114,14 +137,108 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
         [],
     );
 
-    const layout = useMemo(() => ({
-        name: 'dagre',
-        directed: true,
+    const layout = useMemo<FcoseLayoutOptions>(() => ({
+        name: 'fcose',
+        quality: 'default',
+        randomize: false,
+        animate: false,
         fit: true,
-        avoidOverlap: true,
         nodeDimensionsIncludeLabels: true,
-        padding: 40
+        packComponents: true,
+        padding: 40,
     }), []);
+
+    const relativePlacementConstraints = useMemo<RelativePlacementConstraint[]>(() => {
+        const constraints: RelativePlacementConstraint[] = [];
+        const seen = new Set<string>();
+        const adjacency = new Map<string, Set<string>>();
+
+        const createsCycle = (source: string, target: string) => {
+            if (source === target) {
+                return true;
+            }
+
+            const visited = new Set<string>();
+            const stack: string[] = [target];
+
+            while (stack.length > 0) {
+                const current = stack.pop()!;
+                if (current === source) {
+                    return true;
+                }
+                if (visited.has(current)) {
+                    continue;
+                }
+                visited.add(current);
+
+                const neighbors = adjacency.get(current);
+                if (!neighbors) {
+                    continue;
+                }
+
+                neighbors.forEach((neighbor) => {
+                    if (!visited.has(neighbor)) {
+                        stack.push(neighbor);
+                    }
+                });
+            }
+
+            return false;
+        };
+
+        const addAdjacency = (source: string, target: string) => {
+            let neighbors = adjacency.get(source);
+            if (!neighbors) {
+                neighbors = new Set<string>();
+                adjacency.set(source, neighbors);
+            }
+            neighbors.add(target);
+        };
+
+        graph.edges.forEach((edgeArray: Array<Edge>) => {
+            edgeArray.forEach((edge: Edge) => {
+                const key = `${edge.from}->${edge.to}`;
+                if (seen.has(key)) {
+                    return;
+                }
+
+                if (!graph.nodes.has(edge.from) || !graph.nodes.has(edge.to)) {
+                    return;
+                }
+
+                if (edge.from === edge.to) {
+                    return;
+                }
+
+                if (createsCycle(edge.from, edge.to)) {
+                    return;
+                }
+
+                seen.add(key);
+                addAdjacency(edge.from, edge.to);
+                constraints.push({
+                    top: edge.from,
+                    bottom: edge.to,
+                    gap: EDGE_VERTICAL_GAP,
+                });
+            });
+        });
+
+        return constraints;
+    }, [graph]);
+
+    const buildLayoutOptions = useCallback(
+        (overrides?: Partial<FcoseLayoutOptions>): FcoseLayoutOptions => {
+            const relativeConstraint =
+                relativePlacementConstraints.length > 0 ? relativePlacementConstraints : undefined;
+            return {
+                ...layout,
+                relativePlacementConstraint: relativeConstraint,
+                ...overrides,
+            };
+        },
+        [layout, relativePlacementConstraints],
+    );
 
     const stylesheet = useMemo(() =>
         [
@@ -194,11 +311,23 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
             })
         });
 
-        cy.nodes().difference(new_node_coll).lock()
+        const existingNodes = cy.nodes().difference(new_node_coll);
+        existingNodes.lock();
         if (!new_node_coll.empty()) {
-            cy.layout(layout).run();
+            const fixedNodeConstraint: FixedNodeConstraint[] = [];
+            existingNodes.forEach((node: NodeSingular) => {
+                const { x, y } = node.position();
+                fixedNodeConstraint.push({
+                    nodeId: node.id(),
+                    position: { x, y },
+                });
+            });
+
+            const layoutOptions = buildLayoutOptions({ fixedNodeConstraint });
+
+            cy.layout(layoutOptions).run();
         }
-        cy.nodes().difference(new_node_coll).unlock()
+        existingNodes.unlock();
 
         cy.nodes().forEach(function (node) {
             const node_id = node.data("id");
@@ -297,7 +426,7 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                 );
             });
         })
-    }, [selectFile, graph, layout, hideActiveTip, showTipForElement]);
+    }, [selectFile, graph, hideActiveTip, showTipForElement, buildLayoutOptions]);
 
     // Cleanup function to hide active tip on unmount
     useEffect(() => {
@@ -331,9 +460,9 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
             hideActiveTip();
 
             // Rerun the layout on all nodes
-            cy.layout(layout).run();
+            cy.layout(buildLayoutOptions()).run();
         }
-    }, [layout, hideActiveTip]);
+    }, [buildLayoutOptions, hideActiveTip]);
 
     const handleCenterGraph = useCallback(() => {
         if (cyRef.current) {
