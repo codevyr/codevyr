@@ -35,7 +35,7 @@
     "typescript": "5.4.5"
   },
   "devDependencies": {
-    "@playwright/test": "1.54.0",
+    "@playwright/test": "^1.57.0",
     "@types/cytoscape": "^3.21.2",
     "@types/cytoscape-fcose": "^2.2.5",
     "@types/cytoscape-popper": "^2.0.4",
