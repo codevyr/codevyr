@@ -77,5 +77,5 @@ export function EditorComponent({ query, onGraphChange }: EditorProps) {
         };
     }, []);
 
-    return <Editor height="90vh" defaultLanguage="askl" defaultValue={query} beforeMount={handleEditorWillMount} onMount={handleEditorDidMount} />;
+    return <Editor height="100%" defaultLanguage="askl" defaultValue={query} beforeMount={handleEditorWillMount} onMount={handleEditorDidMount} />;
 }
