@@ -54,6 +54,22 @@ body {
   transition: background-color 0.3s ease;
 }
 
+.flexlayout__tab_button.problems-tab-alert {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.flexlayout__tab_button.problems-tab-alert::after {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: 0.5rem;
+  border-radius: 9999px;
+  background-color: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+}
+
 /* Graph Toolbar Components */
 .toolbar-container {
   @apply flex items-center gap-2 p-2 bg-gray-100 border-b border-gray-300 shadow-sm;

@@ -3,17 +3,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout, Model, TabNode, IJsonModel, Actions, DockLocation, Action, TabSetNode } from 'flexlayout-react';
 import 'flexlayout-react/style/light.css';
-import { EditorComponent } from './editor';
+import { EditorComponent, EditorHandle } from './editor';
 import { Graph, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus, EditorParams } from './code_viewer';
 import { GraphViewer } from './graph_viewer';
 import { makeServer } from "./mirage"
 import { fetchSource } from "./askld";
 import { DEFAULT_QUERY } from './default-queries';
+import { Problems, Problem } from './problems';
 
 
 const CODE_TABSET_ID = "code-tabset";
+const INFO_TABSET_ID = "info-tabset";
 const CODE_PLACEHOLDER_TAB_ID = "code-placeholder";
+const PROBLEMS_TAB_ID = "problems-tab";
 
 const initialLayout: IJsonModel = {
   global: { tabEnableDrag: true },
@@ -40,6 +43,7 @@ const initialLayout: IJsonModel = {
           },
           {
             type: "tabset",
+            id: INFO_TABSET_ID,
             weight: 50,
             children: [
               {
@@ -47,6 +51,13 @@ const initialLayout: IJsonModel = {
                 id: "graph-viewer",
                 name: "Graph",
                 component: "button",
+              },
+              {
+                type: "tab",
+                id: PROBLEMS_TAB_ID,
+                name: "Problems",
+                component: "button",
+                enableClose: false,
               },
               {
                 type: "tab",
@@ -146,14 +157,40 @@ export default function Home() {
   const [model] = useState(() => Model.fromJson(initialLayout));
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
+  const [problems, setProblems] = useState<Problem[]>([]);
   const [codeTabs, setCodeTabs] = useState<Map<string, CodeTabEntry>>(() => new Map());
   const codeTabsRef = useRef<Map<string, CodeTabEntry>>(codeTabs);
+  const editorHandleRef = useRef<EditorHandle | null>(null);
 
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const activeFileIdRef = useRef<string | null>(activeFileId);
   useEffect(() => {
     activeFileIdRef.current = activeFileId;
   }, [activeFileId]);
+
+  const handleProblemsChange = useCallback((nextProblems: Problem[]) => {
+    setProblems(nextProblems);
+    const problemCount = nextProblems.length;
+    const tabNode = model.getNodeById(PROBLEMS_TAB_ID);
+    if (!tabNode) {
+      return;
+    }
+
+    model.doAction(
+      Actions.updateNodeAttributes(PROBLEMS_TAB_ID, {
+        name: problemCount > 0 ? `Problems (${problemCount})` : 'Problems',
+        className: problemCount > 0 ? 'problems-tab-alert' : null,
+      })
+    );
+  }, [model]);
+
+  const handleProblemSelect = useCallback((problem: Problem) => {
+    if (!problem.range) {
+      return;
+    }
+
+    editorHandleRef.current?.revealRange(problem.range);
+  }, []);
 
   const handleSelectFile = useCallback((focus: CodeFocus) => {
     const { file_id: fileId, line } = focus;
@@ -299,13 +336,22 @@ export default function Home() {
 
     switch (node.getId()) {
       case "query-editor":
-        return <EditorComponent query={query} onGraphChange={setQueryGraph} />;
+        return (
+          <EditorComponent
+            ref={editorHandleRef}
+            query={query}
+            onGraphChange={setQueryGraph}
+            onProblemsChange={handleProblemsChange}
+          />
+        );
       case "graph-viewer":
         return <GraphViewer graph={queryGraph} selectFile={handleSelectFile} />;
+      case PROBLEMS_TAB_ID:
+        return <Problems problems={problems} onSelectProblem={handleProblemSelect} />;
       default:
         return <GraphCode graph={queryGraph} />;
     }
-  }, [codeTabs, query, queryGraph, handleSelectFile]);
+  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
