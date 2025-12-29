@@ -38,6 +38,7 @@ const initialLayout: IJsonModel = {
                 id: "query-editor",
                 name: "Query",
                 component: "button",
+                enableClose: false,
               }
             ]
           },
@@ -51,6 +52,7 @@ const initialLayout: IJsonModel = {
                 id: "graph-viewer",
                 name: "Graph",
                 component: "button",
+                enableClose: false,
               },
               {
                 type: "tab",
