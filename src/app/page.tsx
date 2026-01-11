@@ -11,6 +11,7 @@ import { makeServer } from "./mirage"
 import { fetchSource } from "./askld";
 import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
+import { formatOffsetLocation } from './lib/offsets';
 
 
 const CODE_TABSET_ID = "code-tabset";
@@ -92,9 +93,10 @@ const initialLayout: IJsonModel = {
 
 export interface GraphCodeProps {
   graph: Graph;
+  fileContents: Map<string, string>;
 }
 
-function GraphCode({ graph }: GraphCodeProps) {
+function GraphCode({ graph, fileContents }: GraphCodeProps) {
   function get_id(data: any) {
     if ('id' in data) {
       return data.id;
@@ -111,8 +113,20 @@ function GraphCode({ graph }: GraphCodeProps) {
     }
   }
 
+  function resolveEdgeFileId(edge: Edge): string | null {
+    if (edge.from_file) {
+      return edge.from_file;
+    }
+
+    const node = graph.nodes.get(edge.from);
+    return node?.declarations[0]?.file_id ?? null;
+  }
+
   function get_loc(edge: Edge): string {
-    return edge.from_file + ":" + edge.from_line
+    const fileId = resolveEdgeFileId(edge);
+    const filePath = fileId ? graph.files.get(fileId) ?? fileId : 'Unknown';
+    const location = formatOffsetLocation(fileId ? fileContents.get(fileId) : undefined, edge.from_offset_start);
+    return `${filePath}:${location}`;
   }
 
   return (<>
@@ -161,14 +175,20 @@ export default function Home() {
   const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
   const [problems, setProblems] = useState<Problem[]>([]);
   const [codeTabs, setCodeTabs] = useState<Map<string, CodeTabEntry>>(() => new Map());
+  const [fileContents, setFileContents] = useState<Map<string, string>>(() => new Map());
   const codeTabsRef = useRef<Map<string, CodeTabEntry>>(codeTabs);
   const editorHandleRef = useRef<EditorHandle | null>(null);
+  const fileContentsRef = useRef<Map<string, string>>(fileContents);
+  const pendingFileLoadsRef = useRef<Set<string>>(new Set());
 
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const activeFileIdRef = useRef<string | null>(activeFileId);
   useEffect(() => {
     activeFileIdRef.current = activeFileId;
   }, [activeFileId]);
+  useEffect(() => {
+    fileContentsRef.current = fileContents;
+  }, [fileContents]);
 
   const handleProblemsChange = useCallback((nextProblems: Problem[]) => {
     setProblems(nextProblems);
@@ -194,8 +214,39 @@ export default function Home() {
     editorHandleRef.current?.revealRange(problem.range);
   }, []);
 
+  const updateFileContents = useCallback((fileId: string, content: string) => {
+    setFileContents(prev => {
+      if (prev.get(fileId) === content) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(fileId, content);
+      fileContentsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const ensureFileContent = useCallback((fileId: string) => {
+    if (fileContentsRef.current.has(fileId) || pendingFileLoadsRef.current.has(fileId)) {
+      return;
+    }
+
+    pendingFileLoadsRef.current.add(fileId);
+    fetchSource(fileId)
+      .then(response => response.text())
+      .then(data => {
+        updateFileContents(fileId, data);
+      })
+      .catch(error => {
+        console.error('Failed to load source file', error);
+      })
+      .finally(() => {
+        pendingFileLoadsRef.current.delete(fileId);
+      });
+  }, [updateFileContents]);
+
   const handleSelectFile = useCallback((focus: CodeFocus) => {
-    const { file_id: fileId, line } = focus;
+    const { file_id: fileId, start_offset: startOffset, end_offset: endOffset } = focus;
     const tabId = codeTabId(fileId);
     const existingEntry = codeTabsRef.current.get(tabId);
     const filePath = queryGraph.files.get(fileId) ?? fileId;
@@ -216,7 +267,8 @@ export default function Home() {
           editorParams: {
             ...existing.editorParams,
             path: filePath,
-            loc: line,
+            focusStartOffset: startOffset,
+            focusEndOffset: endOffset ?? null,
             isVisible: () => isVisibleNow,
             // && isTabVisible(model, tabId)
           },
@@ -228,6 +280,7 @@ export default function Home() {
       model.doAction(Actions.updateNodeAttributes(tabId, { name: tabTitle }));
       model.doAction(Actions.selectTab(tabId));
       setActiveFileId(fileId);
+      updateFileContents(fileId, existingEntry.editorParams.value);
       return;
     }
 
@@ -239,7 +292,8 @@ export default function Home() {
           path: String(filePath),
           language: 'c',
           value: data,
-          loc: line,
+          focusStartOffset: startOffset,
+          focusEndOffset: endOffset ?? null,
           isVisible: () => isVisibleNow,
           // && isTabVisible(model, tabId)
         };
@@ -252,6 +306,7 @@ export default function Home() {
         });
 
         setActiveFileId(fileId);
+        updateFileContents(fileId, data);
 
         const newTab = {
           type: "tab",
@@ -270,7 +325,7 @@ export default function Home() {
       .catch(error => {
         console.error('Failed to load source file', error);
       });
-  }, [model, queryGraph]);
+  }, [model, queryGraph, updateFileContents]);
 
   const handleModelChange = useCallback((_: Model, action: Action) => {
     if (action.type === Actions.SELECT_TAB) {
@@ -347,13 +402,20 @@ export default function Home() {
           />
         );
       case "graph-viewer":
-        return <GraphViewer graph={queryGraph} selectFile={handleSelectFile} />;
+        return (
+          <GraphViewer
+            graph={queryGraph}
+            selectFile={handleSelectFile}
+            fileContents={fileContents}
+            ensureFileContent={ensureFileContent}
+          />
+        );
       case PROBLEMS_TAB_ID:
         return <Problems problems={problems} onSelectProblem={handleProblemSelect} />;
       default:
-        return <GraphCode graph={queryGraph} />;
+        return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect]);
+  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect, fileContents, ensureFileContent]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">

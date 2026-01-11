@@ -3,17 +3,20 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Editor, Monaco } from "@monaco-editor/react";
 import type * as monaco from 'monaco-editor';
 import * as monacoEditor from 'monaco-editor';
+import { getLineColumnFromOffset, parseOffset, type OffsetValue } from './lib/offsets';
 
 export interface CodeFocus {
     file_id: string;
-    line: string;
+    start_offset: OffsetValue;
+    end_offset?: OffsetValue | null;
 }
 
 export interface EditorParams {
     path: string;
     language: string;
     value: string;
-    loc: string;
+    focusStartOffset: OffsetValue;
+    focusEndOffset?: OffsetValue | null;
     isVisible: () => boolean;
 }
 
@@ -23,16 +26,16 @@ export interface CodeViewerProps {
 
 const RETRY_DELAY_MS = 16;
 
-function locIntoLineNumber(loc: string): number {
-    const parsed = parseInt(loc, 10);
-    return Number.isNaN(parsed) ? 1 : parsed;
-}
+type FocusLocation = {
+    lineNumber: number;
+    column: number;
+};
 
 export function CodeViewer({ editorParams }: CodeViewerProps) {
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const layoutListenerRef = useRef<monaco.IDisposable | null>(null);
     const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const pendingLineRef = useRef<number | null>(null);
+    const pendingOffsetRef = useRef<number | null>(null);
 
     const clearRetryTimeout = useCallback(() => {
         if (retryTimeoutRef.current) {
@@ -41,11 +44,23 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         }
     }, []);
 
-    const centerRequestedLine = useCallback(() => {
-        const editor = editorRef.current;
-        const targetLine = pendingLineRef.current;
+    const resolveFocusOffset = useCallback(() => {
+        const parsedOffset = parseOffset(editorParams.focusStartOffset);
+        return parsedOffset === null ? 0 : parsedOffset;
+    }, [editorParams.focusStartOffset]);
 
-        if (!editor || targetLine === null || targetLine !== locIntoLineNumber(editorParams.loc)) {
+    const resolveFocusLocation = useCallback((): FocusLocation => {
+        const offset = resolveFocusOffset();
+        const location = getLineColumnFromOffset(editorParams.value, offset);
+        return location ?? { lineNumber: 1, column: 1 };
+    }, [editorParams.value, resolveFocusOffset]);
+
+    const centerRequestedLocation = useCallback(() => {
+        const editor = editorRef.current;
+        const targetOffset = pendingOffsetRef.current;
+        const resolvedOffset = resolveFocusOffset();
+
+        if (!editor || targetOffset === null || targetOffset !== resolvedOffset) {
             clearRetryTimeout();
             return;
         }
@@ -65,36 +80,37 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
             return;
         }
 
-        pendingLineRef.current = null;
-        const clampedLine = Math.max(1, Math.min(targetLine, model.getLineCount()));
+        pendingOffsetRef.current = null;
+        const { lineNumber, column } = resolveFocusLocation();
+        const clampedLine = Math.max(1, Math.min(lineNumber, model.getLineCount()));
 
         if (layoutListenerRef.current) {
             layoutListenerRef.current.dispose();
             layoutListenerRef.current = null;
         }
 
-        editor.setPosition({ lineNumber: clampedLine, column: 1 });
-        editor.revealLineInCenter(clampedLine);
+        editor.setPosition({ lineNumber: clampedLine, column });
+        editor.revealPositionInCenter({ lineNumber: clampedLine, column });
         editor.focus();
 
-    }, [clearRetryTimeout, editorParams.loc]);
+    }, [clearRetryTimeout, resolveFocusLocation, resolveFocusOffset]);
 
     useEffect(() => {
         const editor = editorRef.current;
-        const requestedLine = locIntoLineNumber(editorParams.loc);
+        const requestedOffset = resolveFocusOffset();
 
-        pendingLineRef.current = requestedLine;
+        pendingOffsetRef.current = requestedOffset;
         const isVisible = editorParams.isVisible();
         if (isVisible) {
-            centerRequestedLine();
+            centerRequestedLocation();
         } else {
             clearRetryTimeout();
             retryTimeoutRef.current = setTimeout(() => {
                 retryTimeoutRef.current = null;
-                centerRequestedLine();
+                centerRequestedLocation();
             }, RETRY_DELAY_MS);
         }
-    }, [editorParams, centerRequestedLine, clearRetryTimeout]);
+    }, [editorParams, centerRequestedLocation, clearRetryTimeout, resolveFocusOffset]);
 
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
         editorRef.current = editor;
@@ -104,17 +120,17 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
             layoutListenerRef.current = null;
         }
         layoutListenerRef.current = editor.onDidLayoutChange(() => {
-            centerRequestedLine();
+            centerRequestedLocation();
         });
 
       
-    }, [centerRequestedLine]);
+    }, [centerRequestedLocation]);
 
     useEffect(() => {
         return () => {
             clearRetryTimeout();
             editorRef.current = null;
-            pendingLineRef.current = null;
+            pendingOffsetRef.current = null;
         };
     }, [clearRetryTimeout]);
 

@@ -1,14 +1,12 @@
-import { use, useEffect, useState } from 'react';
+import type { OffsetValue } from './lib/offsets';
 
 export interface Declaration {
     id: string;
     symbol: string;
     file_id: string;
     symbol_type: string;
-    line_start: string;
-    col_start: string;
-    line_end: string;
-    col_end: string;
+    start_offset: OffsetValue;
+    end_offset: OffsetValue;
 }
 
 export interface Node {
@@ -21,8 +19,9 @@ export interface Edge {
     id: string;
     from: string;
     to: string;
-    from_file: string;
-    from_line: string;
+    from_file?: string;
+    from_offset_start: OffsetValue;
+    from_offset_end: OffsetValue;
 }
 
 export interface Graph {

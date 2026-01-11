@@ -22,6 +22,8 @@ import { setupGraphTestApis } from './testing/graph_test_utils';
 export interface GraphProps {
     graph: Graph;
     selectFile: (codeFocus: CodeFocus) => void;
+    fileContents: Map<string, string>;
+    ensureFileContent: (fileId: string) => void;
 }
 
 type FixedNodeConstraint = {
@@ -85,7 +87,7 @@ const createContentFromComponent = (
     return divElement;
 };
 
-export function GraphViewer({ graph, selectFile }: GraphProps) {
+export function GraphViewer({ graph, selectFile, fileContents, ensureFileContent }: GraphProps) {
     let cyRef = useRef<cytoscape.Core | null>(null);
     let activeTipRef = useRef<PopperInstance | null>(null);
     let activeTipCleanupRef = useRef<(() => void) | null>(null);
@@ -365,7 +367,8 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
 
                     selectFile({
                         file_id: decl.file_id,
-                        line: decl.line_start
+                        start_offset: decl.start_offset,
+                        end_offset: decl.end_offset,
                     });
                     return;
                 }
@@ -373,7 +376,15 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                 showTipForElement(
                     evt.target,
                     elementId,
-                    () => <NodeHover node={nodeData} graph={graph} setCodeFocus={selectFile} />,
+                    () => (
+                        <NodeHover
+                            node={nodeData}
+                            graph={graph}
+                            setCodeFocus={selectFile}
+                            fileContents={fileContents}
+                            ensureFileContent={ensureFileContent}
+                        />
+                    ),
                 );
             });
         })
@@ -411,10 +422,16 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
 
                 if (edges.length === 1) {
                     let e = edges[0];
+                    const fileId = e.from_file ?? graph.nodes.get(e.from)?.declarations[0]?.file_id;
+                    if (!fileId) {
+                        console.warn('Edge missing from_file and node declarations', e);
+                        return;
+                    }
 
                     selectFile({
-                        file_id: e.from_file,
-                        line: e.from_line
+                        file_id: fileId,
+                        start_offset: e.from_offset_start,
+                        end_offset: e.from_offset_end,
                     });
                     return;
                 }
@@ -422,11 +439,19 @@ export function GraphViewer({ graph, selectFile }: GraphProps) {
                 showTipForElement(
                     evt.target,
                     elementId,
-                    () => <EdgesHover edges={edges} graph={graph} setCodeFocus={selectFile} />,
+                    () => (
+                        <EdgesHover
+                            edges={edges}
+                            graph={graph}
+                            setCodeFocus={selectFile}
+                            fileContents={fileContents}
+                            ensureFileContent={ensureFileContent}
+                        />
+                    ),
                 );
             });
         })
-    }, [selectFile, graph, hideActiveTip, showTipForElement, buildLayoutOptions]);
+    }, [selectFile, graph, hideActiveTip, showTipForElement, buildLayoutOptions, fileContents, ensureFileContent]);
 
     // Cleanup function to hide active tip on unmount
     useEffect(() => {

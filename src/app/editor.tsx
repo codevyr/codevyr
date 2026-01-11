@@ -9,6 +9,7 @@ import { setupEditorTestApis } from './testing/editor_test_utils';
 import { fetchQuery } from './askld';
 import { registerAskl } from './monaco-askl-language';
 import { Problem } from './problems';
+import { getLineColumnFromOffset } from './lib/offsets';
 
 export interface EditorHandle {
     revealRange: (range: MonacoEditor.IRange) => void;
@@ -112,6 +113,52 @@ function getRangeFromLineCol(lineCol?: LineColLocation | null): MonacoEditor.IRa
     return null;
 }
 
+function getRangeFromOffsetLocation(source: string, location?: InputLocation | null): MonacoEditor.IRange | null {
+    if (!location || typeof location !== 'object') {
+        return null;
+    }
+
+    if ('Pos' in location) {
+        const pos = getLineColumnFromOffset(source, location.Pos);
+        if (!pos) {
+            return null;
+        }
+
+        return {
+            startLineNumber: pos.lineNumber,
+            startColumn: pos.column,
+            endLineNumber: pos.lineNumber,
+            endColumn: pos.column + 1,
+        };
+    }
+
+    if ('Span' in location) {
+        const span = location.Span;
+        if (!Array.isArray(span) || span.length === 0) {
+            return null;
+        }
+
+        const startPos = getLineColumnFromOffset(source, span[0]);
+        const endPos = getLineColumnFromOffset(source, span[1] ?? span[0]);
+        if (!startPos || !endPos) {
+            return null;
+        }
+
+        return {
+            startLineNumber: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLineNumber: endPos.lineNumber,
+            endColumn: Math.max(startPos.lineNumber === endPos.lineNumber ? startPos.column + 1 : 1, endPos.column),
+        };
+    }
+
+    return null;
+}
+
+function getRangeFromLocation(source: string, location?: InputLocation | null, lineCol?: LineColLocation | null): MonacoEditor.IRange | null {
+    return getRangeFromOffsetLocation(source, location) ?? getRangeFromLineCol(lineCol);
+}
+
 function applyEditorErrorMarker(monacoInstance: Monaco | null, editor: MonacoEditor.ICodeEditor, message: string, range?: MonacoEditor.IRange | null) {
     if (!monacoInstance) {
         return;
@@ -165,13 +212,13 @@ function buildProblem(message: string, severity: Problem['severity'], range?: Mo
     };
 }
 
-function buildProblemsFromWarnings(warnings?: QueryDiagnostic[]): Problem[] {
+function buildProblemsFromWarnings(warnings: QueryDiagnostic[] | undefined, sourceText: string): Problem[] {
     if (!warnings || !Array.isArray(warnings)) {
         return [];
     }
 
     return warnings.map(warning => {
-        const range = getRangeFromLineCol(warning.line_col);
+        const range = getRangeFromLocation(sourceText, warning.location, warning.line_col);
         return buildProblem(warning.message ?? 'Warning', 'warning', range, {
             source: warning.path ?? 'warning',
             lineText: warning.line ?? null,
@@ -179,10 +226,10 @@ function buildProblemsFromWarnings(warnings?: QueryDiagnostic[]): Problem[] {
     });
 }
 
-async function handleQueryFailure(response: Response, monacoInstance: Monaco | null, editor: MonacoEditor.ICodeEditor): Promise<Problem[]> {
+async function handleQueryFailure(response: Response, monacoInstance: Monaco | null, editor: MonacoEditor.ICodeEditor, sourceText: string): Promise<Problem[]> {
     try {
         const errorData: QueryDiagnostic = await response.json();
-        const range = getRangeFromLineCol(errorData.line_col);
+        const range = getRangeFromLocation(sourceText, errorData.location, errorData.line_col);
         applyEditorErrorMarker(monacoInstance, editor, errorData.message || 'Query failed', range);
         return [
             buildProblem(errorData.message || 'Query failed', 'error', range, {
@@ -204,9 +251,10 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
     const queryGraph = async (ed: MonacoEditor.ICodeEditor) => {
         console.log('submit-query');
         try {
-            const response = await fetchQuery(ed.getValue());
+            const queryText = ed.getValue();
+            const response = await fetchQuery(queryText);
             if (!response.ok) {
-                const problems = await handleQueryFailure(response, monacoRef.current, ed);
+                const problems = await handleQueryFailure(response, monacoRef.current, ed, queryText);
                 onProblemsChange?.(problems);
                 return;
             }
@@ -237,7 +285,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 { nodes: nodes, edges: edgeMap, files: files }
             );
             clearEditorErrorMarker(monacoRef.current, ed);
-            const warningProblems = buildProblemsFromWarnings(data.warnings);
+            const warningProblems = buildProblemsFromWarnings(data.warnings, queryText);
             onProblemsChange?.(warningProblems);
         } catch (error) {
             console.error('Failed to submit query', error);
