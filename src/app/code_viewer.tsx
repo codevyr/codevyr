@@ -70,7 +70,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
             clearRetryTimeout();
             retryTimeoutRef.current = setTimeout(() => {
                 retryTimeoutRef.current = null;
-                centerRequestedLine();
+                centerRequestedLocation();
             }, RETRY_DELAY_MS);
             return;
         }
