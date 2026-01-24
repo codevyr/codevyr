@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
-import type { editor as MonacoEditor } from 'monaco-editor';
+import type { editor as MonacoEditor, IRange } from 'monaco-editor';
 import { Node, Edge, Graph } from './graph';
 import { setupEditorTestApis } from './testing/editor_test_utils';
 
@@ -12,7 +12,7 @@ import { Problem } from './problems';
 import { getLineColumnFromOffset } from './lib/offsets';
 
 export interface EditorHandle {
-    revealRange: (range: MonacoEditor.IRange) => void;
+    revealRange: (range: IRange) => void;
 }
 
 interface EditorProps {
@@ -48,7 +48,7 @@ type LineColLocation =
 
 const QUERY_ERROR_MARKER_OWNER = 'askl-query-error';
 
-const defaultMarkerRange: MonacoEditor.IRange = {
+const defaultMarkerRange: IRange = {
     startLineNumber: 1,
     startColumn: 1,
     endLineNumber: 1,
@@ -71,7 +71,7 @@ function normalizePositionTuple(value: unknown): { lineNumber: number; column: n
     };
 }
 
-function getRangeFromLineCol(lineCol?: LineColLocation | null): MonacoEditor.IRange | null {
+function getRangeFromLineCol(lineCol?: LineColLocation | null): IRange | null {
     if (!lineCol || typeof lineCol !== 'object') {
         return null;
     }
@@ -92,7 +92,7 @@ function getRangeFromLineCol(lineCol?: LineColLocation | null): MonacoEditor.IRa
 
     if ('Span' in lineCol) {
         const span = lineCol.Span;
-        if (!Array.isArray(span) || span.length === 0) {
+        if (!Array.isArray(span) || span[0] == null) {
             return null;
         }
 
@@ -113,7 +113,7 @@ function getRangeFromLineCol(lineCol?: LineColLocation | null): MonacoEditor.IRa
     return null;
 }
 
-function getRangeFromOffsetLocation(source: string, location?: InputLocation | null): MonacoEditor.IRange | null {
+function getRangeFromOffsetLocation(source: string, location?: InputLocation | null): IRange | null {
     if (!location || typeof location !== 'object') {
         return null;
     }
@@ -134,7 +134,7 @@ function getRangeFromOffsetLocation(source: string, location?: InputLocation | n
 
     if ('Span' in location) {
         const span = location.Span;
-        if (!Array.isArray(span) || span.length === 0) {
+        if (!Array.isArray(span) || span[0] == null) {
             return null;
         }
 
@@ -155,11 +155,11 @@ function getRangeFromOffsetLocation(source: string, location?: InputLocation | n
     return null;
 }
 
-function getRangeFromLocation(source: string, location?: InputLocation | null, lineCol?: LineColLocation | null): MonacoEditor.IRange | null {
+function getRangeFromLocation(source: string, location?: InputLocation | null, lineCol?: LineColLocation | null): IRange | null {
     return getRangeFromOffsetLocation(source, location) ?? getRangeFromLineCol(lineCol);
 }
 
-function applyEditorErrorMarker(monacoInstance: Monaco | null, editor: MonacoEditor.ICodeEditor, message: string, range?: MonacoEditor.IRange | null) {
+function applyEditorErrorMarker(monacoInstance: Monaco | null, editor: MonacoEditor.ICodeEditor, message: string, range?: IRange | null) {
     if (!monacoInstance) {
         return;
     }
@@ -201,7 +201,7 @@ function nextProblemId() {
     return `problem-${problemIdCounter}`;
 }
 
-function buildProblem(message: string, severity: Problem['severity'], range?: MonacoEditor.IRange | null, extras?: Partial<Problem>): Problem {
+function buildProblem(message: string, severity: Problem['severity'], range?: IRange | null, extras?: Partial<Problem>): Problem {
     return {
         id: extras?.id ?? nextProblemId(),
         message,
@@ -313,7 +313,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
     }, []);
 
     useImperativeHandle(ref, () => ({
-        revealRange(range: MonacoEditor.IRange) {
+        revealRange(range: IRange) {
             if (!editorInstanceRef.current) {
                 return;
             }
