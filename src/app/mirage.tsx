@@ -8,8 +8,6 @@ export function makeServer({ environment = 'test' }) {
         environment,
 
         routes() {
-            this.namespace = "api"
-
             this.get("/source/:id", () => {
                 return code;
             })

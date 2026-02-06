@@ -4,6 +4,13 @@ import { resolve } from 'path';
 import { getMockResponseForQuery } from './mock-responses';
 
 const mockDir = resolve(__dirname, 'mock');
+const askldBaseUrl = process.env.NEXT_PUBLIC_ASKLD_URL ?? 'http://127.0.0.1:8080';
+const askldQueryUrl = `${askldBaseUrl}/query`;
+const askldSourceUrlPrefix = `${askldBaseUrl}/source/`;
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const queryUrlPattern = new RegExp(`${escapeRegex(askldQueryUrl)}$`);
+const sourceUrlPattern = new RegExp(`${escapeRegex(askldSourceUrlPrefix)}[^/?#]+$`);
 
 export const fileContents: Record<string, string> = {
   '1': readFileSync(resolve(mockDir, 'kubelet.go'), 'utf-8'),
@@ -13,7 +20,7 @@ export const fileContents: Record<string, string> = {
 };
 
 export async function interceptGraphEndpoints(page: Page) {
-  await page.route('**/api/query', async route => {
+  await page.route(queryUrlPattern, async route => {
     const body = route.request().postData() ?? '';
     const mockResponse = getMockResponseForQuery(body);
 
@@ -29,9 +36,9 @@ export async function interceptGraphEndpoints(page: Page) {
     });
   });
 
-  await page.route('**/api/source/*', async route => {
-    const url = route.request().url();
-    const fileId = url.split('/').pop() ?? '';
+  await page.route(sourceUrlPattern, async route => {
+    const url = new URL(route.request().url());
+    const fileId = url.pathname.split('/').pop() ?? '';
     const content = fileContents[fileId];
 
     if (!content) {
@@ -75,7 +82,7 @@ export async function setEditorQuery(page: Page, query: string) {
 }
 
 export async function submitQuery(page: Page) {
-  const queryResponse = page.waitForResponse('**/api/query');
+  const queryResponse = page.waitForResponse(queryUrlPattern);
   await page.keyboard.press('ControlOrMeta+Enter');
   await queryResponse;
 }
@@ -95,7 +102,9 @@ export async function ensureGraphApis(page: Page) {
 }
 
 export async function tapGraphNodeAndWaitForSource(page: Page, nodeId: string, fileId: string) {
-  const responsePromise = page.waitForResponse(response => response.url().includes(`/api/source/${fileId}`));
+  const responsePromise = page.waitForResponse(
+    new RegExp(`${escapeRegex(`${askldSourceUrlPrefix}${fileId}`)}$`),
+  );
   await page.evaluate(id => {
     const tapNode = (window as any).__asklTapNode;
     tapNode?.(id);
