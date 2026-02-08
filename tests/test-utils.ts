@@ -4,6 +4,13 @@ import { resolve } from 'path';
 import { getMockResponseForQuery } from './mock-responses';
 
 const mockDir = resolve(__dirname, 'mock');
+const queryUrlPattern = /\/query(?:\?.*)?$/;
+const sourceUrlPattern = /\/source\/[^/?#]+(?:\?.*)?$/;
+
+const isSourceUrlForFile = (url: string, fileId: string) => {
+  const match = url.match(/\/source\/([^/?#]+)(?:\?.*)?$/);
+  return match ? match[1] === fileId : false;
+};
 
 export const fileContents: Record<string, string> = {
   '1': readFileSync(resolve(mockDir, 'kubelet.go'), 'utf-8'),
@@ -13,7 +20,7 @@ export const fileContents: Record<string, string> = {
 };
 
 export async function interceptGraphEndpoints(page: Page) {
-  await page.route('**/api/query', async route => {
+  await page.route(queryUrlPattern, async route => {
     const body = route.request().postData() ?? '';
     const mockResponse = getMockResponseForQuery(body);
 
@@ -25,13 +32,14 @@ export async function interceptGraphEndpoints(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify(mockResponse),
     });
   });
 
-  await page.route('**/api/source/*', async route => {
-    const url = route.request().url();
-    const fileId = url.split('/').pop() ?? '';
+  await page.route(sourceUrlPattern, async route => {
+    const url = new URL(route.request().url());
+    const fileId = url.pathname.split('/').pop() ?? '';
     const content = fileContents[fileId];
 
     if (!content) {
@@ -42,6 +50,7 @@ export async function interceptGraphEndpoints(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'text/plain',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: content,
     });
   });
@@ -75,7 +84,7 @@ export async function setEditorQuery(page: Page, query: string) {
 }
 
 export async function submitQuery(page: Page) {
-  const queryResponse = page.waitForResponse('**/api/query');
+  const queryResponse = page.waitForResponse(queryUrlPattern);
   await page.keyboard.press('ControlOrMeta+Enter');
   await queryResponse;
 }
@@ -95,7 +104,7 @@ export async function ensureGraphApis(page: Page) {
 }
 
 export async function tapGraphNodeAndWaitForSource(page: Page, nodeId: string, fileId: string) {
-  const responsePromise = page.waitForResponse(response => response.url().includes(`/api/source/${fileId}`));
+  const responsePromise = page.waitForResponse(response => isSourceUrlForFile(response.url(), fileId));
   await page.evaluate(id => {
     const tapNode = (window as any).__asklTapNode;
     tapNode?.(id);
