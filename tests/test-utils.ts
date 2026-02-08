@@ -4,13 +4,13 @@ import { resolve } from 'path';
 import { getMockResponseForQuery } from './mock-responses';
 
 const mockDir = resolve(__dirname, 'mock');
-const askldBaseUrl = process.env.NEXT_PUBLIC_ASKLD_URL ?? 'http://127.0.0.1:8080';
-const askldQueryUrl = `${askldBaseUrl}/query`;
-const askldSourceUrlPrefix = `${askldBaseUrl}/source/`;
+const queryUrlPattern = /\/query(?:\?.*)?$/;
+const sourceUrlPattern = /\/source\/[^/?#]+(?:\?.*)?$/;
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const queryUrlPattern = new RegExp(`${escapeRegex(askldQueryUrl)}$`);
-const sourceUrlPattern = new RegExp(`${escapeRegex(askldSourceUrlPrefix)}[^/?#]+$`);
+const isSourceUrlForFile = (url: string, fileId: string) => {
+  const match = url.match(/\/source\/([^/?#]+)(?:\?.*)?$/);
+  return match ? match[1] === fileId : false;
+};
 
 export const fileContents: Record<string, string> = {
   '1': readFileSync(resolve(mockDir, 'kubelet.go'), 'utf-8'),
@@ -32,6 +32,7 @@ export async function interceptGraphEndpoints(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify(mockResponse),
     });
   });
@@ -49,6 +50,7 @@ export async function interceptGraphEndpoints(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'text/plain',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: content,
     });
   });
@@ -102,9 +104,7 @@ export async function ensureGraphApis(page: Page) {
 }
 
 export async function tapGraphNodeAndWaitForSource(page: Page, nodeId: string, fileId: string) {
-  const responsePromise = page.waitForResponse(
-    new RegExp(`${escapeRegex(`${askldSourceUrlPrefix}${fileId}`)}$`),
-  );
+  const responsePromise = page.waitForResponse(response => isSourceUrlForFile(response.url(), fileId));
   await page.evaluate(id => {
     const tapNode = (window as any).__asklTapNode;
     tapNode?.(id);
