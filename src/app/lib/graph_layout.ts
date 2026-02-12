@@ -1,0 +1,161 @@
+import ELK from 'elkjs/lib/elk.bundled.js';
+import type { Edge as FlowEdge, Node as FlowNode } from 'reactflow';
+
+const elk = new ELK();
+
+const DEFAULT_NODE_WIDTH = 180;
+const DEFAULT_NODE_HEIGHT = 40;
+const MAX_NODE_WIDTH = 320;
+const CHAR_WIDTH = 7;
+
+function estimateNodeSize(label: string) {
+  const width = Math.min(
+    MAX_NODE_WIDTH,
+    Math.max(DEFAULT_NODE_WIDTH, label.length * CHAR_WIDTH + 32),
+  );
+  return {
+    width,
+    height: DEFAULT_NODE_HEIGHT,
+  };
+}
+
+function pruneEdgesForLayout(edges: FlowEdge[]) {
+  const adjacency = new Map<string, Set<string>>();
+  const pruned: FlowEdge[] = [];
+
+  const createsCycle = (source: string, target: string) => {
+    if (source === target) {
+      return true;
+    }
+
+    const visited = new Set<string>();
+    const stack: string[] = [target];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (current === source) {
+        return true;
+      }
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      const neighbors = adjacency.get(current);
+      if (!neighbors) {
+        continue;
+      }
+      neighbors.forEach((neighbor) => {
+        if (!visited.has(neighbor)) {
+          stack.push(neighbor);
+        }
+      });
+    }
+
+    return false;
+  };
+
+  const addAdjacency = (source: string, target: string) => {
+    let neighbors = adjacency.get(source);
+    if (!neighbors) {
+      neighbors = new Set<string>();
+      adjacency.set(source, neighbors);
+    }
+    neighbors.add(target);
+  };
+
+  edges.forEach((edge) => {
+    if (createsCycle(edge.source, edge.target)) {
+      return;
+    }
+    addAdjacency(edge.source, edge.target);
+    pruned.push(edge);
+  });
+
+  return pruned;
+}
+
+export type LayoutOptions = {
+  direction?: 'DOWN' | 'RIGHT';
+  layerSpacing?: number;
+  nodeSpacing?: number;
+  preserveExisting?: boolean;
+  positions?: Map<string, { x: number; y: number }>;
+};
+
+export async function layoutGraph(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  {
+    direction = 'DOWN',
+    layerSpacing = 60,
+    nodeSpacing = 30,
+    preserveExisting = false,
+    positions = new Map<string, { x: number; y: number }>(),
+  }: LayoutOptions,
+) {
+  const layoutEdges = pruneEdgesForLayout(edges);
+
+  const elkGraph = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': direction,
+      'elk.spacing.nodeNode': String(nodeSpacing),
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
+      'elk.edgeRouting': 'POLYLINE',
+      'elk.incremental': 'true',
+    },
+    children: nodes.map((node) => {
+      const label =
+        typeof (node.data as any)?.label === 'string'
+          ? (node.data as any).label
+          : String((node.data as any)?.node?.label ?? node.id);
+      const size = estimateNodeSize(label);
+      const measuredWidth = (node as any).measured?.width ?? node.width;
+      const measuredHeight = (node as any).measured?.height ?? node.height;
+      const width = measuredWidth ?? size.width;
+      const height = measuredHeight ?? size.height;
+      const existingPosition = positions.get(node.id);
+      const shouldPreserve = preserveExisting && existingPosition;
+      return {
+        id: node.id,
+        width,
+        height,
+        ...(shouldPreserve
+          ? {
+              x: existingPosition.x,
+              y: existingPosition.y,
+            }
+          : {}),
+        layoutOptions: shouldPreserve ? { 'elk.fixed': 'true' } : undefined,
+      };
+    }),
+    edges: layoutEdges.map((edge) => ({
+      id: edge.id,
+      sources: [edge.source],
+      targets: [edge.target],
+    })),
+  };
+
+  const layout = await elk.layout(elkGraph);
+  const layoutNodes = new Map(
+    (layout.children ?? []).map((node: any) => [node.id, node]),
+  );
+
+  return nodes.map((node) => {
+    const layoutNode = layoutNodes.get(node.id);
+    if (!layoutNode) {
+      return node;
+    }
+    if (preserveExisting && positions.has(node.id)) {
+      return { ...node, position: positions.get(node.id)! };
+    }
+    return {
+      ...node,
+      position: {
+        x: layoutNode.x ?? node.position.x,
+        y: layoutNode.y ?? node.position.y,
+      },
+    };
+  });
+}

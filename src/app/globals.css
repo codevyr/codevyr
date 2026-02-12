@@ -23,35 +23,38 @@ body {
       rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
 }
 
-.popper-div {
-  /* just an example */
-  border: 1px solid red;
-  color: black;
-  z-index: 9999;
-  padding: 0.25em;
-  pointer-events: none;
-  width: max-content;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
 .node-hover {
   color: rgb(var(--foreground-rgb));
-  z-index: 9999;
-  padding: 0.25em;
+  padding: 0.25em 0.5em;
   width: max-content;
-  position: absolute;
-  top: 0;
-  left: 0;
-  background: linear-gradient(to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+  background: #ffffff;
 }
 
 .declaration-hover {
   cursor: pointer;
   transition: background-color 0.3s ease;
+}
+
+.context-menu-content {
+  background: #ffffff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  z-index: 50;
+}
+
+.graph-node {
+  @apply rounded-md border border-blue-300 bg-blue-200 text-gray-900 px-3 py-1.5 text-sm shadow-sm;
+  cursor: pointer;
+  user-select: none;
+}
+
+.graph-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
 }
 
 .flexlayout__tab_button.problems-tab-alert {
