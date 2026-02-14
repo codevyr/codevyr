@@ -21,7 +21,7 @@ import { Edge as GraphEdge, Graph, Node as GraphNode } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
-import { layoutGraph } from './lib/graph_layout';
+import { layoutGraphWithDagre, layoutGraphWithElk } from './lib/graph_layout';
 import { setupGraphTestApis } from './testing/graph_test_utils';
 
 export interface GraphProps {
@@ -84,6 +84,18 @@ function resolveEdgeFileId(edge: GraphEdge, graph: Graph): string | null {
 
   const node = graph.nodes.get(edge.from);
   return node?.declarations[0]?.file_id ?? null;
+}
+
+function hasNodeOverlap(previous: Graph | null, next: Graph) {
+  if (!previous || previous.nodes.size === 0 || next.nodes.size === 0) {
+    return false;
+  }
+  for (const nodeId of next.nodes.keys()) {
+    if (previous.nodes.has(nodeId)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function GraphNodeComponent({ id, data }: GraphNodeProps) {
@@ -365,6 +377,7 @@ export function GraphViewer({
     }
 
     const graphChanged = graphRef.current !== graph;
+    const shouldUseDagre = !hasNodeOverlap(graphRef.current, graph);
     graphRef.current = graph;
 
     if (!graphChanged) {
@@ -372,13 +385,16 @@ export function GraphViewer({
     }
 
     const layoutRunId = ++layoutRunIdRef.current;
-    const preserveExisting = positionsRef.current.size > 0;
-    const shouldFitView = !preserveExisting;
+    const preserveExisting = !shouldUseDagre && positionsRef.current.size > 0;
+    const shouldFitView = shouldUseDagre || !preserveExisting;
+    const layoutPromise = shouldUseDagre
+      ? layoutGraphWithDagre(nextNodes, nextEdges)
+      : layoutGraphWithElk(nextNodes, nextEdges, {
+          preserveExisting,
+          positions: positionsRef.current,
+        });
 
-    layoutGraph(nextNodes, nextEdges, {
-      preserveExisting,
-      positions: positionsRef.current,
-    }).then((layoutedNodes) => {
+    layoutPromise.then((layoutedNodes) => {
       if (layoutRunId !== layoutRunIdRef.current) {
         return;
       }
@@ -417,16 +433,13 @@ export function GraphViewer({
     reactFlowInstanceRef.current = instance;
   }, []);
 
-  const handleRerunLayout = useCallback(() => {
+  const handleDagreLayout = useCallback(() => {
     if (nodes.length === 0) {
       return;
     }
 
     const layoutRunId = ++layoutRunIdRef.current;
-    layoutGraph(nodes, edges, {
-      preserveExisting: false,
-      positions: new Map(),
-    }).then((layoutedNodes) => {
+    layoutGraphWithDagre(nodes, edges).then((layoutedNodes) => {
       if (layoutRunId !== layoutRunIdRef.current) {
         return;
       }
@@ -437,6 +450,26 @@ export function GraphViewer({
       requestAnimationFrame(() => {
         reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
       });
+    });
+  }, [edges, nodes, setNodes]);
+
+  const handleElkLayout = useCallback(() => {
+    if (nodes.length === 0) {
+      return;
+    }
+
+    const layoutRunId = ++layoutRunIdRef.current;
+    layoutGraphWithElk(nodes, edges, {
+      preserveExisting: positionsRef.current.size > 0,
+      positions: positionsRef.current,
+    }).then((layoutedNodes) => {
+      if (layoutRunId !== layoutRunIdRef.current) {
+        return;
+      }
+      setNodes(layoutedNodes);
+      positionsRef.current = new Map(
+        layoutedNodes.map((node) => [node.id, node.position]),
+      );
     });
   }, [edges, nodes, setNodes]);
 
@@ -481,7 +514,8 @@ export function GraphViewer({
         />
       )}
       <GraphToolbar
-        onRerunLayout={handleRerunLayout}
+        onDagreLayout={handleDagreLayout}
+        onElkLayout={handleElkLayout}
         onCenterGraph={handleCenterGraph}
         onFitToView={handleFitToView}
         onResetZoom={handleResetZoom}

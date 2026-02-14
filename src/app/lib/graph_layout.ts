@@ -1,4 +1,5 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
+import dagre from 'dagre';
 import type { Edge as FlowEdge, Node as FlowNode } from 'reactflow';
 
 const elk = new ELK();
@@ -16,6 +17,24 @@ function estimateNodeSize(label: string) {
   return {
     width,
     height: DEFAULT_NODE_HEIGHT,
+  };
+}
+
+function resolveNodeLabel(node: FlowNode) {
+  return typeof (node.data as any)?.label === 'string'
+    ? (node.data as any).label
+    : String((node.data as any)?.node?.label ?? node.id);
+}
+
+function resolveNodeSize(node: FlowNode) {
+  const label = resolveNodeLabel(node);
+  const size = estimateNodeSize(label);
+  const measuredWidth = (node as any).measured?.width ?? node.width;
+  const measuredHeight = (node as any).measured?.height ?? node.height;
+  return {
+    label,
+    width: measuredWidth ?? size.width,
+    height: measuredHeight ?? size.height,
   };
 }
 
@@ -82,7 +101,9 @@ export type LayoutOptions = {
   positions?: Map<string, { x: number; y: number }>;
 };
 
-export async function layoutGraph(
+export type DagreLayoutOptions = Pick<LayoutOptions, 'direction' | 'layerSpacing' | 'nodeSpacing'>;
+
+export async function layoutGraphWithElk(
   nodes: FlowNode[],
   edges: FlowEdge[],
   {
@@ -106,15 +127,7 @@ export async function layoutGraph(
       'elk.incremental': 'true',
     },
     children: nodes.map((node) => {
-      const label =
-        typeof (node.data as any)?.label === 'string'
-          ? (node.data as any).label
-          : String((node.data as any)?.node?.label ?? node.id);
-      const size = estimateNodeSize(label);
-      const measuredWidth = (node as any).measured?.width ?? node.width;
-      const measuredHeight = (node as any).measured?.height ?? node.height;
-      const width = measuredWidth ?? size.width;
-      const height = measuredHeight ?? size.height;
+      const { width, height } = resolveNodeSize(node);
       const existingPosition = positions.get(node.id);
       const shouldPreserve = preserveExisting && existingPosition;
       return {
@@ -155,6 +168,51 @@ export async function layoutGraph(
       position: {
         x: layoutNode.x ?? node.position.x,
         y: layoutNode.y ?? node.position.y,
+      },
+    };
+  });
+}
+
+export async function layoutGraphWithDagre(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  {
+    direction = 'DOWN',
+    layerSpacing = 60,
+    nodeSpacing = 30,
+  }: DagreLayoutOptions = {},
+) {
+  const layoutEdges = pruneEdgesForLayout(edges);
+  const graph = new dagre.graphlib.Graph();
+  graph.setGraph({
+    rankdir: direction === 'RIGHT' ? 'LR' : 'TB',
+    nodesep: nodeSpacing,
+    ranksep: layerSpacing,
+  });
+  graph.setDefaultEdgeLabel(() => ({}));
+
+  nodes.forEach((node) => {
+    const { width, height } = resolveNodeSize(node);
+    graph.setNode(node.id, { width, height });
+  });
+
+  layoutEdges.forEach((edge) => {
+    graph.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(graph);
+
+  return nodes.map((node) => {
+    const layoutNode = graph.node(node.id);
+    if (!layoutNode) {
+      return node;
+    }
+    const { width, height } = resolveNodeSize(node);
+    return {
+      ...node,
+      position: {
+        x: layoutNode.x - width / 2,
+        y: layoutNode.y - height / 2,
       },
     };
   });
