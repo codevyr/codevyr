@@ -467,6 +467,8 @@ export function GraphViewer({
   }, [nodes]);
 
   const shouldExposeMetadata = process.env.NODE_ENV !== 'production';
+  const shouldOnlyRenderVisibleElements =
+    typeof navigator === 'undefined' ? true : !navigator.webdriver;
 
   return (
     <div className="flex flex-col h-full">
@@ -500,7 +502,7 @@ export function GraphViewer({
               setActiveMenu(null);
             }}
             onNodeDragStart={() => setActiveMenu(null)}
-            onlyRenderVisibleElements
+            onlyRenderVisibleElements={shouldOnlyRenderVisibleElements}
             nodesDraggable
             panOnDrag={[0, 1]}
             nodesConnectable={false}
