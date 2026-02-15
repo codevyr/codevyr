@@ -280,7 +280,7 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) 
   const filePath = fileId ? graph.files.get(fileId) ?? fileId : 'Undefined';
   const location = formatOffsetLocation(fileId ? fileContents.get(fileId) : undefined, edge.from_offset_start);
 
-  function clickDeclaration() {
+  function openInEditor() {
     if (!fileId) {
       return;
     }
@@ -291,10 +291,27 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) 
     });
   }
 
+  function copyPath() {
+    copyToClipboard(filePath);
+  }
+
   return (
-    <tr onClick={clickDeclaration} className="declaration-hover">
+    <tr className="declaration-hover">
       <td>{filePath}</td>
       <td>{location}</td>
+      <td className="node-hover-actions-cell">
+        <button type="button" className="node-hover-icon" onClick={openInEditor} title="Open in editor">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6 3h7v7h-2V6.41L4.7 12.7 3.3 11.3 9.59 5H6V3z" />
+          </svg>
+        </button>
+        <button type="button" className="node-hover-icon" onClick={copyPath} title="Copy path">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M5 5V2h7v9h-3V5H5z" />
+            <path d="M3 4h5v2H5v6h6v-3h2v5H3z" />
+          </svg>
+        </button>
+      </td>
     </tr>
   );
 }
@@ -320,9 +337,28 @@ export function EdgesHover({ edges, setCodeFocus, graph, fileContents, ensureFil
   const sortedEdges = [...edges].sort((left, right) =>
     compareEdges(left, right, graph, fileContents),
   );
+  const headerEdge = sortedEdges[0];
+  const fromLabel = headerEdge ? graph.nodes.get(headerEdge.from)?.label ?? headerEdge.from : null;
+  const toLabel = headerEdge ? graph.nodes.get(headerEdge.to)?.label ?? headerEdge.to : null;
 
   return (
     <div className="node-hover">
+      {headerEdge && (
+        <div className="edge-hover-header">
+          <div className="edge-hover-line">
+            <span className="edge-hover-key">From</span>
+            <span className="edge-hover-value" title={fromLabel ?? undefined}>
+              {fromLabel}
+            </span>
+          </div>
+          <div className="edge-hover-line">
+            <span className="edge-hover-key">To</span>
+            <span className="edge-hover-value" title={toLabel ?? undefined}>
+              {toLabel}
+            </span>
+          </div>
+        </div>
+      )}
       <table>
         <tbody>
           {sortedEdges.map((edge) => (

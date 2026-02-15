@@ -71,6 +71,32 @@ body {
   white-space: nowrap;
 }
 
+.edge-hover-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.4rem;
+}
+
+.edge-hover-line {
+  display: flex;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+
+.edge-hover-key {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.edge-hover-value {
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
 .declaration-hover {
   cursor: pointer;
   transition: background-color 0.3s ease;
