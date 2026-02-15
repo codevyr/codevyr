@@ -99,6 +99,7 @@ export type LayoutOptions = {
   nodeSpacing?: number;
   preserveExisting?: boolean;
   positions?: Map<string, { x: number; y: number }>;
+  incremental?: boolean;
 };
 
 export type DagreLayoutOptions = Pick<LayoutOptions, 'direction' | 'layerSpacing' | 'nodeSpacing'>;
@@ -108,23 +109,32 @@ export async function layoutGraphWithElk(
   edges: FlowEdge[],
   {
     direction = 'DOWN',
-    layerSpacing = 60,
-    nodeSpacing = 30,
+    layerSpacing = 8,
+    nodeSpacing = 10,
     preserveExisting = false,
     positions = new Map<string, { x: number; y: number }>(),
+    incremental = true,
   }: LayoutOptions,
 ) {
   const layoutEdges = pruneEdgesForLayout(edges);
+  const resolvedLayerSpacing = layerSpacing;
+  const resolvedNodeSpacing = nodeSpacing;
+  const resolvedEdgeSpacing = 1;
+  const edgeTrackFactor = 0.5;
 
   const elkGraph = {
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': direction,
-      'elk.spacing.nodeNode': String(nodeSpacing),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
+      'elk.spacing.nodeNode': String(resolvedNodeSpacing),
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(resolvedLayerSpacing),
+      'elk.layered.spacing.edgeNodeBetweenLayers': String(resolvedEdgeSpacing),
+      'elk.layered.spacing.edgeEdgeBetweenLayers': String(resolvedEdgeSpacing),
+      'elk.layered.edgeRouting.splines.mode': 'SLOPPY',
+      'elk.layered.edgeRouting.splines.sloppy.layerSpacingFactor': String(edgeTrackFactor),
       'elk.edgeRouting': 'POLYLINE',
-      'elk.incremental': 'true',
+      'elk.incremental': String(incremental),
     },
     children: nodes.map((node) => {
       const { width, height } = resolveNodeSize(node);

@@ -186,14 +186,31 @@ function GraphEdgeComponent({
   const setActiveMenu = menuContext?.setActiveMenu ?? (() => {});
   const edges = data.edges;
   const isOpen = activeMenu?.kind === 'edge' && activeMenu.id === id;
-  const [edgePath] = getBezierPath({
+  const entryOffset = 12;
+  const targetDir = (() => {
+    switch (targetPosition) {
+      case Position.Left:
+        return { x: -1, y: 0 };
+      case Position.Right:
+        return { x: 1, y: 0 };
+      case Position.Bottom:
+        return { x: 0, y: 1 };
+      case Position.Top:
+      default:
+        return { x: 0, y: -1 };
+    }
+  })();
+  const preTargetX = targetX + targetDir.x * entryOffset;
+  const preTargetY = targetY + targetDir.y * entryOffset;
+  const [curvePath] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
-    targetX,
-    targetY,
+    targetX: preTargetX,
+    targetY: preTargetY,
     targetPosition,
   });
+  const edgePath = `${curvePath} L ${targetX},${targetY}`;
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
@@ -350,7 +367,15 @@ export function GraphViewer({
         type: 'graphEdge',
         source: edge.from,
         target: edge.to,
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#9dbaea' },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: '#9dbaea',
+          width: 10,
+          height: 10,
+          strokeWidth: 1,
+          markerUnits: 'strokeWidth',
+          orient: 'auto',
+        },
         style: { stroke: '#9dbaea', strokeWidth: 3 },
         data: {
           edges: edgeArray,
@@ -392,6 +417,7 @@ export function GraphViewer({
       : layoutGraphWithElk(nextNodes, nextEdges, {
           preserveExisting,
           positions: positionsRef.current,
+          incremental: preserveExisting,
         });
 
     layoutPromise.then((layoutedNodes) => {
@@ -462,6 +488,7 @@ export function GraphViewer({
     layoutGraphWithElk(nodes, edges, {
       preserveExisting: positionsRef.current.size > 0,
       positions: positionsRef.current,
+      incremental: positionsRef.current.size > 0,
     }).then((layoutedNodes) => {
       if (layoutRunId !== layoutRunIdRef.current) {
         return;
