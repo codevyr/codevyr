@@ -211,7 +211,7 @@ function hasNodeOverlap(previous: Graph | null, next: Graph) {
   if (!previous || previous.nodes.size === 0 || next.nodes.size === 0) {
     return false;
   }
-  for (const nodeId of next.nodes.keys()) {
+  for (const nodeId of Array.from(next.nodes.keys())) {
     if (previous.nodes.has(nodeId)) {
       return true;
     }
@@ -251,7 +251,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 
       if (declarationCount > 1) {
         if (isOpen) {
-          setActiveMenu(null);
+          setActiveMenu?.(null);
           return;
         }
         triggerContextMenu(event);
@@ -268,7 +268,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
   );
 
   return (
-    <ContextMenu.Root open={isOpen} onOpenChange={handleOpenChange}>
+    <ContextMenu.Root onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         <div
           className={`graph-node${isSelected ? ' graph-node-selected' : ''}`}
@@ -335,7 +335,10 @@ function GraphEdgeComponent({
   const selectionContext = useContext(SelectionContext);
   const lastSelected = selectionContext?.lastSelected ?? null;
   const setLastSelected = selectionContext?.setLastSelected;
-  const edges = data.edges;
+  const edges = data?.edges;
+  const edgesList = useMemo(() => edges ?? [], [edges]);
+  const graph = data?.graph;
+  const selectFile = data?.selectFile;
   const isOpen = activeMenu?.kind === 'edge' && activeMenu.id === id;
   const isSelected = lastSelected?.kind === 'edge' && lastSelected.id === id;
   const isSelfLoop = source === target;
@@ -343,12 +346,7 @@ function GraphEdgeComponent({
   const edgeBaseColor =
     typeof style?.stroke === 'string'
       ? style.stroke
-      : typeof markerEnd === 'object' &&
-          markerEnd !== null &&
-          'color' in markerEnd &&
-          typeof markerEnd.color === 'string'
-        ? markerEnd.color
-        : '#9dbaea';
+      : '#9dbaea';
   const selectedEdgeColor = darkenColor(edgeBaseColor, 0.35);
   const baseStrokeWidth =
     typeof style?.strokeWidth === 'number' ? style.strokeWidth : 3;
@@ -360,10 +358,6 @@ function GraphEdgeComponent({
         filter: 'drop-shadow(0 2px 4px rgba(15, 23, 42, 0.2))',
       }
     : style;
-  const edgeMarkerEnd =
-    isSelected && typeof markerEnd === 'object' && markerEnd !== null
-      ? { ...markerEnd, color: selectedEdgeColor }
-      : markerEnd;
 
   if (isSelfLoop) {
     const loopOffsetX = 70;
@@ -405,17 +399,20 @@ function GraphEdgeComponent({
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
       setLastSelected?.({ kind: 'edge', id });
-      if (edges.length === 0) {
+      if (edgesList.length === 0) {
         return;
       }
 
-      if (edges.length === 1) {
-        const edge = edges[0];
-        const fileId = resolveEdgeFileId(edge, data.graph);
+      if (edgesList.length === 1) {
+        const edge = edgesList[0];
+        if (!graph || !selectFile) {
+          return;
+        }
+        const fileId = resolveEdgeFileId(edge, graph);
         if (!fileId) {
           return;
         }
-        data.selectFile({
+        selectFile({
           file_id: fileId,
           start_offset: edge.from_offset_start,
           end_offset: edge.from_offset_end,
@@ -425,13 +422,13 @@ function GraphEdgeComponent({
       }
 
       if (isOpen) {
-        setActiveMenu(null);
+        setActiveMenu?.(null);
         return;
       }
 
       triggerContextMenu(event);
     },
-    [data, edges, id, isOpen, setActiveMenu, setLastSelected],
+    [edgesList, graph, id, isOpen, selectFile, setActiveMenu, setLastSelected],
   );
 
   const handleOpenChange = useCallback(
@@ -441,8 +438,12 @@ function GraphEdgeComponent({
     [id, setActiveMenu],
   );
 
+  if (!data) {
+    return null;
+  }
+
   return (
-    <ContextMenu.Root open={isOpen} onOpenChange={handleOpenChange}>
+    <ContextMenu.Root onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         <g
           className={`graph-edge${isSelected ? ' graph-edge-selected' : ''}`}
@@ -453,7 +454,7 @@ function GraphEdgeComponent({
           <path
             d={edgePath}
             className="react-flow__edge-path"
-            markerEnd={edgeMarkerEnd}
+            markerEnd={markerEnd}
             style={edgeStyle}
           />
           <path d={edgePath} className="graph-edge-hit" />
@@ -465,7 +466,7 @@ function GraphEdgeComponent({
           data-testid={`context-menu-edge-${id}`}
         >
           <EdgesHover
-            edges={edges}
+            edges={edgesList}
             graph={data.graph}
             setCodeFocus={data.selectFile}
             fileContents={data.fileContents}
