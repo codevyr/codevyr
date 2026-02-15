@@ -535,27 +535,6 @@ export function GraphViewer({
     });
   }, [edges, nodes, setNodes]);
 
-  const handleElkLayout = useCallback(() => {
-    if (nodes.length === 0) {
-      return;
-    }
-
-    const layoutRunId = ++layoutRunIdRef.current;
-    layoutGraphWithElk(nodes, edges, {
-      preserveExisting: positionsRef.current.size > 0,
-      positions: positionsRef.current,
-      incremental: positionsRef.current.size > 0,
-    }).then((layoutedNodes) => {
-      if (layoutRunId !== layoutRunIdRef.current) {
-        return;
-      }
-      setNodes(layoutedNodes);
-      positionsRef.current = new Map(
-        layoutedNodes.map((node) => [node.id, node.position]),
-      );
-    });
-  }, [edges, nodes, setNodes]);
-
   const handleCenterGraph = useCallback(() => {
     if (nodes.length === 0) {
       return;
@@ -598,7 +577,6 @@ export function GraphViewer({
       )}
       <GraphToolbar
         onDagreLayout={handleDagreLayout}
-        onElkLayout={handleElkLayout}
         onCenterGraph={handleCenterGraph}
         onFitToView={handleFitToView}
         onResetZoom={handleResetZoom}

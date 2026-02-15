@@ -45,7 +45,6 @@ const ResetZoomIcon = () => (
 
 export interface GraphToolbarProps {
   onDagreLayout: () => void;
-  onElkLayout: () => void;
   onCenterGraph: () => void;
   onFitToView: () => void;
   onResetZoom: () => void;
@@ -53,7 +52,6 @@ export interface GraphToolbarProps {
 
 export function GraphToolbar({
   onDagreLayout,
-  onElkLayout,
   onCenterGraph,
   onFitToView,
   onResetZoom,
@@ -63,18 +61,10 @@ export function GraphToolbar({
       <div className="toolbar-button-group">
         <ToolbarButton
           onClick={onDagreLayout}
-          title="Dagre Layout (Full relayout)"
+          title="Redraw"
           icon={<LayoutIcon />}
         >
-          Dagre Layout
-        </ToolbarButton>
-
-        <ToolbarButton
-          onClick={onElkLayout}
-          title="ELK Layout (Iterative)"
-          icon={<LayoutIcon />}
-        >
-          ELK Layout
+          Redraw
         </ToolbarButton>
 
         <ToolbarButton
