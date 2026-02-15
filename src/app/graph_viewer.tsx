@@ -589,6 +589,7 @@ export function GraphViewer({
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onInit={handleInit}
+            minZoom={0.1}
             onPaneClick={() => setActiveMenu(null)}
             onPaneContextMenu={(event) => {
               event.preventDefault();
