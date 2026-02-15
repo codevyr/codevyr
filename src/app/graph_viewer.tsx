@@ -346,8 +346,10 @@ function GraphEdgeComponent({
   const edgeBaseColor =
     typeof style?.stroke === 'string'
       ? style.stroke
-      : '#9dbaea';
-  const selectedEdgeColor = darkenColor(edgeBaseColor, 0.35);
+      : 'var(--graph-edge-color)';
+  const selectedEdgeColor = edgeBaseColor.startsWith('var(')
+    ? 'var(--graph-edge-color-selected)'
+    : darkenColor(edgeBaseColor, 0.35);
   const baseStrokeWidth =
     typeof style?.strokeWidth === 'number' ? style.strokeWidth : 3;
   const edgeStyle = isSelected
@@ -597,14 +599,14 @@ export function GraphViewer({
         targetHandle: isSelfLoop ? 'target-top-right' : 'target-top',
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: '#9dbaea',
+          color: 'var(--graph-edge-color)',
           width: 10,
           height: 10,
           strokeWidth: 1,
           markerUnits: 'strokeWidth',
           orient: 'auto',
         },
-        style: { stroke: '#9dbaea', strokeWidth: 3 },
+        style: { stroke: 'var(--graph-edge-color)', strokeWidth: 3 },
         data: {
           edges: edgeArray,
           graph,
@@ -776,7 +778,7 @@ export function GraphViewer({
               panOnDrag={[0, 1]}
               nodesConnectable={false}
             >
-              <Background gap={20} color="#d4d8e1" />
+              <Background gap={20} color="var(--graph-grid-color)" />
             </ReactFlow>
           </SelectionContext.Provider>
         </MenuContext.Provider>

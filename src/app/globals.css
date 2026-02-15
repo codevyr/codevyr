@@ -6,6 +6,9 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
+  --graph-edge-color: #9dbaea;
+  --graph-edge-color-selected: color-mix(in srgb, var(--graph-edge-color) 70%, #000);
+  --graph-grid-color: #d4d8e1;
 }
 /* 
 @media (prefers-color-scheme: dark) {
