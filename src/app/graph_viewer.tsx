@@ -32,6 +32,7 @@ export interface GraphProps {
 }
 
 type GraphNodeData = {
+  label?: string;
   node: GraphNode;
   graph: Graph;
   fileContents: Map<string, string>;
@@ -154,6 +155,49 @@ function darkenColor(color: string, amount: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+function splitSymbolParts(label: string) {
+  return label.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+}
+
+function buildDisplayLabelMap(graph: Graph) {
+  const entries = Array.from(graph.nodes.values()).map((node) => ({
+    id: node.id,
+    label: node.label,
+    parts: splitSymbolParts(node.label),
+  }));
+  const suffixCounts = new Map<string, number>();
+
+  entries.forEach(({ parts, label }) => {
+    if (parts.length === 0) {
+      suffixCounts.set(label, (suffixCounts.get(label) ?? 0) + 1);
+      return;
+    }
+    for (let start = parts.length - 1; start >= 0; start -= 1) {
+      const suffix = parts.slice(start).join('.');
+      suffixCounts.set(suffix, (suffixCounts.get(suffix) ?? 0) + 1);
+    }
+  });
+
+  const displayMap = new Map<string, string>();
+  entries.forEach(({ id, label, parts }) => {
+    if (parts.length === 0) {
+      displayMap.set(id, label);
+      return;
+    }
+    let resolved = label;
+    for (let len = 1; len <= parts.length; len += 1) {
+      const suffix = parts.slice(parts.length - len).join('.');
+      if ((suffixCounts.get(suffix) ?? 0) === 1) {
+        resolved = suffix;
+        break;
+      }
+    }
+    displayMap.set(id, resolved);
+  });
+
+  return displayMap;
+}
+
 function resolveEdgeFileId(edge: GraphEdge, graph: Graph): string | null {
   if (edge.from_file) {
     return edge.from_file;
@@ -183,6 +227,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
   const lastSelected = selectionContext?.lastSelected ?? null;
   const setLastSelected = selectionContext?.setLastSelected ?? (() => {});
   const { node, graph, fileContents, ensureFileContent, selectFile } = data;
+  const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
     ? ({ '--graph-node-color': node.color } as React.CSSProperties)
     : undefined;
@@ -229,11 +274,12 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
           className={`graph-node${isSelected ? ' graph-node-selected' : ''}`}
           data-testid={`graph-node-${id}`}
           style={nodeStyle}
+          title={node.label}
           onClick={handleClick}
           onContextMenu={(event) => event.stopPropagation()}
         >
           <Handle id="target-top" type="target" position={Position.Top} />
-          {node.label}
+          {displayLabel}
           <Handle id="source-bottom" type="source" position={Position.Bottom} />
           <Handle
             id="target-top-right"
@@ -504,6 +550,7 @@ export function GraphViewer({
   );
 
   const buildFlowElements = useCallback(() => {
+    const displayLabels = buildDisplayLabelMap(graph);
     const nextNodes: FlowNode<GraphNodeData>[] = [];
     const nextEdges: FlowEdge<GraphEdgeData>[] = [];
     const nextNodeIds = new Set(graph.nodes.keys());
@@ -520,6 +567,7 @@ export function GraphViewer({
         type: 'graphNode',
         position,
         data: {
+          label: displayLabels.get(node.id),
           node,
           graph,
           fileContents,
