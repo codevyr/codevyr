@@ -60,6 +60,13 @@ type MenuContextValue = {
 
 const MenuContext = React.createContext<MenuContextValue | null>(null);
 
+type SelectionContextValue = {
+  lastSelected: { kind: 'node' | 'edge'; id: string } | null;
+  setLastSelected: (selection: { kind: 'node' | 'edge'; id: string } | null) => void;
+};
+
+const SelectionContext = React.createContext<SelectionContextValue | null>(null);
+
 const nodeTypes = { graphNode: GraphNodeComponent };
 const edgeTypes = { graphEdge: GraphEdgeComponent };
 
@@ -78,10 +85,79 @@ function triggerContextMenu(event: React.MouseEvent<Element>) {
   target.dispatchEvent(contextEvent);
 }
 
-  function resolveEdgeFileId(edge: GraphEdge, graph: Graph): string | null {
-    if (edge.from_file) {
-      return edge.from_file;
+function parseRgbChannel(value: string) {
+  if (value.endsWith('%')) {
+    const percent = Number.parseFloat(value);
+    return Number.isNaN(percent) ? null : Math.round((percent / 100) * 255);
+  }
+  const numberValue = Number.parseFloat(value);
+  return Number.isNaN(numberValue) ? null : Math.round(numberValue);
+}
+
+function parseColorToRgba(color: string) {
+  const trimmed = color.trim();
+  if (trimmed.startsWith('#')) {
+    const hex = trimmed.slice(1);
+    const normalize = (value: string) => Number.parseInt(value, 16);
+    if (hex.length === 3) {
+      const r = normalize(hex[0] + hex[0]);
+      const g = normalize(hex[1] + hex[1]);
+      const b = normalize(hex[2] + hex[2]);
+      return { r, g, b, a: 1 };
     }
+    if (hex.length === 6 || hex.length === 8) {
+      const r = normalize(hex.slice(0, 2));
+      const g = normalize(hex.slice(2, 4));
+      const b = normalize(hex.slice(4, 6));
+      const a =
+        hex.length === 8 ? normalize(hex.slice(6, 8)) / 255 : 1;
+      return { r, g, b, a };
+    }
+    return null;
+  }
+
+  if (trimmed.startsWith('rgb')) {
+    const match = trimmed.match(/rgba?\(([^)]+)\)/);
+    if (!match) {
+      return null;
+    }
+    const parts = match[1].split(',').map((part) => part.trim());
+    if (parts.length < 3) {
+      return null;
+    }
+    const r = parseRgbChannel(parts[0]);
+    const g = parseRgbChannel(parts[1]);
+    const b = parseRgbChannel(parts[2]);
+    if (r === null || g === null || b === null) {
+      return null;
+    }
+    const a = parts[3] ? Number.parseFloat(parts[3]) : 1;
+    return { r, g, b, a: Number.isNaN(a) ? 1 : a };
+  }
+
+  return null;
+}
+
+function darkenColor(color: string, amount: number) {
+  const parsed = parseColorToRgba(color);
+  if (!parsed) {
+    return color;
+  }
+  const clamp = (value: number) => Math.max(0, Math.min(255, value));
+  const darkenChannel = (value: number) => clamp(Math.round(value * (1 - amount)));
+  const r = darkenChannel(parsed.r);
+  const g = darkenChannel(parsed.g);
+  const b = darkenChannel(parsed.b);
+  if (parsed.a < 1) {
+    return `rgba(${r}, ${g}, ${b}, ${parsed.a.toFixed(3)})`;
+  }
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function resolveEdgeFileId(edge: GraphEdge, graph: Graph): string | null {
+  if (edge.from_file) {
+    return edge.from_file;
+  }
 
   const node = graph.nodes.get(edge.from);
   return node?.declarations[0]?.file_id ?? null;
@@ -103,12 +179,20 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
   const setActiveMenu = menuContext?.setActiveMenu ?? (() => {});
+  const selectionContext = useContext(SelectionContext);
+  const lastSelected = selectionContext?.lastSelected ?? null;
+  const setLastSelected = selectionContext?.setLastSelected ?? (() => {});
   const { node, graph, fileContents, ensureFileContent, selectFile } = data;
+  const nodeStyle = node.color
+    ? ({ '--graph-node-color': node.color } as React.CSSProperties)
+    : undefined;
   const isOpen = activeMenu?.kind === 'node' && activeMenu.id === id;
+  const isSelected = lastSelected?.kind === 'node' && lastSelected.id === id;
   const declarationCount = node.declarations.length;
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
+      setLastSelected({ kind: 'node', id });
       if (declarationCount === 1) {
         const decl = node.declarations[0];
         selectFile({
@@ -128,7 +212,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
         triggerContextMenu(event);
       }
     },
-    [declarationCount, isOpen, node, selectFile, setActiveMenu],
+    [declarationCount, id, isOpen, node, selectFile, setActiveMenu, setLastSelected],
   );
 
   const handleOpenChange = useCallback(
@@ -142,8 +226,9 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
     <ContextMenu.Root open={isOpen} onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         <div
-          className="graph-node"
+          className={`graph-node${isSelected ? ' graph-node-selected' : ''}`}
           data-testid={`graph-node-${id}`}
+          style={nodeStyle}
           onClick={handleClick}
           onContextMenu={(event) => event.stopPropagation()}
         >
@@ -201,10 +286,38 @@ function GraphEdgeComponent({
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
   const setActiveMenu = menuContext?.setActiveMenu ?? (() => {});
+  const selectionContext = useContext(SelectionContext);
+  const lastSelected = selectionContext?.lastSelected ?? null;
+  const setLastSelected = selectionContext?.setLastSelected ?? (() => {});
   const edges = data.edges;
   const isOpen = activeMenu?.kind === 'edge' && activeMenu.id === id;
+  const isSelected = lastSelected?.kind === 'edge' && lastSelected.id === id;
   const isSelfLoop = source === target;
   let edgePath = '';
+  const edgeBaseColor =
+    typeof style?.stroke === 'string'
+      ? style.stroke
+      : typeof markerEnd === 'object' &&
+          markerEnd !== null &&
+          'color' in markerEnd &&
+          typeof markerEnd.color === 'string'
+        ? markerEnd.color
+        : '#9dbaea';
+  const selectedEdgeColor = darkenColor(edgeBaseColor, 0.35);
+  const baseStrokeWidth =
+    typeof style?.strokeWidth === 'number' ? style.strokeWidth : 3;
+  const edgeStyle = isSelected
+    ? {
+        ...(style ?? {}),
+        stroke: selectedEdgeColor,
+        strokeWidth: baseStrokeWidth + 1,
+        filter: 'drop-shadow(0 2px 4px rgba(15, 23, 42, 0.2))',
+      }
+    : style;
+  const edgeMarkerEnd =
+    isSelected && typeof markerEnd === 'object' && markerEnd !== null
+      ? { ...markerEnd, color: selectedEdgeColor }
+      : markerEnd;
 
   if (isSelfLoop) {
     const loopOffsetX = 70;
@@ -245,6 +358,7 @@ function GraphEdgeComponent({
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
+      setLastSelected({ kind: 'edge', id });
       if (edges.length === 0) {
         return;
       }
@@ -271,7 +385,7 @@ function GraphEdgeComponent({
 
       triggerContextMenu(event);
     },
-    [data, edges, isOpen, setActiveMenu],
+    [data, edges, id, isOpen, setActiveMenu, setLastSelected],
   );
 
   const handleOpenChange = useCallback(
@@ -285,6 +399,7 @@ function GraphEdgeComponent({
     <ContextMenu.Root open={isOpen} onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         <g
+          className={`graph-edge${isSelected ? ' graph-edge-selected' : ''}`}
           data-testid={`graph-edge-${id}`}
           onClick={handleClick}
           onContextMenu={(event) => event.stopPropagation()}
@@ -292,8 +407,8 @@ function GraphEdgeComponent({
           <path
             d={edgePath}
             className="react-flow__edge-path"
-            markerEnd={markerEnd}
-            style={style}
+            markerEnd={edgeMarkerEnd}
+            style={edgeStyle}
           />
           <path d={edgePath} className="graph-edge-hit" />
         </g>
@@ -330,9 +445,17 @@ export function GraphViewer({
   const layoutRunIdRef = useRef(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
+  const [lastSelected, setLastSelected] = useState<{
+    kind: 'node' | 'edge';
+    id: string;
+  } | null>(null);
   const menuContextValue = useMemo(
     () => ({ activeMenu, setActiveMenu }),
     [activeMenu],
+  );
+  const selectionContextValue = useMemo(
+    () => ({ lastSelected, setLastSelected }),
+    [lastSelected],
   );
 
   const handleNodesChange = useCallback(
@@ -583,28 +706,30 @@ export function GraphViewer({
       />
       <div className="flex-1">
         <MenuContext.Provider value={menuContextValue}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={handleEdgesChange}
-            onInit={handleInit}
-            minZoom={0.1}
-            onPaneClick={() => setActiveMenu(null)}
-            onPaneContextMenu={(event) => {
-              event.preventDefault();
-              setActiveMenu(null);
-            }}
-            onNodeDragStart={() => setActiveMenu(null)}
-            onlyRenderVisibleElements={shouldOnlyRenderVisibleElements}
-            nodesDraggable
-            panOnDrag={[0, 1]}
-            nodesConnectable={false}
-          >
-            <Background gap={20} color="#d4d8e1" />
-          </ReactFlow>
+          <SelectionContext.Provider value={selectionContextValue}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              onNodesChange={handleNodesChange}
+              onEdgesChange={handleEdgesChange}
+              onInit={handleInit}
+              minZoom={0.1}
+              onPaneClick={() => setActiveMenu(null)}
+              onPaneContextMenu={(event) => {
+                event.preventDefault();
+                setActiveMenu(null);
+              }}
+              onNodeDragStart={() => setActiveMenu(null)}
+              onlyRenderVisibleElements={shouldOnlyRenderVisibleElements}
+              nodesDraggable
+              panOnDrag={[0, 1]}
+              nodesConnectable={false}
+            >
+              <Background gap={20} color="#d4d8e1" />
+            </ReactFlow>
+          </SelectionContext.Provider>
         </MenuContext.Provider>
       </div>
     </div>

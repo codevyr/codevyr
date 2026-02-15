@@ -87,8 +87,20 @@ body {
 
 .graph-node {
   @apply rounded-md border border-blue-300 bg-blue-200 text-gray-900 px-3 py-1.5 text-sm shadow-sm;
+  --graph-node-color: #93c5fd;
+  border-color: var(--graph-node-color);
   cursor: pointer;
   user-select: none;
+}
+
+.graph-node-selected {
+  border-color: color-mix(in srgb, var(--graph-node-color) 70%, #000);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--graph-node-color) 60%, #000),
+    0 8px 18px color-mix(in srgb, var(--graph-node-color) 50%, #000);
+}
+
+.graph-edge-selected .react-flow__edge-path {
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.2));
 }
 
 .graph-edge-hit {
