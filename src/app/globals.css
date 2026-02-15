@@ -30,6 +30,47 @@ body {
   background: #ffffff;
 }
 
+.node-hover-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.node-hover-title {
+  font-weight: 600;
+  max-width: 100%;
+}
+
+.node-hover-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #1f2937;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.node-hover-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.node-hover-icon:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.node-hover-actions-cell {
+  padding-left: 0.35rem;
+  white-space: nowrap;
+}
+
 .declaration-hover {
   cursor: pointer;
   transition: background-color 0.3s ease;

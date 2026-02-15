@@ -37,6 +37,7 @@ type GraphNodeData = {
   fileContents: Map<string, string>;
   ensureFileContent: (fileId: string) => void;
   selectFile: (codeFocus: CodeFocus) => void;
+  focusNode: (nodeId: string) => void;
 };
 
 type GraphEdgeData = {
@@ -173,6 +174,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
             node={node}
             graph={graph}
             setCodeFocus={selectFile}
+            focusNode={data.focusNode}
             fileContents={fileContents}
             ensureFileContent={ensureFileContent}
           />
@@ -323,6 +325,7 @@ export function GraphViewer({
   const [nodes, setNodes] = useNodesState<GraphNodeData>([]);
   const [edges, setEdges] = useEdgesState<GraphEdgeData>([]);
   const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const nodesRef = useRef<FlowNode<GraphNodeData>[]>([]);
   const graphRef = useRef<Graph | null>(null);
   const layoutRunIdRef = useRef(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
@@ -357,6 +360,26 @@ export function GraphViewer({
     [setEdges],
   );
 
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  const focusNode = useCallback(
+    (nodeId: string) => {
+      const targetNode = nodesRef.current.find((node) => node.id === nodeId);
+      if (!targetNode) {
+        return;
+      }
+      const width = targetNode.width ?? (targetNode as any).measured?.width ?? 0;
+      const height = targetNode.height ?? (targetNode as any).measured?.height ?? 0;
+      const centerX = targetNode.position.x + width / 2;
+      const centerY = targetNode.position.y + height / 2;
+      const currentZoom = reactFlowInstanceRef.current?.getViewport().zoom ?? 1;
+      reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: currentZoom });
+    },
+    [],
+  );
+
   const buildFlowElements = useCallback(() => {
     const nextNodes: FlowNode<GraphNodeData>[] = [];
     const nextEdges: FlowEdge<GraphEdgeData>[] = [];
@@ -379,6 +402,7 @@ export function GraphViewer({
           fileContents,
           ensureFileContent,
           selectFile,
+          focusNode,
         },
       });
     });
@@ -420,7 +444,7 @@ export function GraphViewer({
     });
 
     return { nextNodes, nextEdges };
-  }, [graph, fileContents, ensureFileContent, selectFile]);
+  }, [graph, fileContents, ensureFileContent, selectFile, focusNode]);
 
   useEffect(() => {
     const { nextNodes, nextEdges } = buildFlowElements();
