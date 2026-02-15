@@ -222,10 +222,10 @@ function hasNodeOverlap(previous: Graph | null, next: Graph) {
 function GraphNodeComponent({ id, data }: GraphNodeProps) {
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
-  const setActiveMenu = menuContext?.setActiveMenu ?? (() => {});
+  const setActiveMenu = menuContext?.setActiveMenu;
   const selectionContext = useContext(SelectionContext);
   const lastSelected = selectionContext?.lastSelected ?? null;
-  const setLastSelected = selectionContext?.setLastSelected ?? (() => {});
+  const setLastSelected = selectionContext?.setLastSelected;
   const { node, graph, fileContents, ensureFileContent, selectFile } = data;
   const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
@@ -237,7 +237,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      setLastSelected({ kind: 'node', id });
+      setLastSelected?.({ kind: 'node', id });
       if (declarationCount === 1) {
         const decl = node.declarations[0];
         selectFile({
@@ -245,7 +245,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
           start_offset: decl.start_offset,
           end_offset: decl.end_offset,
         });
-        setActiveMenu(null);
+        setActiveMenu?.(null);
         return;
       }
 
@@ -262,7 +262,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
-      setActiveMenu(open ? { kind: 'node', id } : null);
+      setActiveMenu?.(open ? { kind: 'node', id } : null);
     },
     [id, setActiveMenu],
   );
@@ -331,10 +331,10 @@ function GraphEdgeComponent({
 }: GraphEdgeProps) {
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
-  const setActiveMenu = menuContext?.setActiveMenu ?? (() => {});
+  const setActiveMenu = menuContext?.setActiveMenu;
   const selectionContext = useContext(SelectionContext);
   const lastSelected = selectionContext?.lastSelected ?? null;
-  const setLastSelected = selectionContext?.setLastSelected ?? (() => {});
+  const setLastSelected = selectionContext?.setLastSelected;
   const edges = data.edges;
   const isOpen = activeMenu?.kind === 'edge' && activeMenu.id === id;
   const isSelected = lastSelected?.kind === 'edge' && lastSelected.id === id;
@@ -404,7 +404,7 @@ function GraphEdgeComponent({
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
-      setLastSelected({ kind: 'edge', id });
+      setLastSelected?.({ kind: 'edge', id });
       if (edges.length === 0) {
         return;
       }
@@ -420,7 +420,7 @@ function GraphEdgeComponent({
           start_offset: edge.from_offset_start,
           end_offset: edge.from_offset_end,
         });
-        setActiveMenu(null);
+        setActiveMenu?.(null);
         return;
       }
 
@@ -436,7 +436,7 @@ function GraphEdgeComponent({
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
-      setActiveMenu(open ? { kind: 'edge', id } : null);
+      setActiveMenu?.(open ? { kind: 'edge', id } : null);
     },
     [id, setActiveMenu],
   );
