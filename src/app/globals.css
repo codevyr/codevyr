@@ -57,6 +57,15 @@ body {
   pointer-events: stroke;
 }
 
+.graph-handle-hidden {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
 .flexlayout__tab_button.problems-tab-alert {
   color: #b91c1c;
   font-weight: 600;

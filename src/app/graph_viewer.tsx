@@ -77,10 +77,10 @@ function triggerContextMenu(event: React.MouseEvent<Element>) {
   target.dispatchEvent(contextEvent);
 }
 
-function resolveEdgeFileId(edge: GraphEdge, graph: Graph): string | null {
-  if (edge.from_file) {
-    return edge.from_file;
-  }
+  function resolveEdgeFileId(edge: GraphEdge, graph: Graph): string | null {
+    if (edge.from_file) {
+      return edge.from_file;
+    }
 
   const node = graph.nodes.get(edge.from);
   return node?.declarations[0]?.file_id ?? null;
@@ -146,9 +146,22 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
           onClick={handleClick}
           onContextMenu={(event) => event.stopPropagation()}
         >
-          <Handle type="target" position={Position.Top} />
+          <Handle id="target-top" type="target" position={Position.Top} />
           {node.label}
-          <Handle type="source" position={Position.Bottom} />
+          <Handle id="source-bottom" type="source" position={Position.Bottom} />
+          <Handle
+            id="target-top-right"
+            type="target"
+            position={Position.Top}
+            className="graph-handle-hidden"
+            style={{ left: '75%' }}
+          />
+          <Handle
+            id="source-right"
+            type="source"
+            position={Position.Right}
+            className="graph-handle-hidden"
+          />
         </div>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
@@ -172,6 +185,8 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 function GraphEdgeComponent({
   id,
   data,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -186,31 +201,45 @@ function GraphEdgeComponent({
   const setActiveMenu = menuContext?.setActiveMenu ?? (() => {});
   const edges = data.edges;
   const isOpen = activeMenu?.kind === 'edge' && activeMenu.id === id;
-  const entryOffset = 12;
-  const targetDir = (() => {
-    switch (targetPosition) {
-      case Position.Left:
-        return { x: -1, y: 0 };
-      case Position.Right:
-        return { x: 1, y: 0 };
-      case Position.Bottom:
-        return { x: 0, y: 1 };
-      case Position.Top:
-      default:
-        return { x: 0, y: -1 };
-    }
-  })();
-  const preTargetX = targetX + targetDir.x * entryOffset;
-  const preTargetY = targetY + targetDir.y * entryOffset;
-  const [curvePath] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX: preTargetX,
-    targetY: preTargetY,
-    targetPosition,
-  });
-  const edgePath = `${curvePath} L ${targetX},${targetY}`;
+  const isSelfLoop = source === target;
+  let edgePath = '';
+
+  if (isSelfLoop) {
+    const loopOffsetX = 70;
+    const loopOffsetY = 50;
+    const control1X = sourceX + loopOffsetX;
+    const control1Y = sourceY - loopOffsetY;
+    const control2X = targetX;
+    const control2Y = targetY - loopOffsetY;
+    edgePath = `M ${sourceX} ${sourceY}
+      C ${control1X} ${control1Y} ${control2X} ${control2Y} ${targetX} ${targetY}`;
+  } else {
+    const entryOffset = 12;
+    const targetDir = (() => {
+      switch (targetPosition) {
+        case Position.Left:
+          return { x: -1, y: 0 };
+        case Position.Right:
+          return { x: 1, y: 0 };
+        case Position.Bottom:
+          return { x: 0, y: 1 };
+        case Position.Top:
+        default:
+          return { x: 0, y: -1 };
+      }
+    })();
+    const preTargetX = targetX + targetDir.x * entryOffset;
+    const preTargetY = targetY + targetDir.y * entryOffset;
+    const [curvePath] = getBezierPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX: preTargetX,
+      targetY: preTargetY,
+      targetPosition,
+    });
+    edgePath = `${curvePath} L ${targetX},${targetY}`;
+  }
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
@@ -362,11 +391,14 @@ export function GraphViewer({
       if (!graph.nodes.has(edge.from) || !graph.nodes.has(edge.to)) {
         return;
       }
+      const isSelfLoop = edge.from === edge.to;
       nextEdges.push({
         id: edgeId,
         type: 'graphEdge',
         source: edge.from,
         target: edge.to,
+        sourceHandle: isSelfLoop ? 'source-right' : 'source-bottom',
+        targetHandle: isSelfLoop ? 'target-top-right' : 'target-top',
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: '#9dbaea',
