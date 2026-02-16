@@ -119,13 +119,13 @@ export async function tapGraphEdge(page: Page, edgeId: string) {
   }, edgeId);
 }
 
-export async function waitForPopper(page: Page, id: string) {
+export async function waitForContextMenu(page: Page, id: string) {
   await page.waitForFunction(testId => {
     return document.querySelector(`[data-testid="${testId}"]`) !== null;
   }, id);
 }
 
-export async function waitForPopperToClose(page: Page, id: string) {
+export async function waitForContextMenuToClose(page: Page, id: string) {
   await page.waitForFunction(testId => {
     return document.querySelector(`[data-testid="${testId}"]`) === null;
   }, id);

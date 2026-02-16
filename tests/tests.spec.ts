@@ -11,8 +11,8 @@ import {
   tapGraphEdge,
   tapGraphNodeAndWaitForSource,
   waitForGraphNodeCount,
-  waitForPopper,
-  waitForPopperToClose,
+  waitForContextMenu,
+  waitForContextMenuToClose,
 } from './test-utils';
 
 test('has title', async ({ page }) => {
@@ -68,10 +68,10 @@ test('query editor highlights InitLogs and opens logs.go', async ({ page }) => {
   await expect(page.locator('.monaco-editor').last()).toContainText('func InitLogs');
 
   await tapGraphEdge(page, '22-201');
-  await waitForPopper(page, 'popper-edge-22-201');
+  await waitForContextMenu(page, 'context-menu-edge-22-201');
 
   await tapGraphEdge(page, '22-201');
-  await waitForPopperToClose(page, 'popper-edge-22-201');
+  await waitForContextMenuToClose(page, 'context-menu-edge-22-201');
 });
 
 test('graph selections center the focused code', async ({ page }) => {

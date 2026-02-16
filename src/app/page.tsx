@@ -260,7 +260,6 @@ export default function Home() {
         }
 
         const updated = new Map(prev);
-        const isVisibleNow = isTabVisible(model, tabId);
         updated.set(tabId, {
           fileId: existing.fileId,
           title: tabTitle,
@@ -269,7 +268,7 @@ export default function Home() {
             path: filePath,
             focusStartOffset: startOffset,
             focusEndOffset: endOffset ?? null,
-            isVisible: () => isVisibleNow,
+            isVisible: () => isTabVisible(model, tabId),
             // && isTabVisible(model, tabId)
           },
         });
@@ -284,7 +283,6 @@ export default function Home() {
       return;
     }
 
-    const isVisibleNow = isTabVisible(model, tabId);
     fetchSource(fileId)
       .then(response => response.text())
       .then(data => {
@@ -294,7 +292,7 @@ export default function Home() {
           value: data,
           focusStartOffset: startOffset,
           focusEndOffset: endOffset ?? null,
-          isVisible: () => isVisibleNow,
+          isVisible: () => isTabVisible(model, tabId),
           // && isTabVisible(model, tabId)
         };
 

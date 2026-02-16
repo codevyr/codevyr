@@ -12,7 +12,8 @@ export interface Declaration {
 export interface Node {
     id: string;
     label: string;
-    declarations: Array<Declaration>
+    declarations: Array<Declaration>;
+    color?: string;
 }
 
 export interface Edge {

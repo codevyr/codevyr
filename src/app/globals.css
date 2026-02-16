@@ -6,6 +6,9 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
+  --graph-edge-color: #9dbaea;
+  --graph-edge-color-selected: color-mix(in srgb, var(--graph-edge-color) 70%, #000);
+  --graph-grid-color: #d4d8e1;
 }
 /* 
 @media (prefers-color-scheme: dark) {
@@ -23,35 +26,132 @@ body {
       rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
 }
 
-.popper-div {
-  /* just an example */
-  border: 1px solid red;
-  color: black;
-  z-index: 9999;
-  padding: 0.25em;
-  pointer-events: none;
-  width: max-content;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
 .node-hover {
   color: rgb(var(--foreground-rgb));
-  z-index: 9999;
-  padding: 0.25em;
+  padding: 0.25em 0.5em;
   width: max-content;
-  position: absolute;
-  top: 0;
-  left: 0;
-  background: linear-gradient(to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+  background: #ffffff;
+}
+
+.node-hover-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.node-hover-title {
+  font-weight: 600;
+  max-width: 100%;
+}
+
+.node-hover-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #1f2937;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.node-hover-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+}
+
+.node-hover-icon svg * {
+  fill: none;
+  stroke: currentColor;
+}
+
+.node-hover-icon:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.node-hover-actions-cell {
+  padding-left: 0.35rem;
+  white-space: nowrap;
+}
+
+.edge-hover-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.4rem;
+}
+
+.edge-hover-line {
+  display: flex;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+
+.edge-hover-key {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.edge-hover-value {
+  font-size: 0.9rem;
+  color: #0f172a;
 }
 
 .declaration-hover {
   cursor: pointer;
   transition: background-color 0.3s ease;
+}
+
+.context-menu-content {
+  background: #ffffff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  z-index: 50;
+}
+
+.graph-node {
+  @apply rounded-md border border-blue-300 bg-blue-200 text-gray-900 px-3 py-1.5 text-sm shadow-sm;
+  --graph-node-color: #93c5fd;
+  border-color: var(--graph-node-color);
+  cursor: pointer;
+  user-select: none;
+}
+
+.graph-node-selected {
+  border-color: color-mix(in srgb, var(--graph-node-color) 70%, #000);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--graph-node-color) 60%, #000),
+    0 8px 18px color-mix(in srgb, var(--graph-node-color) 50%, #000);
+}
+
+.graph-edge-selected .react-flow__edge-path {
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.2));
+}
+
+.graph-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+}
+
+.graph-handle-hidden {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
 }
 
 .flexlayout__tab_button.problems-tab-alert {
