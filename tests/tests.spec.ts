@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { checkTab, findAllTabSets } from './helpers-flex';
 import { SUBMIT_QUERY, SUBMIT_QUERY_INIT_LOGS } from './mock-responses';
 import {
+  ensureEditorApis,
   ensureGraphApis,
   expectLineRoughlyCentered,
   interceptGraphEndpoints,
@@ -14,6 +15,7 @@ import {
   waitForContextMenu,
   waitForContextMenuToClose,
 } from './test-utils';
+import { encodeQuery } from '../src/app/lib/query_share';
 
 test('has title', async ({ page }) => {
   await page.goto('./');
@@ -27,6 +29,18 @@ test('get started', async ({ page }) => {
 
   const tabSets = await findAllTabSets(page);
   expect(await tabSets.count()).toEqual(3);
+});
+
+test('loads query from share link hash', async ({ page }) => {
+  const sharedQuery = 'graph {\\n  foo -> bar\\n}';
+  const encoded = encodeQuery(sharedQuery);
+  await page.goto(`./#q=${encoded}`);
+  await ensureEditorApis(page);
+
+  await page.waitForFunction(expected => {
+    const getQuery = (window as any).__asklGetQuery;
+    return typeof getQuery === 'function' && getQuery() === expected;
+  }, sharedQuery);
 });
 
 test('query editor submits and renders three graph nodes', async ({ page }) => {

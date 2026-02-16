@@ -12,6 +12,8 @@ import { fetchSource } from "./askld";
 import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
 import { formatOffsetLocation } from './lib/offsets';
+import { QueryToolbar, ShareStatus } from './query_toolbar';
+import { buildShareUrl, getQueryFromHash } from './lib/query_share';
 
 
 const CODE_TABSET_ID = "code-tabset";
@@ -180,6 +182,8 @@ export default function Home() {
   const editorHandleRef = useRef<EditorHandle | null>(null);
   const fileContentsRef = useRef<Map<string, string>>(fileContents);
   const pendingFileLoadsRef = useRef<Set<string>>(new Set());
+  const [shareStatus, setShareStatus] = useState<ShareStatus>('idle');
+  const shareResetTimeoutRef = useRef<number | null>(null);
 
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const activeFileIdRef = useRef<string | null>(activeFileId);
@@ -189,6 +193,34 @@ export default function Home() {
   useEffect(() => {
     fileContentsRef.current = fileContents;
   }, [fileContents]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const applyQueryFromHash = () => {
+      const decoded = getQueryFromHash(window.location.hash);
+      if (decoded === null) {
+        return;
+      }
+      setQuery(decoded);
+    };
+
+    applyQueryFromHash();
+    window.addEventListener('hashchange', applyQueryFromHash);
+    return () => {
+      window.removeEventListener('hashchange', applyQueryFromHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (shareResetTimeoutRef.current !== null) {
+        window.clearTimeout(shareResetTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleProblemsChange = useCallback((nextProblems: Problem[]) => {
     setProblems(nextProblems);
@@ -213,6 +245,52 @@ export default function Home() {
 
     editorHandleRef.current?.revealRange(problem.range);
   }, []);
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (error) {
+        console.warn('Clipboard write failed, falling back', error);
+      }
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return success;
+    } catch (error) {
+      console.warn('Clipboard fallback failed', error);
+      return false;
+    }
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    const currentQuery = editorHandleRef.current?.getQuery() ?? query;
+    const shareUrl = buildShareUrl(currentQuery);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', shareUrl);
+    }
+    const didCopy = await copyToClipboard(shareUrl);
+    setShareStatus(didCopy ? 'copied' : 'error');
+    if (shareResetTimeoutRef.current !== null) {
+      window.clearTimeout(shareResetTimeoutRef.current);
+    }
+    shareResetTimeoutRef.current = window.setTimeout(() => {
+      setShareStatus('idle');
+    }, 2000);
+  }, [copyToClipboard, query]);
 
   const updateFileContents = useCallback((fileId: string, content: string) => {
     setFileContents(prev => {
@@ -392,12 +470,17 @@ export default function Home() {
     switch (node.getId()) {
       case "query-editor":
         return (
-          <EditorComponent
-            ref={editorHandleRef}
-            query={query}
-            onGraphChange={setQueryGraph}
-            onProblemsChange={handleProblemsChange}
-          />
+          <div className="flex flex-col h-full">
+            <QueryToolbar onShare={handleShare} status={shareStatus} />
+            <div className="flex-1">
+              <EditorComponent
+                ref={editorHandleRef}
+                query={query}
+                onGraphChange={setQueryGraph}
+                onProblemsChange={handleProblemsChange}
+              />
+            </div>
+          </div>
         );
       case "graph-viewer":
         return (
@@ -413,7 +496,7 @@ export default function Home() {
       default:
         return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect, fileContents, ensureFileContent]);
+  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect, fileContents, ensureFileContent, handleShare, shareStatus]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
