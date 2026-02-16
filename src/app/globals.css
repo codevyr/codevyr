@@ -61,7 +61,13 @@ body {
 .node-hover-icon svg {
   width: 16px;
   height: 16px;
-  fill: currentColor;
+  fill: none;
+  stroke: currentColor;
+}
+
+.node-hover-icon svg * {
+  fill: none;
+  stroke: currentColor;
 }
 
 .node-hover-icon:hover {

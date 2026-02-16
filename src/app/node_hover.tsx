@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { LuArrowUpRight, LuCopy, LuFocus } from 'react-icons/lu';
 import { CodeFocus } from './code_viewer';
 import { Edge, Declaration, Node, Graph } from './graph';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
@@ -94,9 +95,7 @@ function DeclarationHover({ declaration, graph, setCodeFocus, fileContents }: De
           }}
           title="Open in editor"
         >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M6 3h7v7h-2V6.41L4.7 12.7 3.3 11.3 9.59 5H6V3z" />
-          </svg>
+          <LuArrowUpRight />
         </button>
         <button
           type="button"
@@ -107,10 +106,7 @@ function DeclarationHover({ declaration, graph, setCodeFocus, fileContents }: De
           }}
           title="Copy path"
         >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M5 5V2h7v9h-3V5H5z" />
-            <path d="M3 4h5v2H5v6h6v-3h2v5H3z" />
-          </svg>
+          <LuCopy />
         </button>
       </td>
     </tr>
@@ -206,15 +202,10 @@ export function NodeHover({
           {node.label}
         </div>
         <button type="button" className="node-hover-icon" onClick={() => focusNode(node.id)} title="Focus node">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M6 1h4v2H6zM6 13h4v2H6zM1 6h2v4H1zM13 6h2v4h-2zM5 5h6v6H5z" />
-          </svg>
+          <LuFocus />
         </button>
         <button type="button" className="node-hover-icon" onClick={() => copyToClipboard(node.label)} title="Copy symbol name">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M5 5V2h7v9h-3V5H5z" />
-            <path d="M3 4h5v2H5v6h6v-3h2v5H3z" />
-          </svg>
+          <LuCopy />
         </button>
       </div>
       <table>
@@ -325,9 +316,7 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) 
           }}
           title="Open in editor"
         >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M6 3h7v7h-2V6.41L4.7 12.7 3.3 11.3 9.59 5H6V3z" />
-          </svg>
+          <LuArrowUpRight />
         </button>
         <button
           type="button"
@@ -338,10 +327,7 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) 
           }}
           title="Copy path"
         >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M5 5V2h7v9h-3V5H5z" />
-            <path d="M3 4h5v2H5v6h6v-3h2v5H3z" />
-          </svg>
+          <LuCopy />
         </button>
       </td>
     </tr>
