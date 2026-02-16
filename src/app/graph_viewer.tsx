@@ -70,6 +70,37 @@ const SelectionContext = React.createContext<SelectionContextValue | null>(null)
 
 const nodeTypes = { graphNode: GraphNodeComponent };
 const edgeTypes = { graphEdge: GraphEdgeComponent };
+const INITIAL_NODE_OFFSET = 40;
+
+function applyLayoutPadding(
+  nodes: FlowNode<GraphNodeData>[],
+  padding: number,
+) {
+  if (nodes.length === 0) {
+    return nodes;
+  }
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  nodes.forEach((node) => {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+  });
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+    return nodes;
+  }
+  const offsetX = Math.max(0, padding - minX);
+  const offsetY = Math.max(0, padding - minY);
+  if (offsetX === 0 && offsetY === 0) {
+    return nodes;
+  }
+  return nodes.map((node) => ({
+    ...node,
+    position: {
+      x: node.position.x + offsetX,
+      y: node.position.y + offsetY,
+    },
+  }));
+}
 
 function triggerContextMenu(event: React.MouseEvent<Element>) {
   event.preventDefault();
@@ -640,6 +671,7 @@ export function GraphViewer({
     }
 
     const layoutRunId = ++layoutRunIdRef.current;
+    const shouldApplyInitialPadding = positionsRef.current.size === 0;
     const preserveExisting = !shouldUseDagre && positionsRef.current.size > 0;
     const shouldFitView = shouldUseDagre || !preserveExisting;
     const layoutPromise = shouldUseDagre
@@ -654,9 +686,12 @@ export function GraphViewer({
       if (layoutRunId !== layoutRunIdRef.current) {
         return;
       }
-      setNodes(layoutedNodes);
+      const paddedNodes = shouldApplyInitialPadding
+        ? applyLayoutPadding(layoutedNodes, INITIAL_NODE_OFFSET)
+        : layoutedNodes;
+      setNodes(paddedNodes);
       positionsRef.current = new Map(
-        layoutedNodes.map((node) => [node.id, node.position]),
+        paddedNodes.map((node) => [node.id, node.position]),
       );
       if (shouldFitView) {
         requestAnimationFrame(() => {
