@@ -1,5 +1,5 @@
 import React from 'react';
-import { LuShare2 } from 'react-icons/lu';
+import { LuPlay, LuShare2 } from 'react-icons/lu';
 
 interface ToolbarButtonProps {
   onClick: () => void;
@@ -22,17 +22,29 @@ const iconClassName = 'w-4 h-4';
 export type ShareStatus = 'idle' | 'copied' | 'error';
 
 export interface QueryToolbarProps {
+  onRunQuery: () => void;
   onShare: () => void;
   status?: ShareStatus;
 }
 
-export function QueryToolbar({ onShare, status = 'idle' }: QueryToolbarProps) {
+export function QueryToolbar({
+  onRunQuery,
+  onShare,
+  status = 'idle',
+}: QueryToolbarProps) {
   const statusText =
     status === 'copied' ? 'Copied' : status === 'error' ? 'Copy failed' : null;
 
   return (
     <div className="toolbar-container">
       <div className="toolbar-button-group">
+        <ToolbarButton
+          onClick={onRunQuery}
+          title="Run query (Ctrl+Enter)"
+          icon={<LuPlay className={iconClassName} />}
+        >
+          Run
+        </ToolbarButton>
         <ToolbarButton
           onClick={onShare}
           title="Copy shareable link"

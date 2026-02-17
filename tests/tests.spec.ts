@@ -25,10 +25,10 @@ test('has title', async ({ page }) => {
 });
 
 test('get started', async ({ page }) => {
-  await page.goto('./');
+  await loadApp(page);
 
-  const tabSets = await findAllTabSets(page);
-  expect(await tabSets.count()).toEqual(3);
+  const tabSets = findAllTabSets(page);
+  await expect(tabSets).toHaveCount(3);
 });
 
 test('loads query from share link hash', async ({ page }) => {

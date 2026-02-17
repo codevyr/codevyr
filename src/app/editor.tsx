@@ -15,6 +15,7 @@ export interface EditorHandle {
     revealRange: (range: IRange) => void;
     getQuery: () => string;
     setQuery: (nextQuery: string) => void;
+    runQuery: () => void;
 }
 
 interface EditorProps {
@@ -297,13 +298,21 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
         }
     };
 
+    const runQuery = useCallback((editorInstance?: MonacoEditor.ICodeEditor) => {
+        const activeEditor = editorInstance ?? editorInstanceRef.current;
+        if (!activeEditor) {
+            return;
+        }
+        queryGraph(activeEditor);
+    }, [queryGraph]);
+
     const handleEditorWillMount = (monacoInstance: Monaco) => {
         monacoRef.current = monacoInstance;
         monacoInstance.editor.addEditorAction({
             id: 'submit-query',
             label: 'Submit Query',
             keybindings: [monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter],
-            run: queryGraph
+            run: runQuery
         });
 
         registerAskl(monacoInstance);
@@ -334,7 +343,10 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 editorInstanceRef.current.setValue(nextQuery);
             }
         },
-    }), []);
+        runQuery() {
+            runQuery();
+        },
+    }), [runQuery]);
 
     useEffect(() => {
         queryRef.current = query;
