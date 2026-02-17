@@ -13,6 +13,8 @@ import { getLineColumnFromOffset } from './lib/offsets';
 
 export interface EditorHandle {
     revealRange: (range: IRange) => void;
+    getQuery: () => string;
+    setQuery: (nextQuery: string) => void;
 }
 
 interface EditorProps {
@@ -248,6 +250,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
     const testCleanupRef = useRef<(() => void) | null>(null);
     const monacoRef = useRef<Monaco | null>(null);
     const editorInstanceRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+    const queryRef = useRef(query);
     const queryGraph = async (ed: MonacoEditor.ICodeEditor) => {
         console.log('submit-query');
         try {
@@ -321,8 +324,28 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
             editorInstanceRef.current.revealRangeInCenter(range);
             editorInstanceRef.current.setSelection(range);
             editorInstanceRef.current.focus();
-        }
+        },
+        getQuery() {
+            return editorInstanceRef.current?.getValue() ?? queryRef.current;
+        },
+        setQuery(nextQuery: string) {
+            queryRef.current = nextQuery;
+            if (editorInstanceRef.current) {
+                editorInstanceRef.current.setValue(nextQuery);
+            }
+        },
     }), []);
+
+    useEffect(() => {
+        queryRef.current = query;
+        if (!editorInstanceRef.current) {
+            return;
+        }
+        const currentValue = editorInstanceRef.current.getValue();
+        if (currentValue !== query) {
+            editorInstanceRef.current.setValue(query);
+        }
+    }, [query]);
 
     useEffect(() => {
         return () => {
