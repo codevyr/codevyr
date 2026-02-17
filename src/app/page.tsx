@@ -292,6 +292,10 @@ export default function Home() {
     }, 2000);
   }, [copyToClipboard, query]);
 
+  const handleRunQuery = useCallback(() => {
+    editorHandleRef.current?.runQuery();
+  }, []);
+
   const updateFileContents = useCallback((fileId: string, content: string) => {
     setFileContents(prev => {
       if (prev.get(fileId) === content) {
@@ -471,7 +475,7 @@ export default function Home() {
       case "query-editor":
         return (
           <div className="flex flex-col h-full">
-            <QueryToolbar onShare={handleShare} status={shareStatus} />
+            <QueryToolbar onRunQuery={handleRunQuery} onShare={handleShare} status={shareStatus} />
             <div className="flex-1">
               <EditorComponent
                 ref={editorHandleRef}
@@ -496,7 +500,7 @@ export default function Home() {
       default:
         return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect, fileContents, ensureFileContent, handleShare, shareStatus]);
+  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect, fileContents, ensureFileContent, handleShare, shareStatus, handleRunQuery]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
