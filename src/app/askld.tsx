@@ -20,6 +20,7 @@ export interface ProjectTreeNode {
   node_type: TreeNodeType;
   has_children: boolean;
   file_id?: string | null;
+  filetype?: string | null;
 }
 
 export interface ProjectResolveNode {

@@ -15,6 +15,7 @@ import { formatOffsetLocation, type OffsetValue } from './lib/offsets';
 import { QueryToolbar, ShareStatus } from './query_toolbar';
 import { buildShareUrl, getQueryFromHash } from './lib/query_share';
 import { FileExplorer } from './file_explorer';
+import { resolveEditorLanguage } from './lib/file_language';
 
 
 const CODE_TABSET_ID = "code-tabset";
@@ -335,11 +336,18 @@ export default function Home() {
       });
   }, [updateFileContents]);
 
-  const openFileById = useCallback((fileId: string, filePath: string | null, startOffset: OffsetValue, endOffset?: OffsetValue | null) => {
+  const openFileById = useCallback((
+    fileId: string,
+    filePath: string | null,
+    startOffset: OffsetValue,
+    endOffset?: OffsetValue | null,
+    fileType?: string | null,
+  ) => {
     const tabId = codeTabId(fileId);
     const existingEntry = codeTabsRef.current.get(tabId);
     const resolvedPath = filePath ?? fileId;
     const tabTitle = getTabTitle(resolvedPath);
+    const language = resolveEditorLanguage(resolvedPath, fileType ?? null);
 
     if (existingEntry) {
       setCodeTabs(prev => {
@@ -355,6 +363,7 @@ export default function Home() {
           editorParams: {
             ...existing.editorParams,
             path: resolvedPath,
+            language,
             focusStartOffset: startOffset,
             focusEndOffset: endOffset ?? null,
             isVisible: () => isTabVisible(model, tabId),
@@ -377,7 +386,7 @@ export default function Home() {
       .then(data => {
         const editorParams: EditorParams = {
           path: String(resolvedPath),
-          language: 'c',
+          language,
           value: data,
           focusStartOffset: startOffset,
           focusEndOffset: endOffset ?? null,
@@ -420,8 +429,8 @@ export default function Home() {
     openFileById(fileId, filePath, startOffset, endOffset ?? null);
   }, [openFileById, queryGraph]);
 
-  const handleOpenFileFromExplorer = useCallback((fileId: string, filePath: string, _projectId: string) => {
-    openFileById(fileId, filePath, 0, null);
+  const handleOpenFileFromExplorer = useCallback((fileId: string, filePath: string, _projectId: string, fileType?: string | null) => {
+    openFileById(fileId, filePath, 0, null, fileType ?? null);
   }, [openFileById]);
 
   const handleModelChange = useCallback((_: Model, action: Action) => {

@@ -9,17 +9,17 @@ const demoProject = {
     root_path: '/demo',
 }
 
-const demoTree: Record<string, Array<{ name: string; path: string; node_type: 'dir' | 'file'; has_children: boolean; file_id?: string }>> = {
+const demoTree: Record<string, Array<{ name: string; path: string; node_type: 'dir' | 'file'; has_children: boolean; file_id?: string; filetype?: string }>> = {
     '/demo': [
         { name: 'src', path: '/demo/src', node_type: 'dir', has_children: true },
-        { name: 'README.md', path: '/demo/README.md', node_type: 'file', has_children: false, file_id: 'readme' },
+        { name: 'README.md', path: '/demo/README.md', node_type: 'file', has_children: false, file_id: 'readme', filetype: '.md' },
     ],
     '/demo/src': [
-        { name: 'main.c', path: '/demo/src/main.c', node_type: 'file', has_children: false, file_id: 'main-c' },
+        { name: 'main.c', path: '/demo/src/main.c', node_type: 'file', has_children: false, file_id: 'main-c', filetype: '.c' },
         { name: 'lib', path: '/demo/src/lib', node_type: 'dir', has_children: true },
     ],
     '/demo/src/lib': [
-        { name: 'util.c', path: '/demo/src/lib/util.c', node_type: 'file', has_children: false, file_id: 'util-c' },
+        { name: 'util.c', path: '/demo/src/lib/util.c', node_type: 'file', has_children: false, file_id: 'util-c', filetype: '.c' },
     ],
 };
 

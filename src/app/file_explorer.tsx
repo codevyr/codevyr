@@ -24,6 +24,7 @@ type FileNode = {
   node_type: 'dir' | 'file';
   has_children: boolean;
   file_id?: string | null;
+  filetype?: string | null;
   children: string[] | null;
   childrenLoaded?: boolean;
   isLoading?: boolean;
@@ -36,7 +37,7 @@ type FileLocation = {
 
 type FileExplorerProps = {
   activeFileId: string | null;
-  onOpenFile: (fileId: string, path: string, projectId: string) => void;
+  onOpenFile: (fileId: string, path: string, projectId: string, fileType?: string | null) => void;
 };
 
 type RowItem =
@@ -225,6 +226,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
               node_type: child.node_type,
               has_children: child.has_children,
               file_id: child.file_id ?? null,
+              filetype: child.filetype ?? null,
               children: child.node_type === 'dir' ? null : [],
               childrenLoaded: child.node_type !== 'dir',
             };
@@ -335,7 +337,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
       path: node.path,
     });
     setActivePathKey(nodeKey(node.projectId, node.path));
-    onOpenFile(node.file_id, node.path, node.projectId);
+    onOpenFile(node.file_id, node.path, node.projectId, node.filetype ?? null);
   }, [onOpenFile]);
 
   const resolveActiveFile = useCallback(async (fileId: string, projectList: ProjectSummary[]) => {
