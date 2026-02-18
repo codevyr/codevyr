@@ -1,6 +1,7 @@
 type LanguageMap = Record<string, string>;
 
 const mimeToLanguage: LanguageMap = {
+  'text/x-makefile': 'makefile',
   'text/x-shellscript': 'shell',
   'text/css': 'css',
   'text/html': 'html',
@@ -25,6 +26,7 @@ const extensionToLanguage: LanguageMap = {
   '.json': 'json',
   '.md': 'markdown',
   '.mod': 'plaintext',
+  '.mk': 'makefile',
   '.proto': 'plaintext',
   '.py': 'python',
   '.rb': 'ruby',
@@ -41,6 +43,13 @@ const extensionToLanguage: LanguageMap = {
 
 function normalize(value: string) {
   return value.trim().toLowerCase();
+}
+
+function hasMakefileName(filePath: string) {
+  const normalized = filePath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter(Boolean);
+  const basename = segments[segments.length - 1] ?? '';
+  return basename.toLowerCase() === 'makefile';
 }
 
 export function resolveEditorLanguage(filePath?: string | null, fileType?: string | null): string {
@@ -60,6 +69,9 @@ export function resolveEditorLanguage(filePath?: string | null, fileType?: strin
   }
 
   if (filePath) {
+    if (hasMakefileName(filePath)) {
+      return 'makefile';
+    }
     const normalizedPath = filePath.toLowerCase();
     const lastDot = normalizedPath.lastIndexOf('.');
     if (lastDot !== -1) {

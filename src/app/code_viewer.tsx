@@ -4,6 +4,7 @@ import { Editor, Monaco } from "@monaco-editor/react";
 import type * as monaco from 'monaco-editor';
 import * as monacoEditor from 'monaco-editor';
 import { getLineColumnFromOffset, parseOffset, type OffsetValue } from './lib/offsets';
+import { registerMakefile } from './monaco-makefile-language';
 
 export interface CodeFocus {
     file_id: string;
@@ -114,6 +115,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
 
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
         editorRef.current = editor;
+        registerMakefile(monacoInstance);
 
         if (layoutListenerRef.current) {
             layoutListenerRef.current.dispose();
