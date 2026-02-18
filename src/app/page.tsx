@@ -11,9 +11,10 @@ import { makeServer } from "./mirage"
 import { fetchSource } from "./askld";
 import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
-import { formatOffsetLocation } from './lib/offsets';
+import { formatOffsetLocation, type OffsetValue } from './lib/offsets';
 import { QueryToolbar, ShareStatus } from './query_toolbar';
 import { buildShareUrl, getQueryFromHash } from './lib/query_share';
+import { FileExplorer } from './file_explorer';
 
 
 const CODE_TABSET_ID = "code-tabset";
@@ -41,6 +42,13 @@ const initialLayout: IJsonModel = {
                 id: "query-editor",
                 name: "Query",
                 component: "button",
+                enableClose: false,
+              },
+              {
+                type: "tab",
+                id: "file-explorer",
+                name: "Explorer",
+                component: "file-explorer",
                 enableClose: false,
               }
             ]
@@ -327,12 +335,11 @@ export default function Home() {
       });
   }, [updateFileContents]);
 
-  const handleSelectFile = useCallback((focus: CodeFocus) => {
-    const { file_id: fileId, start_offset: startOffset, end_offset: endOffset } = focus;
+  const openFileById = useCallback((fileId: string, filePath: string | null, startOffset: OffsetValue, endOffset?: OffsetValue | null) => {
     const tabId = codeTabId(fileId);
     const existingEntry = codeTabsRef.current.get(tabId);
-    const filePath = queryGraph.files.get(fileId) ?? fileId;
-    const tabTitle = getTabTitle(filePath);
+    const resolvedPath = filePath ?? fileId;
+    const tabTitle = getTabTitle(resolvedPath);
 
     if (existingEntry) {
       setCodeTabs(prev => {
@@ -347,7 +354,7 @@ export default function Home() {
           title: tabTitle,
           editorParams: {
             ...existing.editorParams,
-            path: filePath,
+            path: resolvedPath,
             focusStartOffset: startOffset,
             focusEndOffset: endOffset ?? null,
             isVisible: () => isTabVisible(model, tabId),
@@ -369,7 +376,7 @@ export default function Home() {
       .then(response => response.text())
       .then(data => {
         const editorParams: EditorParams = {
-          path: String(filePath),
+          path: String(resolvedPath),
           language: 'c',
           value: data,
           focusStartOffset: startOffset,
@@ -405,7 +412,17 @@ export default function Home() {
       .catch(error => {
         console.error('Failed to load source file', error);
       });
-  }, [model, queryGraph, updateFileContents]);
+  }, [model, updateFileContents]);
+
+  const handleSelectFile = useCallback((focus: CodeFocus) => {
+    const { file_id: fileId, start_offset: startOffset, end_offset: endOffset } = focus;
+    const filePath = queryGraph.files.get(fileId) ?? null;
+    openFileById(fileId, filePath, startOffset, endOffset ?? null);
+  }, [openFileById, queryGraph]);
+
+  const handleOpenFileFromExplorer = useCallback((fileId: string, filePath: string, _projectId: string) => {
+    openFileById(fileId, filePath, 0, null);
+  }, [openFileById]);
 
   const handleModelChange = useCallback((_: Model, action: Action) => {
     if (action.type === Actions.SELECT_TAB) {
@@ -486,6 +503,10 @@ export default function Home() {
             </div>
           </div>
         );
+      case "file-explorer":
+        return (
+          <FileExplorer activeFileId={activeFileId} onOpenFile={handleOpenFileFromExplorer} />
+        );
       case "graph-viewer":
         return (
           <GraphViewer
@@ -500,7 +521,7 @@ export default function Home() {
       default:
         return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [codeTabs, query, queryGraph, handleSelectFile, problems, handleProblemsChange, handleProblemSelect, fileContents, ensureFileContent, handleShare, shareStatus, handleRunQuery]);
+  }, [codeTabs, query, queryGraph, handleSelectFile, handleOpenFileFromExplorer, problems, handleProblemsChange, handleProblemSelect, fileContents, ensureFileContent, handleShare, shareStatus, handleRunQuery, activeFileId]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
