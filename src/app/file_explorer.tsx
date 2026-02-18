@@ -386,13 +386,10 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
 
     const visibleDirPaths = dirPaths?.filter((dirPath) => dirPath !== '/');
     if (visibleDirPaths && visibleDirPaths.length > 0) {
-      setNodeMap((prev) => {
-        let next = prev;
-        const rootKey = nodeKey(projectId, '/');
-        next = ensurePathChain(projectId, visibleDirPaths, next, rootKey);
-        nodeMapRef.current = next;
-        return next;
-      });
+      const rootKey = nodeKey(projectId, '/');
+      const next = ensurePathChain(projectId, visibleDirPaths, nodeMapRef.current, rootKey);
+      nodeMapRef.current = next;
+      setNodeMap(next);
     }
 
     if (visibleDirPaths && visibleDirPaths.length > 0) {
