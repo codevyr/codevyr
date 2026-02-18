@@ -142,6 +142,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
   const fileIdLookupRef = useRef<Map<string, FileLocation>>(new Map());
   const loadPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     nodeMapRef.current = nodeMap;
@@ -465,15 +466,32 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     if (!container) {
       return;
     }
+    if (pendingScrollKeyRef.current !== activePathKey) {
+      return;
+    }
     const selector = `[data-node-key="${activePathKey}"]`;
     const target = container.querySelector<HTMLElement>(selector);
     if (!target) {
       return;
     }
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const isVisible =
+      targetRect.top >= containerRect.top &&
+      targetRect.bottom <= containerRect.bottom;
+    if (isVisible) {
+      pendingScrollKeyRef.current = null;
+      return;
+    }
     requestAnimationFrame(() => {
       target.scrollIntoView({ block: 'center', inline: 'nearest' });
     });
+    pendingScrollKeyRef.current = null;
   }, [activePathKey, rows]);
+
+  useEffect(() => {
+    pendingScrollKeyRef.current = activePathKey;
+  }, [activePathKey]);
 
   return (
     <div className="flex h-full flex-col">
