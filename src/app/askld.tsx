@@ -51,10 +51,9 @@ export function fetchProjectDetails(projectId: string): Promise<Response> {
   });
 }
 
-export function fetchProjectTree(projectId: string, path: string, depth = 1): Promise<Response> {
+export function fetchProjectTree(projectId: string, path: string): Promise<Response> {
   const params = new URLSearchParams();
   params.set('path', path);
-  params.set('depth', String(depth));
   return fetch(`${askldUrl}/v1/index/projects/${projectId}/tree?${params.toString()}`, {
     method: 'GET',
   });

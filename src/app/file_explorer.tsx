@@ -232,7 +232,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
       return next;
     });
 
-    const promise = fetchProjectTree(projectId, path, 1)
+    const promise = fetchProjectTree(projectId, path)
       .then((response) => readJsonResponse<ProjectTreeNode[]>(response, 'Tree request'))
       .then((data) => {
         setNodeMap((prev) => {
