@@ -15,16 +15,17 @@ export interface ProjectDetails extends ProjectSummary {
 export type TreeNodeType = 'dir' | 'file';
 
 export interface ProjectTreeNode {
-  name: string;
+  name?: string;
   path: string;
   node_type: TreeNodeType;
   has_children: boolean;
   file_id?: string | null;
   filetype?: string | null;
+  compact_path?: string | null;
 }
 
 export interface ProjectResolveNode {
-  name: string;
+  name?: string;
   path: string;
 }
 
