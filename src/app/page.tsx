@@ -31,8 +31,23 @@ const initialLayout: IJsonModel = {
     weight: 100,
     children: [
       {
+        type: "tabset",
+        id: "explorer-tabset",
+        weight: 20,
+        enableDeleteWhenEmpty: false,
+        children: [
+          {
+            type: "tab",
+            id: "file-explorer",
+            name: "Explorer",
+            component: "file-explorer",
+            enableClose: false,
+          }
+        ]
+      },
+      {
         type: "row",
-        weight: 50,
+        weight: 40,
         children: [
           {
             type: "tabset",
@@ -43,13 +58,6 @@ const initialLayout: IJsonModel = {
                 id: "query-editor",
                 name: "Query",
                 component: "button",
-                enableClose: false,
-              },
-              {
-                type: "tab",
-                id: "file-explorer",
-                name: "Explorer",
-                component: "file-explorer",
                 enableClose: false,
               }
             ]
@@ -86,7 +94,7 @@ const initialLayout: IJsonModel = {
       {
         type: "tabset",
         id: CODE_TABSET_ID,
-        weight: 50,
+        weight: 40,
         enableDeleteWhenEmpty: false,
         children: [
           {
