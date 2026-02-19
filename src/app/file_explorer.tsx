@@ -83,21 +83,38 @@ function sortTreeNodes(nodes: Array<{ node: ProjectTreeNode; displayLabel: strin
   });
 }
 
-function buildDirPaths(path: string, rootPath: string) {
-  const segments = path.split('/').filter(Boolean);
-  const rootSegments = rootPath.split('/').filter(Boolean);
-  const dirPaths: string[] = [];
-  if (rootSegments.length > segments.length) {
-    return dirPaths;
+function isPathPrefix(prefix: string, target: string) {
+  const normalizedPrefix = prefix.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+  const normalizedTarget = target.replace(/\\/g, '/');
+  if (normalizedPrefix === '/') {
+    return normalizedTarget.startsWith('/');
   }
-  let current = '';
-  for (let index = 0; index < segments.length - 1; index += 1) {
-    current += `/${segments[index]}`;
-    if (index >= rootSegments.length - 1) {
-      dirPaths.push(current);
-    }
+  return normalizedTarget === normalizedPrefix || normalizedTarget.startsWith(`${normalizedPrefix}/`);
+}
+
+function findChildOnPath(parent: FileNode, nodeMap: Map<string, FileNode>, targetPath: string) {
+  if (!parent.children || parent.children.length === 0) {
+    return null;
   }
-  return dirPaths;
+  let best: FileNode | null = null;
+  let bestLength = -1;
+  parent.children
+    .map((childKey) => nodeMap.get(childKey))
+    .filter((child): child is FileNode => Boolean(child))
+    .forEach((child) => {
+      if (child.node_type !== 'dir') {
+        return;
+      }
+      const candidate = child.load_path ?? child.path;
+      if (!isPathPrefix(candidate, targetPath)) {
+        return;
+      }
+      if (candidate.length > bestLength) {
+        best = child;
+        bestLength = candidate.length;
+      }
+    });
+  return best;
 }
 
 async function readJsonResponse<T>(response: Response, context: string): Promise<T> {
@@ -338,11 +355,9 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
   const resolveActiveFile = useCallback(async (fileId: string, projectList: ProjectSummary[]) => {
     const cached = fileIdLookupRef.current.get(fileId);
     if (cached) {
-      const dirPaths = buildDirPaths(cached.path, '/');
       return {
         projectId: cached.projectId,
         path: cached.path,
-        dirPaths,
       };
     }
 
@@ -359,8 +374,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
         }
         const location = { projectId: project.id, path: leaf.path };
         fileIdLookupRef.current.set(fileId, location);
-        const dirPaths = buildDirPaths(leaf.path, '/');
-        return { projectId: project.id, path: leaf.path, dirPaths };
+        return { projectId: project.id, path: leaf.path };
       } catch (error) {
         console.error('Failed to resolve file path', error);
       }
@@ -369,35 +383,54 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     return null;
   }, []);
 
+  const expandToPath = useCallback(async (projectId: string, targetPath: string) => {
+    expandKey(projectKey(projectId));
+    await loadDirectory(projectId, '/');
+    let currentKey = nodeKey(projectId, '/');
+    const visited = new Set<string>();
+    for (let index = 0; index < 200; index += 1) {
+      if (visited.has(currentKey)) {
+        break;
+      }
+      visited.add(currentKey);
+      const current = nodeMapRef.current.get(currentKey);
+      if (!current || current.node_type !== 'dir') {
+        break;
+      }
+      if (!current.childrenLoaded) {
+        await loadDirectory(current.projectId, current.path);
+      }
+      const refreshed = nodeMapRef.current.get(currentKey);
+      if (!refreshed || !refreshed.children || refreshed.children.length === 0) {
+        break;
+      }
+      const next = findChildOnPath(refreshed, nodeMapRef.current, targetPath);
+      if (!next) {
+        break;
+      }
+      const nextKey = nodeKey(projectId, next.path);
+      expandKey(nextKey);
+      await loadDirectory(projectId, next.path);
+      currentKey = nextKey;
+    }
+  }, [expandKey, loadDirectory]);
+
   const revealActiveFile = useCallback(async (fileId: string, projectList: ProjectSummary[]) => {
     const resolved = await resolveActiveFile(fileId, projectList);
     if (!resolved) {
       return;
     }
 
-    const { projectId, path, dirPaths } = resolved;
+    const { projectId, path } = resolved;
     const project = projectList.find((item) => item.id === projectId);
     if (!project) {
       return;
     }
 
-    const visibleDirPaths = dirPaths?.filter((dirPath) => dirPath !== '/');
-    expandKey(projectKey(projectId));
-    await loadDirectory(projectId, '/');
-    if (visibleDirPaths && visibleDirPaths.length > 0) {
-      for (const dirPath of visibleDirPaths) {
-        const key = nodeKey(projectId, dirPath);
-        const node = nodeMapRef.current.get(key);
-        if (!node || node.node_type !== 'dir') {
-          continue;
-        }
-        expandKey(key);
-        await loadDirectory(projectId, node.path);
-      }
-    }
+    await expandToPath(projectId, path);
 
     setActivePathKey(nodeKey(projectId, path));
-  }, [expandKey, loadDirectory, resolveActiveFile]);
+  }, [expandToPath, resolveActiveFile]);
 
   useEffect(() => {
     if (!activeFileId) {
@@ -456,6 +489,10 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
   }, [expandedKeys, nodeMap, projects]);
 
   useEffect(() => {
+    pendingScrollKeyRef.current = activePathKey;
+  }, [activePathKey]);
+
+  useEffect(() => {
     if (!activePathKey) {
       return;
     }
@@ -485,10 +522,6 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     });
     pendingScrollKeyRef.current = null;
   }, [activePathKey, rows]);
-
-  useEffect(() => {
-    pendingScrollKeyRef.current = activePathKey;
-  }, [activePathKey]);
 
   return (
     <div className="flex h-full flex-col">
