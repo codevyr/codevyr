@@ -42,7 +42,7 @@ type FileExplorerProps = {
 
 type RowItem =
   | { kind: 'project'; project: ProjectSummary }
-  | { kind: 'node'; node: FileNode; depth: number };
+  | { kind: 'node'; node: FileNode; depth: number; label: string; chainStart: FileNode };
 
 const projectKey = (projectId: string) => `project:${projectId}`;
 const nodeKey = (projectId: string, path: string) => `node:${projectId}:${path}`;
@@ -56,6 +56,27 @@ function getBaseName(path: string) {
     return trimmed || '/';
   }
   return segments[segments.length - 1];
+}
+
+function getCompactNode(node: FileNode, nodeMap: Map<string, FileNode>) {
+  if (node.node_type !== 'dir' || !node.children || node.children.length !== 1) {
+    return { node, label: node.name, chainStart: node };
+  }
+
+  let current = node;
+  let label = node.name;
+
+  while (current.node_type === 'dir' && current.children && current.children.length === 1) {
+    const childKey = current.children[0];
+    const child = nodeMap.get(childKey);
+    if (!child || child.node_type !== 'dir') {
+      break;
+    }
+    label = `${label}/${child.name}`;
+    current = child;
+  }
+
+  return { node: current, label, chainStart: node };
 }
 
 function sortTreeNodes(nodes: ProjectTreeNode[]) {
@@ -143,6 +164,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
   const loadPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollKeyRef = useRef<string | null>(null);
+  const compactLoadRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     nodeMapRef.current = nodeMap;
@@ -258,7 +280,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
           const next = new Map(prev);
           const parent = next.get(key);
           if (parent) {
-            next.set(key, { ...parent, isLoading: false, children: [] });
+            next.set(key, { ...parent, isLoading: false, children: [], childrenLoaded: true });
           }
           nodeMapRef.current = next;
           return next;
@@ -282,6 +304,48 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
       return next;
     });
   }, []);
+
+  const expandCompactChain = useCallback(async (node: FileNode) => {
+    let current: FileNode | null = node;
+    while (current && current.node_type === 'dir') {
+      const key = nodeKey(current.projectId, current.path);
+      expandKey(key);
+      await loadDirectory(current.projectId, current.path);
+      const refreshed = nodeMapRef.current.get(key);
+      if (!refreshed || !refreshed.children || refreshed.children.length !== 1) {
+        break;
+      }
+      const childKey = refreshed.children[0];
+      const child = nodeMapRef.current.get(childKey);
+      if (!child || child.node_type !== 'dir') {
+        break;
+      }
+      current = child;
+    }
+  }, [expandKey, loadDirectory]);
+
+  const ensureCompactChainLoaded = useCallback(async (node: FileNode) => {
+    let current: FileNode | null = node;
+    while (current && current.node_type === 'dir') {
+      const key = nodeKey(current.projectId, current.path);
+      if (compactLoadRef.current.has(key)) {
+        return;
+      }
+      compactLoadRef.current.add(key);
+      await loadDirectory(current.projectId, current.path);
+      compactLoadRef.current.delete(key);
+      const refreshed = nodeMapRef.current.get(key);
+      if (!refreshed || !refreshed.children || refreshed.children.length !== 1) {
+        break;
+      }
+      const childKey = refreshed.children[0];
+      const child = nodeMapRef.current.get(childKey);
+      if (!child || child.node_type !== 'dir') {
+        break;
+      }
+      current = child;
+    }
+  }, [loadDirectory]);
 
   const collapseKey = useCallback((key: string) => {
     setExpandedKeys((prev) => {
@@ -310,24 +374,25 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     }
   }, [expandedKeys, loadDirectory]);
 
-  const toggleDirectory = useCallback((node: FileNode) => {
-    if (!node.has_children) {
+  const toggleDirectory = useCallback((node: FileNode, chainStart?: FileNode) => {
+    if (node.node_type !== 'dir') {
       return;
     }
     const key = nodeKey(node.projectId, node.path);
+    const isExpanded = expandedKeys.has(key);
     setExpandedKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) {
+      if (isExpanded) {
         next.delete(key);
         return next;
       }
       next.add(key);
       return next;
     });
-    if (node.children === null && node.has_children) {
-      loadDirectory(node.projectId, node.path);
+    if (!isExpanded) {
+      expandCompactChain(chainStart ?? node);
     }
-  }, [loadDirectory]);
+  }, [expandCompactChain, expandedKeys]);
 
   const handleFileClick = useCallback((node: FileNode) => {
     if (!node.file_id) {
@@ -420,12 +485,19 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
   const rows = useMemo(() => {
     const items: RowItem[] = [];
     const appendNode = (node: FileNode, depth: number) => {
-      items.push({ kind: 'node', node, depth });
-      const key = nodeKey(node.projectId, node.path);
-      if (!expandedKeys.has(key) || !node.children || node.children.length === 0) {
+      const compacted = getCompactNode(node, nodeMap);
+      items.push({
+        kind: 'node',
+        node: compacted.node,
+        depth,
+        label: compacted.label,
+        chainStart: compacted.chainStart,
+      });
+      const key = nodeKey(compacted.node.projectId, compacted.node.path);
+      if (!expandedKeys.has(key) || !compacted.node.children || compacted.node.children.length === 0) {
         return;
       }
-      node.children
+      compacted.node.children
         .map((childKey) => nodeMap.get(childKey))
         .filter((child): child is FileNode => Boolean(child))
         .forEach((child) => {
@@ -457,6 +529,22 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     });
     return items;
   }, [expandedKeys, nodeMap, projects]);
+
+  useEffect(() => {
+    rows.forEach((item) => {
+      if (item.kind !== 'node') {
+        return;
+      }
+      const start = item.chainStart;
+      if (start.node_type !== 'dir') {
+        return;
+      }
+      if (start.childrenLoaded && (!start.children || start.children.length !== 1)) {
+        return;
+      }
+      ensureCompactChainLoaded(start);
+    });
+  }, [ensureCompactChainLoaded, rows]);
 
   useEffect(() => {
     if (!activePathKey) {
@@ -520,11 +608,11 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
             );
           }
 
-          const { node, depth } = item;
+          const { node, depth, label, chainStart } = item;
           const nodeIsExpanded = expandedKeys.has(nodeKey(node.projectId, node.path));
           const isDir = node.node_type === 'dir';
           const isActive = activePathKey === nodeKey(node.projectId, node.path);
-          const canExpand = isDir && node.has_children;
+          const canExpand = isDir && (node.has_children || node.childrenLoaded === false);
           const paddingLeft = Math.max(0, depth * 12);
 
           return (
@@ -539,7 +627,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
               style={{ paddingLeft }}
               onClick={() => {
                 if (isDir) {
-                  toggleDirectory(node);
+                  toggleDirectory(node, chainStart);
                 } else {
                   handleFileClick(node);
                 }
@@ -563,7 +651,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
               ) : (
                 <LuFile className={iconClassName} />
               )}
-              <span className="truncate">{node.name}</span>
+              <span className="truncate">{label}</span>
               {node.isLoading ? (
                 <span className="ml-auto text-xs text-gray-400">Loading...</span>
               ) : null}
