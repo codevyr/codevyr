@@ -43,6 +43,13 @@ type FileExplorerProps = {
   onOpenFile: (fileId: string, path: string, projectId: string, fileType?: string | null) => void;
 };
 
+type ContextMenuState = {
+  x: number;
+  y: number;
+  name: string;
+  path: string;
+} | null;
+
 type RowItem =
   | { kind: 'project'; project: ProjectSummary }
   | { kind: 'node'; node: FileNode; depth: number };
@@ -129,12 +136,30 @@ async function readJsonResponse<T>(response: Response, context: string): Promise
   }
 }
 
+async function copyToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.style.position = 'fixed';
+  textarea.style.top = '-9999px';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
 export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [nodeMap, setNodeMap] = useState<Map<string, FileNode>>(() => new Map());
   const nodeMapRef = useRef(nodeMap);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const [activePathKey, setActivePathKey] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const fileIdLookupRef = useRef<Map<string, FileLocation>>(new Map());
   const loadPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -523,6 +548,55 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     pendingScrollKeyRef.current = null;
   }, [activePathKey, rows]);
 
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+    const handlePointer = () => {
+      setContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setContextMenu(null);
+      }
+    };
+    window.addEventListener('click', handlePointer);
+    window.addEventListener('contextmenu', handlePointer);
+    window.addEventListener('scroll', handlePointer, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', handlePointer);
+      window.removeEventListener('contextmenu', handlePointer);
+      window.removeEventListener('scroll', handlePointer, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!activePathKey) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      const wantsCopyPath =
+        (event.altKey && event.shiftKey && key === 'c') ||
+        ((event.metaKey || event.ctrlKey) && event.altKey && key === 'c');
+      if (!wantsCopyPath) {
+        return;
+      }
+      const node = nodeMapRef.current.get(activePathKey);
+      if (!node) {
+        return;
+      }
+      event.preventDefault();
+      copyToClipboard(node.path);
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
+  }, [activePathKey]);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -567,6 +641,16 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
                 isActive ? 'bg-blue-100 text-blue-900' : 'text-gray-700 hover:bg-gray-100',
               ].join(' ')}
               style={{ paddingLeft }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setContextMenu({
+                  x: event.clientX,
+                  y: event.clientY,
+                  name: node.name,
+                  path: node.path,
+                });
+              }}
               onClick={() => {
                 if (isDir) {
                   toggleDirectory(node);
@@ -600,6 +684,36 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
             </button>
           );
         })}
+        {contextMenu ? (
+          <div
+            className="fixed z-50 min-w-[160px] rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center px-3 py-1.5 text-left text-gray-700 hover:bg-gray-100"
+              onClick={async () => {
+                await copyToClipboard(contextMenu.name);
+                setContextMenu(null);
+              }}
+            >
+              Copy Name
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-gray-700 hover:bg-gray-100"
+              onClick={async () => {
+                await copyToClipboard(contextMenu.path);
+                setContextMenu(null);
+              }}
+            >
+              <span>Copy Path</span>
+              <span className="text-xs text-gray-400">Alt+Shift+C</span>
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
