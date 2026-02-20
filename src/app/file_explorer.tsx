@@ -449,6 +449,8 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
               <button
                 key={projectKey(project.id)}
                 type="button"
+                data-testid="explorer-project"
+                data-project-id={project.id}
                 className="flex w-full items-center gap-2 px-2 py-1 text-left font-semibold text-gray-700 hover:bg-gray-100"
                 onClick={() => toggleProject(project.id)}
               >
@@ -477,7 +479,13 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
             <button
               key={nodeKey(node.projectId, node.path)}
               type="button"
+              data-testid="explorer-node"
               data-node-key={nodeKey(node.projectId, node.path)}
+              data-path={displayPath}
+              data-node-path={node.path}
+              data-type={isDir ? 'dir' : 'file'}
+              data-active={isActive ? 'true' : 'false'}
+              data-project-id={node.projectId}
               className={[
                 'flex w-full items-center gap-2 px-2 py-1 text-left',
                 isActive ? 'bg-blue-100 text-blue-900' : 'text-gray-700 hover:bg-gray-100',
@@ -535,6 +543,7 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
           >
             <button
               type="button"
+              data-testid="explorer-copy-name"
               className="flex w-full items-center px-3 py-1.5 text-left text-gray-700 hover:bg-gray-100"
               onClick={async () => {
                 await copyToClipboard(contextMenu.name);
@@ -545,6 +554,7 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
             </button>
             <button
               type="button"
+              data-testid="explorer-copy-path"
               className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-gray-700 hover:bg-gray-100"
               onClick={async () => {
                 await copyToClipboard(contextMenu.path);

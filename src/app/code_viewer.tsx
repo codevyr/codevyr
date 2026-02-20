@@ -13,6 +13,7 @@ export interface CodeFocus {
 }
 
 export interface EditorParams {
+    fileId?: string;
     path: string;
     language: string;
     value: string;
@@ -136,5 +137,9 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         };
     }, [clearRetryTimeout]);
 
-    return <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} />;
+    return (
+        <div className="h-full w-full" data-testid="code-viewer" data-file-id={editorParams.fileId ?? ''}>
+            <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} />
+        </div>
+    );
 }

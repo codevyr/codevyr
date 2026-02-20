@@ -129,6 +129,7 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
           fileId: existing.fileId,
           title: tabTitle,
           editorParams: {
+            fileId,
             ...existing.editorParams,
             path: resolvedPath,
             language,
@@ -152,6 +153,7 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
       .then((response) => response.text())
       .then((data) => {
         const editorParams: EditorParams = {
+          fileId,
           path: String(resolvedPath),
           language,
           value: data,
