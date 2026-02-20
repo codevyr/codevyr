@@ -58,20 +58,6 @@ export function makeServer({ environment = 'test' }) {
                 };
             });
 
-            this.get("/v1/index/projects/:id/resolve", (_schema, request) => {
-                const pathParam = request.queryParams.path;
-                const path = Array.isArray(pathParam) ? pathParam[0] : pathParam;
-                const fileIdParam = request.queryParams.file_id;
-                const fileId = Array.isArray(fileIdParam) ? fileIdParam[0] : fileIdParam;
-                const resolvedPath = path ?? (fileId ? `/demo/src/${fileId}.c` : '/demo');
-                const segments = resolvedPath.split('/').filter(Boolean);
-                const ancestors = segments.map((segment, index) => ({
-                    name: segment,
-                    path: `/${segments.slice(0, index + 1).join('/')}`,
-                }));
-                return ancestors;
-            });
-
             this.get("/v1/index/projects/:id/source", () => {
                 return code;
             });

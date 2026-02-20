@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import {
   fetchProjectTree,
   fetchProjects,
-  resolveProjectPath,
-  type ProjectResolveNode,
   type ProjectSummary,
   type ProjectTreeNode,
   type ProjectTreeResponse,
@@ -39,7 +37,6 @@ export type FileTreeCache = {
   nodeMap: Map<string, FileNode>;
   loadDirectory: (projectId: string, path: string) => Promise<void>;
   ensurePath: (projectId: string, targetPath: string) => Promise<void>;
-  resolveFileLocation: (fileId: string) => Promise<FileLocation | null>;
   getFileLocation: (fileId: string) => FileLocation | null;
   registerFileLocation: (fileId: string, projectId: string, path: string) => void;
 };
@@ -344,41 +341,12 @@ export function useFileTreeCache(): FileTreeCache {
     hydrateCachedNodes(projectId, normalizedTarget);
   }, [fetchAndApplyTree, hydrateCachedNodes]);
 
-  const resolveFileLocation = useCallback(async (fileId: string) => {
-    const cached = fileIdLookupRef.current.get(fileId);
-    if (cached) {
-      return cached;
-    }
-
-    for (const project of projects) {
-      try {
-        const response = await resolveProjectPath(project.id, { fileId });
-        if (!response.ok) {
-          continue;
-        }
-        const ancestors = await readJsonResponse<ProjectResolveNode[]>(response, 'Resolve request');
-        const leaf = ancestors[ancestors.length - 1];
-        if (!leaf) {
-          continue;
-        }
-        const location = { projectId: project.id, path: normalizePath(leaf.path) };
-        fileIdLookupRef.current.set(fileId, location);
-        return location;
-      } catch (error) {
-        console.error('Failed to resolve file path', error);
-      }
-    }
-
-    return null;
-  }, [projects]);
-
   return useMemo(() => ({
     projects,
     nodeMap,
     loadDirectory,
     ensurePath,
-    resolveFileLocation,
     getFileLocation,
     registerFileLocation,
-  }), [projects, nodeMap, loadDirectory, ensurePath, resolveFileLocation, getFileLocation, registerFileLocation]);
+  }), [projects, nodeMap, loadDirectory, ensurePath, getFileLocation, registerFileLocation]);
 }

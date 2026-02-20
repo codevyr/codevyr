@@ -193,23 +193,6 @@ async function interceptIndexEndpoints(page: Page) {
     });
   });
 
-  await page.route(`**/v1/index/projects/${PROJECT_ID}/resolve**`, async (route) => {
-    const url = new URL(route.request().url());
-    const pathParam = url.searchParams.get('path');
-    const fileId = url.searchParams.get('file_id');
-    const resolvedPath = pathParam ?? (fileId ? fileIdToPath[fileId] : undefined) ?? '/';
-    const segments = resolvedPath.split('/').filter(Boolean);
-    const ancestors = segments.map((segment, index) => ({
-      name: segment,
-      path: `/${segments.slice(0, index + 1).join('/')}`,
-    }));
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(ancestors),
-    });
-  });
-
   await page.route('**/source/**', async (route) => {
     const url = new URL(route.request().url());
     const fileId = url.pathname.split('/').pop() ?? '';

@@ -29,30 +29,15 @@ export type RevealFileResult = {
 
 export async function revealFile(options: RevealFileOptions, deps: RevealFileDeps): Promise<RevealFileResult> {
   const { fileId } = options;
-  let resolvedPath = options.path ?? null;
-  let resolvedProjectId = options.projectId ?? null;
-  const needsResolve =
-    !resolvedProjectId ||
-    typeof resolvedPath !== 'string' ||
-    !resolvedPath ||
-    !resolvedPath.startsWith('/');
-
-  if (needsResolve) {
-    const resolved = await deps.cache.resolveFileLocation(fileId);
-    if (resolved) {
-      if (!resolvedProjectId) {
-        resolvedProjectId = resolved.projectId;
-      }
-      if (typeof resolvedPath !== 'string' || !resolvedPath || !resolvedPath.startsWith('/')) {
-        resolvedPath = resolved.path;
-      }
-    }
-  }
+  const resolvedPath = typeof options.path === 'string' ? options.path : null;
+  const resolvedProjectId = options.projectId ?? null;
 
   let ensurePromise: Promise<void> | null = null;
-  if (resolvedProjectId && resolvedPath) {
+  if (resolvedProjectId && resolvedPath && resolvedPath.startsWith('/')) {
     deps.cache.registerFileLocation(fileId, resolvedProjectId, resolvedPath);
     ensurePromise = deps.cache.ensurePath(resolvedProjectId, resolvedPath);
+  } else {
+    console.warn('Missing projectId/path for revealFile', { fileId, projectId: resolvedProjectId, path: resolvedPath });
   }
 
   deps.openFileById({

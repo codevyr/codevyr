@@ -30,10 +30,6 @@ export interface ProjectTreeResponse {
   expanded?: Record<string, ProjectTreeNode[]>;
 }
 
-export interface ProjectResolveNode {
-  name?: string;
-  path: string;
-}
 
 export function fetchQuery(query: string): Promise<Response> {
   console.log(`${askldUrl}`, query);
@@ -68,19 +64,6 @@ export function fetchProjectTree(projectId: string, path: string, expandPaths?: 
     });
   }
   return fetch(`${askldUrl}/v1/index/projects/${projectId}/tree?${params.toString()}`, {
-    method: 'GET',
-  });
-}
-
-export function resolveProjectPath(projectId: string, options: { fileId?: string; path?: string }): Promise<Response> {
-  const params = new URLSearchParams();
-  if (options.fileId) {
-    params.set('file_id', options.fileId);
-  }
-  if (options.path) {
-    params.set('path', options.path);
-  }
-  return fetch(`${askldUrl}/v1/index/projects/${projectId}/resolve?${params.toString()}`, {
     method: 'GET',
   });
 }
