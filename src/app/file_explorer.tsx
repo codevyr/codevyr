@@ -14,7 +14,7 @@ import {
 type FileExplorerProps = {
   cache: FileTreeCache;
   activeFileId: string | null;
-  revealRequest?: { fileId: string; nonce: number } | null;
+  revealRequest?: { fileId: string; projectId: string; path: string; nonce: number } | null;
   onOpenFile: (fileId: string, path: string, projectId: string, fileType?: string | null) => void;
 };
 
@@ -148,7 +148,7 @@ async function copyToClipboard(value: string) {
 }
 
 export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }: FileExplorerProps) {
-  const { projects, nodeMap, loadDirectory, ensurePath, resolveFileLocation } = cache;
+  const { projects, nodeMap, loadDirectory, getFileLocation } = cache;
   const nodeMapRef = useRef(nodeMap);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const [activePathKey, setActivePathKey] = useState<string | null>(null);
@@ -254,16 +254,13 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
     }
   }, [expandKey]);
 
-  const revealActiveFile = useCallback(async (fileId: string) => {
-    const resolved = await resolveFileLocation(fileId);
+  const revealActiveFile = useCallback((fileId: string) => {
+    const resolved = getFileLocation(fileId);
     if (!resolved) {
       return;
     }
-
-    const { projectId, path } = resolved;
-    await ensurePath(projectId, path);
-    setPendingReveal({ projectId, path });
-  }, [ensurePath, resolveFileLocation]);
+    setPendingReveal({ projectId: resolved.projectId, path: normalizePath(resolved.path) });
+  }, [getFileLocation]);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -272,7 +269,10 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
     if (revealRequest && revealRequest.nonce > lastRevealNonceRef.current) {
       lastRevealNonceRef.current = revealRequest.nonce;
       lastActiveFileIdRef.current = revealRequest.fileId;
-      revealActiveFile(revealRequest.fileId);
+      setPendingReveal({
+        projectId: revealRequest.projectId,
+        path: normalizePath(revealRequest.path),
+      });
       return;
     }
     if (!activeFileId) {
@@ -528,9 +528,6 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
                 <LuFile className={iconClassName} />
               )}
               <span className="truncate">{displayLabel}</span>
-              {node.isLoading ? (
-                <span className="ml-auto text-xs text-gray-400">Loading...</span>
-              ) : null}
             </button>
           );
         })}

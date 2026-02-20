@@ -20,7 +20,6 @@ export type FileNode = {
   compact_path?: string | null;
   children: string[] | null;
   childrenLoaded?: boolean;
-  isLoading?: boolean;
 };
 
 type FileLocation = {
@@ -40,6 +39,7 @@ export type FileTreeCache = {
   loadDirectory: (projectId: string, path: string) => Promise<void>;
   ensurePath: (projectId: string, targetPath: string) => Promise<void>;
   resolveFileLocation: (fileId: string) => Promise<FileLocation | null>;
+  getFileLocation: (fileId: string) => FileLocation | null;
   registerFileLocation: (fileId: string, projectId: string, path: string) => void;
 };
 
@@ -130,7 +130,6 @@ function applyTreeChildren(
         compact_path: node.compact_path ?? existing.compact_path ?? null,
         children: keepChildren,
         childrenLoaded: existing.childrenLoaded || node.childrenLoaded,
-        isLoading: existing.isLoading && !node.childrenLoaded ? existing.isLoading : node.isLoading,
       };
       next.set(childKey, merged);
     } else {
@@ -164,7 +163,6 @@ export function useFileTreeCache(): FileTreeCache {
   const [nodeMap, setNodeMap] = useState<Map<string, FileNode>>(() => new Map());
   const nodeMapRef = useRef(nodeMap);
   const fileIdLookupRef = useRef<Map<string, FileLocation>>(new Map());
-  const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
   const loadedChildrenRef = useRef<Map<string, string[]>>(new Map());
 
   useEffect(() => {
@@ -212,16 +210,13 @@ export function useFileTreeCache(): FileTreeCache {
   const registerFileLocation = useCallback((fileId: string, projectId: string, path: string) => {
     fileIdLookupRef.current.set(fileId, { projectId, path: normalizePath(path) });
   }, []);
+  const getFileLocation = useCallback((fileId: string) => {
+    return fileIdLookupRef.current.get(fileId) ?? null;
+  }, []);
 
   const fetchAndApplyTree = useCallback(async (projectId: string, basePath: string, expandPaths: string[]) => {
     const normalizedBase = normalizePath(basePath);
-    const loadKey = `${projectId}:${normalizedBase}`;
-    const inFlight = inFlightRef.current.get(loadKey);
-    if (inFlight) {
-      return inFlight;
-    }
-
-    const promise = fetchProjectTree(projectId, normalizedBase, expandPaths)
+    return fetchProjectTree(projectId, normalizedBase, expandPaths)
       .then((response) => readJsonResponse<ProjectTreeResponse>(response, 'Tree request'))
       .then((data) => {
         const normalized = normalizeTreeResponse(data, normalizedBase);
@@ -241,7 +236,6 @@ export function useFileTreeCache(): FileTreeCache {
             next.set(parentKey, {
               ...parent,
               children: childrenKeys,
-              isLoading: false,
               childrenLoaded: true,
             });
           } else {
@@ -254,7 +248,6 @@ export function useFileTreeCache(): FileTreeCache {
               compact_path: null,
               children: childrenKeys,
               childrenLoaded: true,
-              isLoading: false,
             });
           }
           Object.entries(normalized.expanded).forEach(([expandedPath, nodes]) => {
@@ -285,7 +278,6 @@ export function useFileTreeCache(): FileTreeCache {
               ...expandedNode,
               children: expandedChildren,
               has_children: nodes.length > 0 ? true : expandedNode.has_children,
-              isLoading: false,
               childrenLoaded: true,
             });
           });
@@ -295,13 +287,7 @@ export function useFileTreeCache(): FileTreeCache {
       })
       .catch((error) => {
         console.error('Failed to load directory', error);
-      })
-      .finally(() => {
-        inFlightRef.current.delete(loadKey);
       });
-
-    inFlightRef.current.set(loadKey, promise);
-    return promise;
   }, []);
 
   const hydrateCachedNodes = useCallback((projectId: string, targetPath: string) => {
@@ -326,7 +312,6 @@ export function useFileTreeCache(): FileTreeCache {
           ...node,
           children: cachedChildren,
           childrenLoaded: true,
-          isLoading: false,
         });
         changed = true;
       });
@@ -355,7 +340,6 @@ export function useFileTreeCache(): FileTreeCache {
                 ...target,
                 children: cachedChildren,
                 childrenLoaded: true,
-                isLoading: false,
               });
             }
             nodeMapRef.current = next;
@@ -425,6 +409,7 @@ export function useFileTreeCache(): FileTreeCache {
     loadDirectory,
     ensurePath,
     resolveFileLocation,
+    getFileLocation,
     registerFileLocation,
-  }), [projects, nodeMap, loadDirectory, ensurePath, resolveFileLocation, registerFileLocation]);
+  }), [projects, nodeMap, loadDirectory, ensurePath, resolveFileLocation, getFileLocation, registerFileLocation]);
 }

@@ -172,7 +172,12 @@ export default function Home() {
   const editorHandleRef = useRef<EditorHandle | null>(null);
   const [shareStatus, setShareStatus] = useState<ShareStatus>('idle');
   const shareResetTimeoutRef = useRef<number | null>(null);
-  const [explorerReveal, setExplorerReveal] = useState<{ fileId: string; nonce: number } | null>(null);
+  const [explorerReveal, setExplorerReveal] = useState<{
+    fileId: string;
+    projectId: string;
+    path: string;
+    nonce: number;
+  } | null>(null);
 
   const fileTreeCache = useFileTreeCache();
   const {
@@ -294,18 +299,37 @@ export default function Home() {
   const handleSelectFile = useCallback((focus: CodeFocus) => {
     const { file_id: fileId, start_offset: startOffset, end_offset: endOffset } = focus;
     const filePath = queryGraph.files.get(fileId) ?? null;
-    setExplorerReveal({ fileId, nonce: Date.now() });
     void revealFile(
       { fileId, path: filePath, startOffset, endOffset: endOffset ?? null },
       { cache: fileTreeCache, openFileById },
-    );
+    ).then((resolved) => {
+      if (!resolved.projectId || !resolved.path) {
+        return;
+      }
+      setExplorerReveal({
+        fileId: resolved.fileId,
+        projectId: resolved.projectId,
+        path: resolved.path,
+        nonce: Date.now(),
+      });
+    });
   }, [fileTreeCache, openFileById, queryGraph]);
 
   const handleOpenFileFromExplorer = useCallback((fileId: string, filePath: string, projectId: string, fileType?: string | null) => {
     void revealFile(
       { fileId, path: filePath, projectId, fileType: fileType ?? null, startOffset: 0, endOffset: null },
       { cache: fileTreeCache, openFileById },
-    );
+    ).then((resolved) => {
+      if (!resolved.projectId || !resolved.path) {
+        return;
+      }
+      setExplorerReveal({
+        fileId: resolved.fileId,
+        projectId: resolved.projectId,
+        path: resolved.path,
+        nonce: Date.now(),
+      });
+    });
   }, [fileTreeCache, openFileById]);
 
   const factory = useCallback((node: TabNode) => {

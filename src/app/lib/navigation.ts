@@ -21,7 +21,13 @@ type RevealFileDeps = {
   }) => void;
 };
 
-export async function revealFile(options: RevealFileOptions, deps: RevealFileDeps): Promise<void> {
+export type RevealFileResult = {
+  fileId: string;
+  projectId: string | null;
+  path: string | null;
+};
+
+export async function revealFile(options: RevealFileOptions, deps: RevealFileDeps): Promise<RevealFileResult> {
   const { fileId } = options;
   let resolvedPath = options.path ?? null;
   let resolvedProjectId = options.projectId ?? null;
@@ -54,4 +60,9 @@ export async function revealFile(options: RevealFileOptions, deps: RevealFileDep
   });
 
   await ensurePromise;
+  return {
+    fileId,
+    projectId: resolvedProjectId ?? null,
+    path: resolvedPath ?? null,
+  };
 }
