@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout, Model, TabNode, type IJsonModel, Actions } from 'flexlayout-react';
 import 'flexlayout-react/style/light.css';
 import { EditorComponent, EditorHandle } from './editor';
-import { Graph, Node, Edge } from './graph';
+import { Graph, GraphFile, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus } from './code_viewer';
 import { GraphViewer } from './graph_viewer';
 import { DEFAULT_QUERY } from './default-queries';
@@ -16,6 +16,7 @@ import { FileExplorer } from './file_explorer';
 import { useFileTreeCache } from './lib/file_tree_cache';
 import { revealFile } from './lib/navigation';
 import { useCodeTabs } from './lib/use_code_tabs';
+import { copyToClipboard } from './lib/clipboard';
 
 
 const CODE_TABSET_ID = "code-tabset";
@@ -143,7 +144,7 @@ function GraphCode({ graph, fileContents }: GraphCodeProps) {
 
   function get_loc(edge: Edge): string {
     const fileId = resolveEdgeFileId(edge);
-    const filePath = fileId ? graph.files.get(fileId) ?? fileId : 'Unknown';
+    const filePath = fileId ? graph.files.get(fileId)?.path ?? fileId : 'Unknown';
     const location = formatOffsetLocation(fileId ? fileContents.get(fileId) : undefined, edge.from_offset_start);
     return `${filePath}:${location}`;
   }
@@ -167,7 +168,11 @@ function GraphCode({ graph, fileContents }: GraphCodeProps) {
 export default function Home() {
   const [model] = useState(() => Model.fromJson(initialLayout));
   const [query, setQuery] = useState(DEFAULT_QUERY);
-  const [queryGraph, setQueryGraph] = useState<Graph>({ nodes: new Map(), edges: new Map(), files: new Map() });
+  const [queryGraph, setQueryGraph] = useState<Graph>({
+    nodes: new Map<string, Node>(),
+    edges: new Map<string, Array<Edge>>(),
+    files: new Map<string, GraphFile>(),
+  });
   const [problems, setProblems] = useState<Problem[]>([]);
   const editorHandleRef = useRef<EditorHandle | null>(null);
   const [shareStatus, setShareStatus] = useState<ShareStatus>('idle');
@@ -246,36 +251,6 @@ export default function Home() {
     editorHandleRef.current?.revealRange(problem.range);
   }, []);
 
-  const copyToClipboard = useCallback(async (text: string) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } catch (error) {
-        console.warn('Clipboard write failed, falling back', error);
-      }
-    }
-
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.setAttribute('readonly', '');
-      textarea.style.position = 'fixed';
-      textarea.style.top = '0';
-      textarea.style.left = '0';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      const success = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      return success;
-    } catch (error) {
-      console.warn('Clipboard fallback failed', error);
-      return false;
-    }
-  }, []);
-
   const handleShare = useCallback(async () => {
     const currentQuery = editorHandleRef.current?.getQuery() ?? query;
     const shareUrl = buildShareUrl(currentQuery);
@@ -290,7 +265,7 @@ export default function Home() {
     shareResetTimeoutRef.current = window.setTimeout(() => {
       setShareStatus('idle');
     }, 2000);
-  }, [copyToClipboard, query]);
+  }, [query]);
 
   const handleRunQuery = useCallback(() => {
     editorHandleRef.current?.runQuery();
@@ -298,9 +273,11 @@ export default function Home() {
 
   const handleSelectFile = useCallback((focus: CodeFocus) => {
     const { file_id: fileId, start_offset: startOffset, end_offset: endOffset } = focus;
-    const filePath = queryGraph.files.get(fileId) ?? null;
+    const fileInfo = queryGraph.files.get(fileId);
+    const filePath = fileInfo?.path ?? null;
+    const projectId = fileInfo?.project_id ?? null;
     void revealFile(
-      { fileId, path: filePath, startOffset, endOffset: endOffset ?? null },
+      { fileId, path: filePath, projectId, startOffset, endOffset: endOffset ?? null },
       { cache: fileTreeCache, openFileById },
     ).then((resolved) => {
       if (!resolved.projectId || !resolved.path) {

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditor, IRange } from 'monaco-editor';
-import { Node, Edge, Graph } from './graph';
+import { Node, Edge, Graph, GraphFile } from './graph';
 import { setupEditorTestApis } from './testing/editor_test_utils';
 
 import { fetchQuery } from './askld';
@@ -24,10 +24,12 @@ interface EditorProps {
     onProblemsChange?: (problems: Problem[]) => void;
 }
 
+type RustGraphFileEntry = [string, string] | [string, string, string];
+
 interface RustGraph {
     nodes: Map<string, Node>;
     edges: Set<Edge>;
-    files: Array<[string, string]>;
+    files: Array<RustGraphFileEntry>;
     warnings?: QueryDiagnostic[];
 }
 
@@ -270,9 +272,10 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 nodes.set(node.id, node)
             })
 
-            let files = new Map<string, string>()
-            data.files.forEach(([file_id, file_path]) => {
-                files.set(file_id, file_path)
+            let files = new Map<string, GraphFile>()
+            data.files.forEach((entry) => {
+                const [file_id, file_path, project_id] = entry;
+                files.set(file_id, { path: file_path, project_id: project_id ?? null })
             });
 
             const edgeMap: Map<string, Array<Edge>> = new Map();

@@ -31,7 +31,11 @@ export async function revealFile(options: RevealFileOptions, deps: RevealFileDep
   const { fileId } = options;
   let resolvedPath = options.path ?? null;
   let resolvedProjectId = options.projectId ?? null;
-  const needsResolve = !resolvedProjectId || !resolvedPath || !resolvedPath.startsWith('/');
+  const needsResolve =
+    !resolvedProjectId ||
+    typeof resolvedPath !== 'string' ||
+    !resolvedPath ||
+    !resolvedPath.startsWith('/');
 
   if (needsResolve) {
     const resolved = await deps.cache.resolveFileLocation(fileId);
@@ -39,7 +43,7 @@ export async function revealFile(options: RevealFileOptions, deps: RevealFileDep
       if (!resolvedProjectId) {
         resolvedProjectId = resolved.projectId;
       }
-      if (!resolvedPath || !resolvedPath.startsWith('/')) {
+      if (typeof resolvedPath !== 'string' || !resolvedPath || !resolvedPath.startsWith('/')) {
         resolvedPath = resolved.path;
       }
     }

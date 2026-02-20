@@ -8,6 +8,7 @@ import {
   type ProjectTreeNode,
   type ProjectTreeResponse,
 } from '../askld';
+import { ROOT_PATH, buildAncestorPaths, getBaseName, normalizePath } from './paths';
 
 export type FileNode = {
   projectId: string;
@@ -43,39 +44,7 @@ export type FileTreeCache = {
   registerFileLocation: (fileId: string, projectId: string, path: string) => void;
 };
 
-const ROOT_PATH = '/';
-
 const nodeKey = (projectId: string, path: string) => `node:${projectId}:${path}`;
-
-function normalizePath(path: string) {
-  const normalized = path.replace(/\\/g, '/');
-  if (normalized === ROOT_PATH) {
-    return ROOT_PATH;
-  }
-  return normalized.replace(/\/+$/, '');
-}
-
-function getBaseName(path: string) {
-  const trimmed = path.replace(/\\/g, '/');
-  const segments = trimmed.split('/').filter(Boolean);
-  if (segments.length === 0) {
-    return trimmed || ROOT_PATH;
-  }
-  return segments[segments.length - 1];
-}
-
-function buildAncestorPaths(path: string, includeSelf: boolean) {
-  const normalized = normalizePath(path);
-  const segments = normalized.split('/').filter(Boolean);
-  const dirPaths: string[] = [];
-  let current = '';
-  const limit = includeSelf ? segments.length : Math.max(segments.length - 1, 0);
-  for (let index = 0; index < limit; index += 1) {
-    current += `/${segments[index]}`;
-    dirPaths.push(current);
-  }
-  return dirPaths;
-}
 
 function normalizeTreeResponse(
   data: ProjectTreeResponse,

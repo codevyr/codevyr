@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FileNode, FileTreeCache } from './lib/file_tree_cache';
 import type { ProjectSummary } from './askld';
+import { ROOT_PATH, getBaseName, isPathPrefix, normalizePath } from './lib/paths';
+import { copyToClipboard } from './lib/clipboard';
 import {
   LuChevronDown,
   LuChevronRight,
@@ -32,26 +34,7 @@ type RowItem =
 const projectKey = (projectId: string) => `project:${projectId}`;
 const nodeKey = (projectId: string, path: string) => `node:${projectId}:${path}`;
 
-const ROOT_PATH = '/';
-
 const iconClassName = 'h-4 w-4';
-
-function normalizePath(path: string) {
-  const normalized = path.replace(/\\/g, '/');
-  if (normalized === ROOT_PATH) {
-    return ROOT_PATH;
-  }
-  return normalized.replace(/\/+$/, '');
-}
-
-function getBaseName(path: string) {
-  const trimmed = path.replace(/\\/g, '/');
-  const segments = trimmed.split('/').filter(Boolean);
-  if (segments.length === 0) {
-    return trimmed || ROOT_PATH;
-  }
-  return segments[segments.length - 1];
-}
 
 function getDisplayPath(node: FileNode) {
   return normalizePath(node.compact_path ?? node.path);
@@ -67,15 +50,6 @@ function buildDisplayLabel(parentPath: string, displayPath: string) {
     return normalizedBase.slice(normalizedParent.length + 1) || getBaseName(normalizedBase);
   }
   return getBaseName(normalizedBase);
-}
-
-function isPathPrefix(prefix: string, target: string) {
-  const normalizedPrefix = prefix.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
-  const normalizedTarget = target.replace(/\\/g, '/');
-  if (normalizedPrefix === '/') {
-    return normalizedTarget.startsWith('/');
-  }
-  return normalizedTarget === normalizedPrefix || normalizedTarget.startsWith(`${normalizedPrefix}/`);
 }
 
 function getDisplayNode(node: FileNode, nodeMap: Map<string, FileNode>) {
@@ -128,23 +102,6 @@ function findChildOnPath(parent: FileNode, nodeMap: Map<string, FileNode>, targe
     }
   });
   return best;
-}
-
-async function copyToClipboard(value: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.style.position = 'fixed';
-  textarea.style.top = '-9999px';
-  textarea.style.left = '-9999px';
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
 }
 
 export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }: FileExplorerProps) {
@@ -427,7 +384,7 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
         return;
       }
       event.preventDefault();
-      copyToClipboard(getDisplayPath(node));
+      void copyToClipboard(getDisplayPath(node));
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
