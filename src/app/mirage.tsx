@@ -42,13 +42,27 @@ export function makeServer({ environment = 'test' }) {
             });
 
             this.get("/v1/index/projects/:id/tree", (_schema, request) => {
-                const path = request.queryParams.path ?? '/demo';
-                return demoTree[path] ?? [];
+                const pathParam = request.queryParams.path;
+                const path = Array.isArray(pathParam) ? pathParam[0] : pathParam ?? '/demo';
+                const expandParam = (request.queryParams['expand[]'] ??
+                    request.queryParams.expand) as string | string[] | undefined;
+                const expandPaths = Array.isArray(expandParam) ? expandParam : expandParam ? [expandParam] : [];
+                const expanded: Record<string, typeof demoTree['/demo']> = {};
+                expandPaths.forEach((expandPath) => {
+                    expanded[expandPath] = demoTree[expandPath] ?? [];
+                });
+                return {
+                    base_path: path,
+                    nodes: demoTree[path] ?? [],
+                    expanded,
+                };
             });
 
             this.get("/v1/index/projects/:id/resolve", (_schema, request) => {
-                const path = request.queryParams.path;
-                const fileId = request.queryParams.file_id;
+                const pathParam = request.queryParams.path;
+                const path = Array.isArray(pathParam) ? pathParam[0] : pathParam;
+                const fileIdParam = request.queryParams.file_id;
+                const fileId = Array.isArray(fileIdParam) ? fileIdParam[0] : fileIdParam;
                 const resolvedPath = path ?? (fileId ? `/demo/src/${fileId}.c` : '/demo');
                 const segments = resolvedPath.split('/').filter(Boolean);
                 const ancestors = segments.map((segment, index) => ({

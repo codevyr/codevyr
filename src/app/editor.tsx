@@ -252,7 +252,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
     const monacoRef = useRef<Monaco | null>(null);
     const editorInstanceRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
     const queryRef = useRef(query);
-    const queryGraph = async (ed: MonacoEditor.ICodeEditor) => {
+    const queryGraph = useCallback(async (ed: MonacoEditor.ICodeEditor) => {
         console.log('submit-query');
         try {
             const queryText = ed.getValue();
@@ -296,7 +296,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
             applyEditorErrorMarker(monacoRef.current, ed, 'Unable to submit query. Please try again.');
             onProblemsChange?.([buildProblem('Unable to submit query. Please try again.', 'error', defaultMarkerRange)]);
         }
-    };
+    }, [onGraphChange, onProblemsChange]);
 
     const runQuery = useCallback((editorInstance?: MonacoEditor.ICodeEditor) => {
         const activeEditor = editorInstance ?? editorInstanceRef.current;

@@ -107,7 +107,7 @@ function sortNodesForDisplay(parentPath: string, nodes: FileNode[]) {
   });
 }
 
-function findChildOnPath(parent: FileNode, nodeMap: Map<string, FileNode>, targetPath: string) {
+function findChildOnPath(parent: FileNode, nodeMap: Map<string, FileNode>, targetPath: string): FileNode | null {
   const children = getChildNodesForDisplay(parent, nodeMap);
   if (children.length === 0) {
     return null;
@@ -263,7 +263,7 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
     const { projectId, path } = resolved;
     await ensurePath(projectId, path);
     setPendingReveal({ projectId, path });
-  }, [ensurePath, expandToPath, resolveFileLocation]);
+  }, [ensurePath, resolveFileLocation]);
 
   useEffect(() => {
     if (projects.length === 0) {

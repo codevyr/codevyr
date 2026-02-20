@@ -364,7 +364,7 @@ export default function Home() {
       default:
         return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [activeFileId, codeTabs, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRunQuery, handleSelectFile, handleShare, problems, query, queryGraph, shareStatus]);
+  }, [activeFileId, codeTabs, codeTabsRef, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRunQuery, handleSelectFile, handleShare, problems, query, queryGraph, shareStatus]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
