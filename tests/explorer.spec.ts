@@ -147,8 +147,8 @@ const graphResponse = {
   ],
   edges: [],
   files: [
-    ['1', fileIdToPath['1'], PROJECT_ID],
-    ['11', fileIdToPath['11'], PROJECT_ID],
+    { file_id: '1', path: fileIdToPath['1'], project_id: PROJECT_ID },
+    { file_id: '11', path: fileIdToPath['11'], project_id: PROJECT_ID },
   ],
 };
 

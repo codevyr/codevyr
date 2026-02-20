@@ -24,7 +24,7 @@ interface EditorProps {
     onProblemsChange?: (problems: Problem[]) => void;
 }
 
-type RustGraphFileEntry = [string, string] | [string, string, string];
+type RustGraphFileEntry = { file_id: string; path: string; project_id?: string | null };
 
 interface RustGraph {
     nodes: Map<string, Node>;
@@ -274,8 +274,17 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
 
             let files = new Map<string, GraphFile>()
             data.files.forEach((entry) => {
-                const [file_id, file_path, project_id] = entry;
-                files.set(file_id, { path: file_path, project_id: project_id ?? null })
+                if (!entry || typeof entry !== 'object') {
+                    return;
+                }
+                const info = entry as { file_id?: unknown; path?: unknown; project_id?: unknown };
+                if (typeof info.file_id !== 'string' || typeof info.path !== 'string') {
+                    return;
+                }
+                files.set(info.file_id, {
+                    path: info.path,
+                    project_id: typeof info.project_id === 'string' ? info.project_id : null,
+                });
             });
 
             const edgeMap: Map<string, Array<Edge>> = new Map();

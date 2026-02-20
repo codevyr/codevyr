@@ -4,7 +4,7 @@ import { resolve } from 'path';
 type MockGraphResponse = {
   nodes: Array<unknown>;
   edges: Array<unknown>;
-  files: Array<[string, string, string]>;
+  files: Array<{ file_id: string; path: string; project_id?: string }>;
 };
 
 const mockDir = resolve(__dirname, 'mock');
@@ -129,8 +129,8 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
     },
   ],
   files: [
-    ['4', 'mock/run.go', '1'],
-    ['1', 'mock/kubelet.go', '1'],
+    { file_id: '4', path: 'mock/run.go', project_id: '1' },
+    { file_id: '1', path: 'mock/kubelet.go', project_id: '1' },
   ],
 };
 
@@ -236,9 +236,9 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
     },
   ],
   files: [
-    ['4', 'mock/run.go', '1'],
-    ['11', 'mock/logs.go', '1'],
-    ['1', 'mock/kubelet.go', '1'],
+    { file_id: '4', path: 'mock/run.go', project_id: '1' },
+    { file_id: '11', path: 'mock/logs.go', project_id: '1' },
+    { file_id: '1', path: 'mock/kubelet.go', project_id: '1' },
   ],
 };
 
