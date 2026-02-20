@@ -24,6 +24,12 @@ export interface ProjectTreeNode {
   compact_path?: string | null;
 }
 
+export interface ProjectTreeResponse {
+  base_path?: string;
+  nodes?: ProjectTreeNode[];
+  expanded?: Record<string, ProjectTreeNode[]>;
+}
+
 export interface ProjectResolveNode {
   name?: string;
   path: string;
@@ -52,9 +58,15 @@ export function fetchProjectDetails(projectId: string): Promise<Response> {
   });
 }
 
-export function fetchProjectTree(projectId: string, path: string): Promise<Response> {
+export function fetchProjectTree(projectId: string, path: string, expandPaths?: string[]): Promise<Response> {
   const params = new URLSearchParams();
   params.set('path', path);
+  if (expandPaths && expandPaths.length > 0) {
+    const uniquePaths = Array.from(new Set(expandPaths));
+    uniquePaths.forEach((expandPath) => {
+      params.append('expand[]', expandPath);
+    });
+  }
   return fetch(`${askldUrl}/v1/index/projects/${projectId}/tree?${params.toString()}`, {
     method: 'GET',
   });

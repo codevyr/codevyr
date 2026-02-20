@@ -1,14 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  fetchProjectTree,
-  fetchProjects,
-  resolveProjectPath,
-  type ProjectResolveNode,
-  type ProjectSummary,
-  type ProjectTreeNode,
-} from './askld';
+import type { FileNode, FileTreeCache } from './lib/file_tree_cache';
+import type { ProjectSummary } from './askld';
 import {
   LuChevronDown,
   LuChevronRight,
@@ -17,29 +11,10 @@ import {
   LuFolderOpen,
 } from 'react-icons/lu';
 
-type FileNode = {
-  projectId: string;
-  name: string;
-  path: string;
-  node_type: 'dir' | 'file';
-  has_children: boolean;
-  file_id?: string | null;
-  filetype?: string | null;
-  compact_path?: string | null;
-  load_path?: string | null;
-  displayLabel: string;
-  children: string[] | null;
-  childrenLoaded?: boolean;
-  isLoading?: boolean;
-};
-
-type FileLocation = {
-  projectId: string;
-  path: string;
-};
-
 type FileExplorerProps = {
+  cache: FileTreeCache;
   activeFileId: string | null;
+  revealRequest?: { fileId: string; nonce: number } | null;
   onOpenFile: (fileId: string, path: string, projectId: string, fileType?: string | null) => void;
 };
 
@@ -52,42 +27,46 @@ type ContextMenuState = {
 
 type RowItem =
   | { kind: 'project'; project: ProjectSummary }
-  | { kind: 'node'; node: FileNode; depth: number };
+  | { kind: 'node'; node: FileNode; depth: number; displayPath: string; parentPath: string };
 
 const projectKey = (projectId: string) => `project:${projectId}`;
 const nodeKey = (projectId: string, path: string) => `node:${projectId}:${path}`;
 
+const ROOT_PATH = '/';
+
 const iconClassName = 'h-4 w-4';
+
+function normalizePath(path: string) {
+  const normalized = path.replace(/\\/g, '/');
+  if (normalized === ROOT_PATH) {
+    return ROOT_PATH;
+  }
+  return normalized.replace(/\/+$/, '');
+}
 
 function getBaseName(path: string) {
   const trimmed = path.replace(/\\/g, '/');
   const segments = trimmed.split('/').filter(Boolean);
   if (segments.length === 0) {
-    return trimmed || '/';
+    return trimmed || ROOT_PATH;
   }
   return segments[segments.length - 1];
 }
 
-function buildDisplayLabel(parentPath: string, nodePath: string, compactPath?: string | null) {
-  const basePath = compactPath && compactPath.length > 0 ? compactPath : nodePath;
-  const normalizedParent = parentPath.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
-  const normalizedBase = basePath.replace(/\\/g, '/');
-  if (normalizedParent === '/') {
-    return normalizedBase.replace(/^\/+/, '') || '/';
+function getDisplayPath(node: FileNode) {
+  return normalizePath(node.compact_path ?? node.path);
+}
+
+function buildDisplayLabel(parentPath: string, displayPath: string) {
+  const normalizedParent = normalizePath(parentPath);
+  const normalizedBase = normalizePath(displayPath);
+  if (normalizedParent === ROOT_PATH) {
+    return normalizedBase.replace(/^\/+/, '') || ROOT_PATH;
   }
   if (normalizedBase.startsWith(`${normalizedParent}/`)) {
     return normalizedBase.slice(normalizedParent.length + 1) || getBaseName(normalizedBase);
   }
   return getBaseName(normalizedBase);
-}
-
-function sortTreeNodes(nodes: Array<{ node: ProjectTreeNode; displayLabel: string }>) {
-  return [...nodes].sort((a, b) => {
-    if (a.node.node_type !== b.node.node_type) {
-      return a.node.node_type === 'dir' ? -1 : 1;
-    }
-    return a.displayLabel.localeCompare(b.displayLabel);
-  });
 }
 
 function isPathPrefix(prefix: string, target: string) {
@@ -99,41 +78,56 @@ function isPathPrefix(prefix: string, target: string) {
   return normalizedTarget === normalizedPrefix || normalizedTarget.startsWith(`${normalizedPrefix}/`);
 }
 
+function getDisplayNode(node: FileNode, nodeMap: Map<string, FileNode>) {
+  const displayPath = getDisplayPath(node);
+  if (displayPath === node.path) {
+    return node;
+  }
+  return nodeMap.get(nodeKey(node.projectId, displayPath)) ?? null;
+}
+
+function getChildNodesForDisplay(parent: FileNode, nodeMap: Map<string, FileNode>) {
+  const displayNode = getDisplayNode(parent, nodeMap);
+  if (!displayNode?.children || displayNode.children.length === 0) {
+    return [];
+  }
+  return displayNode.children
+    .map((childKey) => nodeMap.get(childKey))
+    .filter((child): child is FileNode => Boolean(child));
+}
+
+function sortNodesForDisplay(parentPath: string, nodes: FileNode[]) {
+  return [...nodes].sort((a, b) => {
+    if (a.node_type !== b.node_type) {
+      return a.node_type === 'dir' ? -1 : 1;
+    }
+    const labelA = buildDisplayLabel(parentPath, getDisplayPath(a));
+    const labelB = buildDisplayLabel(parentPath, getDisplayPath(b));
+    return labelA.localeCompare(labelB);
+  });
+}
+
 function findChildOnPath(parent: FileNode, nodeMap: Map<string, FileNode>, targetPath: string) {
-  if (!parent.children || parent.children.length === 0) {
+  const children = getChildNodesForDisplay(parent, nodeMap);
+  if (children.length === 0) {
     return null;
   }
   let best: FileNode | null = null;
   let bestLength = -1;
-  parent.children
-    .map((childKey) => nodeMap.get(childKey))
-    .filter((child): child is FileNode => Boolean(child))
-    .forEach((child) => {
-      if (child.node_type !== 'dir') {
-        return;
-      }
-      const candidate = child.load_path ?? child.path;
-      if (!isPathPrefix(candidate, targetPath)) {
-        return;
-      }
-      if (candidate.length > bestLength) {
-        best = child;
-        bestLength = candidate.length;
-      }
-    });
+  children.forEach((child) => {
+    if (child.node_type !== 'dir') {
+      return;
+    }
+    const candidate = getDisplayPath(child);
+    if (!isPathPrefix(candidate, targetPath)) {
+      return;
+    }
+    if (candidate.length > bestLength) {
+      best = child;
+      bestLength = candidate.length;
+    }
+  });
   return best;
-}
-
-async function readJsonResponse<T>(response: Response, context: string): Promise<T> {
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`${context} failed (${response.status}). ${text.slice(0, 200)}`);
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch (error) {
-    throw new Error(`${context} returned non-JSON response: ${text.slice(0, 200)}`);
-  }
 }
 
 async function copyToClipboard(value: string) {
@@ -153,159 +147,21 @@ async function copyToClipboard(value: string) {
   document.body.removeChild(textarea);
 }
 
-export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [nodeMap, setNodeMap] = useState<Map<string, FileNode>>(() => new Map());
+export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }: FileExplorerProps) {
+  const { projects, nodeMap, loadDirectory, ensurePath, resolveFileLocation } = cache;
   const nodeMapRef = useRef(nodeMap);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const [activePathKey, setActivePathKey] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
-  const fileIdLookupRef = useRef<Map<string, FileLocation>>(new Map());
-  const loadPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollKeyRef = useRef<string | null>(null);
+  const lastRevealNonceRef = useRef<number>(0);
+  const lastActiveFileIdRef = useRef<string | null>(null);
+  const [pendingReveal, setPendingReveal] = useState<{ projectId: string; path: string } | null>(null);
 
   useEffect(() => {
     nodeMapRef.current = nodeMap;
   }, [nodeMap]);
-
-  useEffect(() => {
-    let canceled = false;
-    fetchProjects()
-      .then((response) => readJsonResponse<ProjectSummary[]>(response, 'Projects request'))
-      .then((data) => {
-        if (canceled) {
-          return;
-        }
-        setProjects(data);
-        setNodeMap((prev) => {
-          const next = new Map(prev);
-          data.forEach((project) => {
-            const rootKey = nodeKey(project.id, '/');
-            if (!next.has(rootKey)) {
-              next.set(rootKey, {
-                projectId: project.id,
-                name: '/',
-                path: '/',
-                node_type: 'dir',
-                has_children: true,
-                compact_path: null,
-                load_path: '/',
-                displayLabel: '/',
-                children: null,
-                childrenLoaded: false,
-              });
-            }
-          });
-          nodeMapRef.current = next;
-          return next;
-        });
-      })
-      .catch((error) => {
-        console.error('Failed to load projects', error);
-      });
-    return () => {
-      canceled = true;
-    };
-  }, []);
-
-  const loadDirectory = useCallback(async (projectId: string, path: string) => {
-    const key = nodeKey(projectId, path);
-    const existing = nodeMapRef.current.get(key);
-    if (!existing || existing.node_type !== 'dir') {
-      return;
-    }
-    if (existing.childrenLoaded) {
-      return;
-    }
-    const loadPath = existing.load_path ?? existing.path;
-
-    const cachedPromise = loadPromisesRef.current.get(key);
-    if (cachedPromise) {
-      return cachedPromise;
-    }
-
-    setNodeMap((prev) => {
-      const next = new Map(prev);
-      const target = next.get(key);
-      if (target) {
-        next.set(key, { ...target, isLoading: true });
-      }
-      nodeMapRef.current = next;
-      return next;
-    });
-
-    const promise = fetchProjectTree(projectId, loadPath)
-      .then((response) => readJsonResponse<ProjectTreeNode[]>(response, 'Tree request'))
-      .then((data) => {
-        setNodeMap((prev) => {
-          const next = new Map(prev);
-          const parent = next.get(key);
-          const childrenKeys: string[] = [];
-          const normalizedChildren = data.map((child) => ({
-            node: child,
-            displayLabel: buildDisplayLabel(loadPath, child.path, child.compact_path ?? null),
-          }));
-          const sortedChildren = sortTreeNodes(normalizedChildren);
-          sortedChildren.forEach(({ node: child, displayLabel }) => {
-            const childKey = nodeKey(projectId, child.path);
-            const isDir = child.node_type === 'dir';
-            const hasChildren = child.has_children;
-            const childrenLoaded = !isDir || !hasChildren;
-            const node: FileNode = {
-              projectId,
-              name: child.name ?? getBaseName(child.path),
-              path: child.path,
-              node_type: child.node_type,
-              has_children: hasChildren,
-              file_id: child.file_id ?? null,
-              filetype: child.filetype ?? null,
-              compact_path: child.compact_path ?? null,
-              load_path: isDir ? child.compact_path ?? child.path : null,
-              displayLabel,
-              children: isDir ? (hasChildren ? null : []) : [],
-              childrenLoaded,
-            };
-            next.set(childKey, node);
-            childrenKeys.push(childKey);
-            if (child.file_id) {
-              fileIdLookupRef.current.set(child.file_id, {
-                projectId,
-                path: child.path,
-              });
-            }
-          });
-          if (parent) {
-            next.set(key, {
-              ...parent,
-              children: childrenKeys,
-              isLoading: false,
-              childrenLoaded: true,
-            });
-          }
-          nodeMapRef.current = next;
-          return next;
-        });
-      })
-      .catch((error) => {
-        console.error('Failed to load directory', error);
-        setNodeMap((prev) => {
-          const next = new Map(prev);
-          const parent = next.get(key);
-          if (parent) {
-            next.set(key, { ...parent, isLoading: false, children: [], childrenLoaded: true });
-          }
-          nodeMapRef.current = next;
-          return next;
-        });
-      })
-      .finally(() => {
-        loadPromisesRef.current.delete(key);
-      });
-
-    loadPromisesRef.current.set(key, promise);
-    return promise;
-  }, []);
 
   const expandKey = useCallback((key: string) => {
     setExpandedKeys((prev) => {
@@ -351,6 +207,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     }
     const key = nodeKey(node.projectId, node.path);
     const isExpanded = expandedKeys.has(key);
+    const loadPath = node.compact_path ? normalizePath(node.compact_path) : node.path;
     setExpandedKeys((prev) => {
       const next = new Set(prev);
       if (isExpanded) {
@@ -361,7 +218,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
       return next;
     });
     if (!isExpanded) {
-      loadDirectory(node.projectId, node.path);
+      loadDirectory(node.projectId, loadPath);
     }
   }, [expandedKeys, loadDirectory]);
 
@@ -369,48 +226,13 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
     if (!node.file_id) {
       return;
     }
-    fileIdLookupRef.current.set(node.file_id, {
-      projectId: node.projectId,
-      path: node.path,
-    });
     setActivePathKey(nodeKey(node.projectId, node.path));
     onOpenFile(node.file_id, node.path, node.projectId, node.filetype ?? null);
   }, [onOpenFile]);
 
-  const resolveActiveFile = useCallback(async (fileId: string, projectList: ProjectSummary[]) => {
-    const cached = fileIdLookupRef.current.get(fileId);
-    if (cached) {
-      return {
-        projectId: cached.projectId,
-        path: cached.path,
-      };
-    }
-
-    for (const project of projectList) {
-      try {
-        const response = await resolveProjectPath(project.id, { fileId });
-        if (!response.ok) {
-          continue;
-        }
-        const ancestors = await readJsonResponse<ProjectResolveNode[]>(response, 'Resolve request');
-        const leaf = ancestors[ancestors.length - 1];
-        if (!leaf) {
-          continue;
-        }
-        const location = { projectId: project.id, path: leaf.path };
-        fileIdLookupRef.current.set(fileId, location);
-        return { projectId: project.id, path: leaf.path };
-      } catch (error) {
-        console.error('Failed to resolve file path', error);
-      }
-    }
-
-    return null;
-  }, []);
-
-  const expandToPath = useCallback(async (projectId: string, targetPath: string) => {
+  const expandToPath = useCallback((projectId: string, targetPath: string, map?: Map<string, FileNode>) => {
+    const activeMap = map ?? nodeMapRef.current;
     expandKey(projectKey(projectId));
-    await loadDirectory(projectId, '/');
     let currentKey = nodeKey(projectId, '/');
     const visited = new Set<string>();
     for (let index = 0; index < 200; index += 1) {
@@ -418,85 +240,101 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
         break;
       }
       visited.add(currentKey);
-      const current = nodeMapRef.current.get(currentKey);
+      const current = activeMap.get(currentKey);
       if (!current || current.node_type !== 'dir') {
         break;
       }
-      if (!current.childrenLoaded) {
-        await loadDirectory(current.projectId, current.path);
-      }
-      const refreshed = nodeMapRef.current.get(currentKey);
-      if (!refreshed || !refreshed.children || refreshed.children.length === 0) {
-        break;
-      }
-      const next = findChildOnPath(refreshed, nodeMapRef.current, targetPath);
+      const next = findChildOnPath(current, activeMap, targetPath);
       if (!next) {
         break;
       }
       const nextKey = nodeKey(projectId, next.path);
       expandKey(nextKey);
-      await loadDirectory(projectId, next.path);
       currentKey = nextKey;
     }
-  }, [expandKey, loadDirectory]);
+  }, [expandKey]);
 
-  const revealActiveFile = useCallback(async (fileId: string, projectList: ProjectSummary[]) => {
-    const resolved = await resolveActiveFile(fileId, projectList);
+  const revealActiveFile = useCallback(async (fileId: string) => {
+    const resolved = await resolveFileLocation(fileId);
     if (!resolved) {
       return;
     }
 
     const { projectId, path } = resolved;
-    const project = projectList.find((item) => item.id === projectId);
-    if (!project) {
-      return;
-    }
-
-    await expandToPath(projectId, path);
-
-    setActivePathKey(nodeKey(projectId, path));
-  }, [expandToPath, resolveActiveFile]);
+    await ensurePath(projectId, path);
+    setPendingReveal({ projectId, path });
+  }, [ensurePath, expandToPath, resolveFileLocation]);
 
   useEffect(() => {
-    if (!activeFileId) {
-      setActivePathKey(null);
-      return;
-    }
     if (projects.length === 0) {
       return;
     }
-    revealActiveFile(activeFileId, projects);
-  }, [activeFileId, projects, revealActiveFile]);
+    if (revealRequest && revealRequest.nonce > lastRevealNonceRef.current) {
+      lastRevealNonceRef.current = revealRequest.nonce;
+      lastActiveFileIdRef.current = revealRequest.fileId;
+      revealActiveFile(revealRequest.fileId);
+      return;
+    }
+    if (!activeFileId) {
+      setActivePathKey(null);
+      lastActiveFileIdRef.current = null;
+      return;
+    }
+    if (activeFileId !== lastActiveFileIdRef.current) {
+      lastActiveFileIdRef.current = activeFileId;
+      revealActiveFile(activeFileId);
+    }
+  }, [activeFileId, projects, revealActiveFile, revealRequest]);
+
+  useEffect(() => {
+    if (!pendingReveal) {
+      return;
+    }
+    const rootNode = nodeMap.get(nodeKey(pendingReveal.projectId, '/'));
+    if (!rootNode) {
+      return;
+    }
+    const rootChildren = getChildNodesForDisplay(rootNode, nodeMap);
+    if (rootChildren.length === 0) {
+      return;
+    }
+    expandToPath(pendingReveal.projectId, pendingReveal.path, nodeMap);
+    setActivePathKey(nodeKey(pendingReveal.projectId, pendingReveal.path));
+    setPendingReveal(null);
+  }, [expandToPath, nodeMap, pendingReveal]);
 
   const rows = useMemo(() => {
     const items: RowItem[] = [];
-    const appendNode = (node: FileNode, depth: number) => {
+    const appendNode = (node: FileNode, depth: number, parentPath: string) => {
+      const displayPath = getDisplayPath(node);
       items.push({
         kind: 'node',
         node,
         depth,
+        displayPath,
+        parentPath,
       });
       const key = nodeKey(node.projectId, node.path);
-      if (!expandedKeys.has(key) || !node.children || node.children.length === 0) {
+      if (!expandedKeys.has(key)) {
         return;
       }
-      node.children
-        .map((childKey) => nodeMap.get(childKey))
-        .filter((child): child is FileNode => Boolean(child))
-        .forEach((child) => {
-          appendNode(child, depth + 1);
-        });
+      const children = sortNodesForDisplay(displayPath, getChildNodesForDisplay(node, nodeMap));
+      if (children.length === 0) {
+        return;
+      }
+      children.forEach((child) => {
+        appendNode(child, depth + 1, displayPath);
+      });
     };
     const appendChildren = (node: FileNode, depth: number) => {
-      if (!node.children || node.children.length === 0) {
+      const displayPath = getDisplayPath(node);
+      const children = sortNodesForDisplay(displayPath, getChildNodesForDisplay(node, nodeMap));
+      if (children.length === 0) {
         return;
       }
-      node.children
-        .map((childKey) => nodeMap.get(childKey))
-        .filter((child): child is FileNode => Boolean(child))
-        .forEach((child) => {
-          appendNode(child, depth);
-        });
+      children.forEach((child) => {
+        appendNode(child, depth, displayPath);
+      });
     };
     projects.forEach((project) => {
       items.push({ kind: 'project', project });
@@ -589,7 +427,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
         return;
       }
       event.preventDefault();
-      copyToClipboard(node.path);
+      copyToClipboard(getDisplayPath(node));
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
@@ -624,12 +462,16 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
             );
           }
 
-          const { node, depth } = item;
+          const { node, depth, displayPath, parentPath } = item;
           const nodeIsExpanded = expandedKeys.has(nodeKey(node.projectId, node.path));
           const isDir = node.node_type === 'dir';
           const isActive = activePathKey === nodeKey(node.projectId, node.path);
-          const canExpand = isDir && (node.has_children || node.childrenLoaded === false);
+          const displayNode = getDisplayNode(node, nodeMap);
+          const hasChildren = displayNode?.has_children ?? node.has_children;
+          const childrenLoaded = displayNode?.childrenLoaded ?? node.childrenLoaded;
+          const canExpand = isDir && (hasChildren || childrenLoaded === false);
           const paddingLeft = Math.max(0, depth * 12);
+          const displayLabel = buildDisplayLabel(parentPath, displayPath);
 
           return (
             <button
@@ -647,8 +489,8 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
                 setContextMenu({
                   x: event.clientX,
                   y: event.clientY,
-                  name: node.name,
-                  path: node.path,
+                  name: displayLabel,
+                  path: displayPath,
                 });
               }}
               onClick={() => {
@@ -677,7 +519,7 @@ export function FileExplorer({ activeFileId, onOpenFile }: FileExplorerProps) {
               ) : (
                 <LuFile className={iconClassName} />
               )}
-              <span className="truncate">{node.displayLabel}</span>
+              <span className="truncate">{displayLabel}</span>
               {node.isLoading ? (
                 <span className="ml-auto text-xs text-gray-400">Loading...</span>
               ) : null}
