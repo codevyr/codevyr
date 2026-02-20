@@ -37,6 +37,37 @@
             await expect(tabContent).toContainText(contentText);
         }
     };
+
+    export const checkTabByName = async (
+        page: Page,
+        tabName: string,
+        selected: boolean,
+        contentText?: string,
+    ) => {
+        const tabButtonContent = page.locator('.flexlayout__tab_button_content', { hasText: tabName }).first();
+        await expect(tabButtonContent).toBeVisible();
+
+        const tabButton = tabButtonContent.locator('xpath=ancestor::*[@data-layout-path][1]');
+        await expect(tabButton).toHaveClass(new RegExp(selected ? 'flexlayout__tab_button--selected' : 'flexlayout__tab_button--unselected'));
+
+        const path = await tabButton.getAttribute('data-layout-path');
+        if (!path) {
+            throw new Error(`Missing data-layout-path for tab "${tabName}"`);
+        }
+
+        const tabContentPath = path.replace(/\/tb(\\d+)$/, '/t$1');
+        const tabContent = findPath(page, tabContentPath);
+
+        if (selected) {
+            await expect(tabContent).toBeVisible();
+        } else {
+            await expect(tabContent).not.toBeVisible();
+        }
+
+        if (contentText !== undefined) {
+            await expect(tabContent).toContainText(contentText);
+        }
+    };
     
     export const checkBorderTab = async (page: Page, path: string, index: number, selected: boolean, text: string) => {
         const tabButton = findTabButton(page, path, index);

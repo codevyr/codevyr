@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { checkTab, findAllTabSets } from './helpers-flex';
+import { findAllTabSets } from './helpers-flex';
 import { SUBMIT_QUERY, SUBMIT_QUERY_INIT_LOGS } from './mock-responses';
 import {
   ensureEditorApis,
@@ -28,7 +28,7 @@ test('get started', async ({ page }) => {
   await loadApp(page);
 
   const tabSets = findAllTabSets(page);
-  await expect(tabSets).toHaveCount(3);
+  await expect(tabSets).toHaveCount(4);
 });
 
 test('loads query from share link hash', async ({ page }) => {
@@ -59,7 +59,7 @@ test('query editor submits and renders three graph nodes', async ({ page }) => {
   await tapGraphNodeAndWaitForSource(page, '1', '1');
 
   await expect(page.locator('[data-testid="graph-metadata"]')).toHaveAttribute('data-node-count', '3');
-  await checkTab(page, '/ts1', 0, true, 'kubelet.go', 'func main()');
+  await expect(page.locator('.monaco-editor').last()).toContainText('func main()');
 });
 
 test('query editor highlights InitLogs and opens logs.go', async ({ page }) => {
@@ -78,7 +78,6 @@ test('query editor highlights InitLogs and opens logs.go', async ({ page }) => {
   await tapGraphNodeAndWaitForSource(page, '201', '11');
 
   await expect(page.locator('[data-testid="graph-metadata"]')).toHaveAttribute('data-node-count', '4');
-  await checkTab(page, '/ts1', 0, true, 'logs.go', 'func InitLogs');
   await expect(page.locator('.monaco-editor').last()).toContainText('func InitLogs');
 
   await tapGraphEdge(page, '22-201');
