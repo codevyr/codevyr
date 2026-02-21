@@ -17,8 +17,8 @@
     "autoprefixer": "10.4.19",
     "dagre": "^0.8.5",
     "elkjs": "^0.10.0",
-    "eslint": "^9.37.0",
-    "eslint-config-next": "^15.5",
+    "eslint": "^10.0.1",
+    "eslint-config-next": "^0.2.4",
     "flexlayout-react": "0.8",
     "lz-string": "^1.5.0",
     "monaco-editor": "^0.53.0",
@@ -35,7 +35,6 @@
   "devDependencies": {
     "@playwright/test": "1.57.0",
     "@types/dagre": "^0.7.52",
-    "jest": "^29.7.0",
     "miragejs": "^0.1.48",
     "raw-loader": "^4.0.2"
   }
