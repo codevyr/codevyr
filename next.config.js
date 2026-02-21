@@ -1,17 +1,28 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    turbopack: {
+        root: __dirname,
+        rules: {
+            '*.c': {
+                loaders: ['raw-loader'],
+                as: '*.js',
+            },
+            '*.json': {
+                loaders: ['raw-loader'],
+                as: '*.js',
+            },
+        },
+    },
+    webpack: (config) => {
         config.module.rules.push(
             {
                 test: /\.c$/,
-                // This is the asset module.
                 type: 'asset/source',
             }
         )
         config.module.rules.push(
             {
                 test: /\.json$/,
-                // This is the asset module.
                 type: 'asset/json',
             }
         )
