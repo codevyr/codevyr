@@ -529,9 +529,22 @@ export function GraphViewer({
     kind: 'node' | 'edge';
     id: string;
   } | null>(null);
+  const resolvedActiveMenu = useMemo(() => {
+    if (!activeMenu) {
+      return null;
+    }
+    if (activeMenu.kind === 'node' && !graph.nodes.has(activeMenu.id)) {
+      return null;
+    }
+    if (activeMenu.kind === 'edge' && !graph.edges.has(activeMenu.id)) {
+      return null;
+    }
+    return activeMenu;
+  }, [activeMenu, graph]);
+
   const menuContextValue = useMemo(
-    () => ({ activeMenu, setActiveMenu }),
-    [activeMenu],
+    () => ({ activeMenu: resolvedActiveMenu, setActiveMenu }),
+    [resolvedActiveMenu],
   );
   const selectionContextValue = useMemo(
     () => ({ lastSelected, setLastSelected }),
@@ -658,7 +671,6 @@ export function GraphViewer({
 
     if (nextNodes.length === 0) {
       positionsRef.current = new Map();
-      setActiveMenu(null);
       return;
     }
 
@@ -699,7 +711,7 @@ export function GraphViewer({
         });
       }
     });
-  }, [buildFlowElements, graph, setActiveMenu, setEdges, setNodes]);
+  }, [buildFlowElements, graph, setEdges, setNodes]);
 
   useEffect(() => {
     const cleanup = setupGraphTestApis();
@@ -707,18 +719,6 @@ export function GraphViewer({
       cleanup?.();
     };
   }, []);
-
-  useEffect(() => {
-    if (!activeMenu) {
-      return;
-    }
-    if (activeMenu.kind === 'node' && !graph.nodes.has(activeMenu.id)) {
-      setActiveMenu(null);
-    }
-    if (activeMenu.kind === 'edge' && !graph.edges.has(activeMenu.id)) {
-      setActiveMenu(null);
-    }
-  }, [activeMenu, graph]);
 
   const handleInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstanceRef.current = instance;

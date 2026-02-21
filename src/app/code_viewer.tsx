@@ -38,6 +38,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
     const layoutListenerRef = useRef<monaco.IDisposable | null>(null);
     const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingOffsetRef = useRef<number | null>(null);
+    const centerRequestedLocationRef = useRef<() => void>(() => {});
 
     const clearRetryTimeout = useCallback(() => {
         if (retryTimeoutRef.current) {
@@ -57,6 +58,14 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         return location ?? { lineNumber: 1, column: 1 };
     }, [editorParams.value, resolveFocusOffset]);
 
+    const scheduleCenterRetry = useCallback(() => {
+        clearRetryTimeout();
+        retryTimeoutRef.current = setTimeout(() => {
+            retryTimeoutRef.current = null;
+            centerRequestedLocationRef.current();
+        }, RETRY_DELAY_MS);
+    }, [clearRetryTimeout]);
+
     const centerRequestedLocation = useCallback(() => {
         const editor = editorRef.current;
         const targetOffset = pendingOffsetRef.current;
@@ -69,11 +78,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
 
         const layoutInfo = editor.getLayoutInfo();
         if (!layoutInfo || layoutInfo.height < 10) {
-            clearRetryTimeout();
-            retryTimeoutRef.current = setTimeout(() => {
-                retryTimeoutRef.current = null;
-                centerRequestedLocation();
-            }, RETRY_DELAY_MS);
+            scheduleCenterRetry();
             return;
         }
 
@@ -95,7 +100,11 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         editor.revealPositionInCenter({ lineNumber: clampedLine, column });
         editor.focus();
 
-    }, [clearRetryTimeout, resolveFocusLocation, resolveFocusOffset]);
+    }, [clearRetryTimeout, resolveFocusLocation, resolveFocusOffset, scheduleCenterRetry]);
+
+    useEffect(() => {
+        centerRequestedLocationRef.current = centerRequestedLocation;
+    }, [centerRequestedLocation]);
 
     useEffect(() => {
         const editor = editorRef.current;
@@ -106,13 +115,9 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         if (isVisible) {
             centerRequestedLocation();
         } else {
-            clearRetryTimeout();
-            retryTimeoutRef.current = setTimeout(() => {
-                retryTimeoutRef.current = null;
-                centerRequestedLocation();
-            }, RETRY_DELAY_MS);
+            scheduleCenterRetry();
         }
-    }, [editorParams, centerRequestedLocation, clearRetryTimeout, resolveFocusOffset]);
+    }, [editorParams, centerRequestedLocation, resolveFocusOffset, scheduleCenterRetry]);
 
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
         editorRef.current = editor;

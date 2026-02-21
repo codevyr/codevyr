@@ -107,44 +107,96 @@ function findChildOnPath(parent: FileNode, nodeMap: Map<string, FileNode>, targe
 export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }: FileExplorerProps) {
   const { projects, nodeMap, loadDirectory, getFileLocation } = cache;
   const nodeMapRef = useRef(nodeMap);
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
-  const [activePathKey, setActivePathKey] = useState<string | null>(null);
+  const [userExpandedKeys, setUserExpandedKeys] = useState<Set<string>>(() => new Set());
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollKeyRef = useRef<string | null>(null);
-  const lastRevealNonceRef = useRef<number>(0);
-  const lastActiveFileIdRef = useRef<string | null>(null);
-  const [pendingReveal, setPendingReveal] = useState<{ projectId: string; path: string } | null>(null);
 
   useEffect(() => {
     nodeMapRef.current = nodeMap;
   }, [nodeMap]);
 
-  const expandKey = useCallback((key: string) => {
-    setExpandedKeys((prev) => {
-      if (prev.has(key)) {
-        return prev;
+  const buildRevealExpansionKeys = useCallback((projectId: string, targetPath: string, map: Map<string, FileNode>) => {
+    const activeMap = map;
+    const keys = new Set<string>();
+    keys.add(projectKey(projectId));
+    let currentKey = nodeKey(projectId, '/');
+    const visited = new Set<string>();
+    for (let index = 0; index < 200; index += 1) {
+      if (visited.has(currentKey)) {
+        break;
       }
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
+      visited.add(currentKey);
+      const current = activeMap.get(currentKey);
+      if (!current || current.node_type !== 'dir') {
+        break;
+      }
+      const next = findChildOnPath(current, activeMap, targetPath);
+      if (!next) {
+        break;
+      }
+      const nextKey = nodeKey(projectId, next.path);
+      keys.add(nextKey);
+      currentKey = nextKey;
+    }
+    return keys;
   }, []);
 
-  const collapseKey = useCallback((key: string) => {
-    setExpandedKeys((prev) => {
-      if (!prev.has(key)) {
-        return prev;
-      }
-      const next = new Set(prev);
-      next.delete(key);
-      return next;
+  const activeLocation = useMemo(() => {
+    if (!activeFileId) {
+      return null;
+    }
+    const resolved = getFileLocation(activeFileId);
+    if (!resolved) {
+      return null;
+    }
+    return { projectId: resolved.projectId, path: normalizePath(resolved.path) };
+  }, [activeFileId, getFileLocation]);
+
+  const revealTarget = useMemo(() => {
+    if (activeLocation) {
+      return activeLocation;
+    }
+    if (!revealRequest) {
+      return null;
+    }
+    return {
+      projectId: revealRequest.projectId,
+      path: normalizePath(revealRequest.path),
+    };
+  }, [activeLocation, revealRequest]);
+
+  const autoExpandedKeys = useMemo(() => {
+    if (!revealTarget) {
+      return new Set<string>();
+    }
+    return buildRevealExpansionKeys(revealTarget.projectId, revealTarget.path, nodeMap);
+  }, [buildRevealExpansionKeys, nodeMap, revealTarget]);
+
+  const expandedKeys = useMemo(() => {
+    if (autoExpandedKeys.size === 0) {
+      return userExpandedKeys;
+    }
+    const next = new Set(userExpandedKeys);
+    autoExpandedKeys.forEach((key) => {
+      next.add(key);
     });
-  }, []);
+    return next;
+  }, [autoExpandedKeys, userExpandedKeys]);
+
+  const activePathKey = useMemo(() => {
+    if (!activeFileId) {
+      return null;
+    }
+    if (activeLocation) {
+      return nodeKey(activeLocation.projectId, activeLocation.path);
+    }
+    return revealTarget ? nodeKey(revealTarget.projectId, revealTarget.path) : null;
+  }, [activeFileId, activeLocation, revealTarget]);
 
   const toggleProject = useCallback((projectId: string) => {
     const key = projectKey(projectId);
-    setExpandedKeys((prev) => {
+    setUserExpandedKeys((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
@@ -165,7 +217,7 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
     const key = nodeKey(node.projectId, node.path);
     const isExpanded = expandedKeys.has(key);
     const loadPath = node.compact_path ? normalizePath(node.compact_path) : node.path;
-    setExpandedKeys((prev) => {
+    setUserExpandedKeys((prev) => {
       const next = new Set(prev);
       if (isExpanded) {
         next.delete(key);
@@ -183,82 +235,8 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
     if (!node.file_id) {
       return;
     }
-    setActivePathKey(nodeKey(node.projectId, node.path));
     onOpenFile(node.file_id, node.path, node.projectId, node.filetype ?? null);
   }, [onOpenFile]);
-
-  const expandToPath = useCallback((projectId: string, targetPath: string, map?: Map<string, FileNode>) => {
-    const activeMap = map ?? nodeMapRef.current;
-    expandKey(projectKey(projectId));
-    let currentKey = nodeKey(projectId, '/');
-    const visited = new Set<string>();
-    for (let index = 0; index < 200; index += 1) {
-      if (visited.has(currentKey)) {
-        break;
-      }
-      visited.add(currentKey);
-      const current = activeMap.get(currentKey);
-      if (!current || current.node_type !== 'dir') {
-        break;
-      }
-      const next = findChildOnPath(current, activeMap, targetPath);
-      if (!next) {
-        break;
-      }
-      const nextKey = nodeKey(projectId, next.path);
-      expandKey(nextKey);
-      currentKey = nextKey;
-    }
-  }, [expandKey]);
-
-  const revealActiveFile = useCallback((fileId: string) => {
-    const resolved = getFileLocation(fileId);
-    if (!resolved) {
-      return;
-    }
-    setPendingReveal({ projectId: resolved.projectId, path: normalizePath(resolved.path) });
-  }, [getFileLocation]);
-
-  useEffect(() => {
-    if (projects.length === 0) {
-      return;
-    }
-    if (revealRequest && revealRequest.nonce > lastRevealNonceRef.current) {
-      lastRevealNonceRef.current = revealRequest.nonce;
-      lastActiveFileIdRef.current = revealRequest.fileId;
-      setPendingReveal({
-        projectId: revealRequest.projectId,
-        path: normalizePath(revealRequest.path),
-      });
-      return;
-    }
-    if (!activeFileId) {
-      setActivePathKey(null);
-      lastActiveFileIdRef.current = null;
-      return;
-    }
-    if (activeFileId !== lastActiveFileIdRef.current) {
-      lastActiveFileIdRef.current = activeFileId;
-      revealActiveFile(activeFileId);
-    }
-  }, [activeFileId, projects, revealActiveFile, revealRequest]);
-
-  useEffect(() => {
-    if (!pendingReveal) {
-      return;
-    }
-    const rootNode = nodeMap.get(nodeKey(pendingReveal.projectId, '/'));
-    if (!rootNode) {
-      return;
-    }
-    const rootChildren = getChildNodesForDisplay(rootNode, nodeMap);
-    if (rootChildren.length === 0) {
-      return;
-    }
-    expandToPath(pendingReveal.projectId, pendingReveal.path, nodeMap);
-    setActivePathKey(nodeKey(pendingReveal.projectId, pendingReveal.path));
-    setPendingReveal(null);
-  }, [expandToPath, nodeMap, pendingReveal]);
 
   const rows = useMemo(() => {
     const items: RowItem[] = [];
