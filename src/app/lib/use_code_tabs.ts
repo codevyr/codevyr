@@ -55,6 +55,7 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
   const [codeTabs, setCodeTabs] = useState<Map<string, CodeTabEntry>>(() => new Map());
   const [fileContents, setFileContents] = useState<Map<string, string>>(() => new Map());
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [activeFileNonce, setActiveFileNonce] = useState(0);
 
   const codeTabsRef = useRef<Map<string, CodeTabEntry>>(codeTabs);
   const fileContentsRef = useRef<Map<string, string>>(fileContents);
@@ -72,6 +73,16 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
   useEffect(() => {
     activeFileIdRef.current = activeFileId;
   }, [activeFileId]);
+
+  const setActiveFile = useCallback((nextFileId: string | null) => {
+    setActiveFileId((prev) => {
+      if (prev === nextFileId) {
+        return prev;
+      }
+      setActiveFileNonce((nonce) => nonce + 1);
+      return nextFileId;
+    });
+  }, []);
 
   const updateFileContents = useCallback((fileId: string, content: string) => {
     setFileContents((prev) => {
@@ -144,7 +155,7 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
 
       model.doAction(Actions.updateNodeAttributes(tabId, { name: tabTitle }));
       model.doAction(Actions.selectTab(tabId));
-      setActiveFileId(fileId);
+      setActiveFile(fileId);
       updateFileContents(fileId, existingEntry.editorParams.value);
       return;
     }
@@ -169,7 +180,7 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
           return next;
         });
 
-        setActiveFileId(fileId);
+        setActiveFile(fileId);
         updateFileContents(fileId, data);
 
         const newTab = {
@@ -189,7 +200,7 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
       .catch((error) => {
         console.error('Failed to load source file', error);
       });
-  }, [model, placeholderTabId, tabsetId, updateFileContents]);
+  }, [model, placeholderTabId, setActiveFile, tabsetId, updateFileContents]);
 
   const handleModelChange = useCallback((_: Model, action: Action) => {
     if (action.type === Actions.SELECT_TAB) {
@@ -197,9 +208,9 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
       if (typeof tabId === 'string') {
         const entry = codeTabsRef.current.get(tabId);
         if (entry) {
-          setActiveFileId(entry.fileId);
+          setActiveFile(entry.fileId);
         } else if (tabId === placeholderTabId) {
-          setActiveFileId(null);
+          setActiveFile(null);
         }
       }
     }
@@ -230,12 +241,12 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
           });
 
           if (activeFileIdRef.current === entry.fileId) {
-            setActiveFileId(null);
+            setActiveFile(null);
           }
         }
       }
     }
-  }, [model, placeholderTabId, tabsetId]);
+  }, [model, placeholderTabId, setActiveFile, tabsetId]);
 
   return {
     codeTabs,
@@ -243,6 +254,7 @@ export function useCodeTabs({ model, tabsetId, placeholderTabId }: UseCodeTabsOp
     fileContents,
     fileContentsRef,
     activeFileId,
+    activeFileNonce,
     openFileById,
     ensureFileContent,
     handleModelChange,

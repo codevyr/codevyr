@@ -16,6 +16,7 @@ import {
 type FileExplorerProps = {
   cache: FileTreeCache;
   activeFileId: string | null;
+  activeFileNonce: number;
   revealRequest?: { fileId: string; projectId: string; path: string; nonce: number } | null;
   onOpenFile: (fileId: string, path: string, projectId: string, fileType?: string | null) => void;
 };
@@ -26,6 +27,9 @@ type ContextMenuState = {
   name: string;
   path: string;
 } | null;
+
+type UserOverride = 'expand' | 'collapse';
+type UserOverrideEntry = { action: UserOverride; scopeKey?: number };
 
 type RowItem =
   | { kind: 'project'; project: ProjectSummary }
@@ -104,10 +108,12 @@ function findChildOnPath(parent: FileNode, nodeMap: Map<string, FileNode>, targe
   return best;
 }
 
-export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }: FileExplorerProps) {
+export function FileExplorer({ cache, activeFileId, activeFileNonce, revealRequest, onOpenFile }: FileExplorerProps) {
   const { projects, nodeMap, loadDirectory, getFileLocation } = cache;
   const nodeMapRef = useRef(nodeMap);
-  const [userExpandedKeys, setUserExpandedKeys] = useState<Set<string>>(() => new Set());
+  const [userOverrides, setUserOverrides] = useState<Map<string, UserOverrideEntry>>(
+    () => new Map(),
+  );
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollKeyRef = useRef<string | null>(null);
@@ -174,15 +180,16 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
   }, [buildRevealExpansionKeys, nodeMap, revealTarget]);
 
   const expandedKeys = useMemo(() => {
-    if (autoExpandedKeys.size === 0) {
-      return userExpandedKeys;
-    }
-    const next = new Set(userExpandedKeys);
-    autoExpandedKeys.forEach((key) => {
-      next.add(key);
+    const next = new Set(autoExpandedKeys);
+    userOverrides.forEach((entry, key) => {
+      if (entry.action === 'expand') {
+        next.add(key);
+      } else if (entry.scopeKey === activeFileNonce) {
+        next.delete(key);
+      }
     });
     return next;
-  }, [autoExpandedKeys, userExpandedKeys]);
+  }, [activeFileNonce, autoExpandedKeys, userOverrides]);
 
   const activePathKey = useMemo(() => {
     if (!activeFileId) {
@@ -196,19 +203,19 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
 
   const toggleProject = useCallback((projectId: string) => {
     const key = projectKey(projectId);
-    setUserExpandedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
+    setUserOverrides((prev) => {
+      const overrides = new Map(prev);
+      if (expandedKeys.has(key)) {
+        overrides.set(key, { action: 'collapse', scopeKey: activeFileNonce });
       } else {
-        next.add(key);
+        overrides.set(key, { action: 'expand' });
       }
-      return next;
+      return overrides;
     });
     if (!expandedKeys.has(key)) {
       loadDirectory(projectId, '/');
     }
-  }, [expandedKeys, loadDirectory]);
+  }, [activeFileNonce, expandedKeys, loadDirectory]);
 
   const toggleDirectory = useCallback((node: FileNode) => {
     if (node.node_type !== 'dir') {
@@ -217,19 +224,19 @@ export function FileExplorer({ cache, activeFileId, revealRequest, onOpenFile }:
     const key = nodeKey(node.projectId, node.path);
     const isExpanded = expandedKeys.has(key);
     const loadPath = node.compact_path ? normalizePath(node.compact_path) : node.path;
-    setUserExpandedKeys((prev) => {
-      const next = new Set(prev);
+    setUserOverrides((prev) => {
+      const overrides = new Map(prev);
       if (isExpanded) {
-        next.delete(key);
-        return next;
+        overrides.set(key, { action: 'collapse', scopeKey: activeFileNonce });
+      } else {
+        overrides.set(key, { action: 'expand' });
       }
-      next.add(key);
-      return next;
+      return overrides;
     });
     if (!isExpanded) {
       loadDirectory(node.projectId, loadPath);
     }
-  }, [expandedKeys, loadDirectory]);
+  }, [activeFileNonce, expandedKeys, loadDirectory]);
 
   const handleFileClick = useCallback((node: FileNode) => {
     if (!node.file_id) {
