@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditor, IRange } from 'monaco-editor';
-import { Node, Edge, Graph } from './graph';
+import { Node, Edge, Graph, GraphFile } from './graph';
 import { setupEditorTestApis } from './testing/editor_test_utils';
 
 import { fetchQuery } from './askld';
@@ -24,10 +24,12 @@ interface EditorProps {
     onProblemsChange?: (problems: Problem[]) => void;
 }
 
+type RustGraphFileEntry = { file_id: string; path: string; project_id?: string | null };
+
 interface RustGraph {
     nodes: Map<string, Node>;
     edges: Set<Edge>;
-    files: Array<[string, string]>;
+    files: Array<RustGraphFileEntry>;
     warnings?: QueryDiagnostic[];
 }
 
@@ -252,7 +254,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
     const monacoRef = useRef<Monaco | null>(null);
     const editorInstanceRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
     const queryRef = useRef(query);
-    const queryGraph = async (ed: MonacoEditor.ICodeEditor) => {
+    const queryGraph = useCallback(async (ed: MonacoEditor.ICodeEditor) => {
         console.log('submit-query');
         try {
             const queryText = ed.getValue();
@@ -270,9 +272,19 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 nodes.set(node.id, node)
             })
 
-            let files = new Map<string, string>()
-            data.files.forEach(([file_id, file_path]) => {
-                files.set(file_id, file_path)
+            let files = new Map<string, GraphFile>()
+            data.files.forEach((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                    return;
+                }
+                const info = entry as { file_id?: unknown; path?: unknown; project_id?: unknown };
+                if (typeof info.file_id !== 'string' || typeof info.path !== 'string') {
+                    return;
+                }
+                files.set(info.file_id, {
+                    path: info.path,
+                    project_id: typeof info.project_id === 'string' ? info.project_id : null,
+                });
             });
 
             const edgeMap: Map<string, Array<Edge>> = new Map();
@@ -296,7 +308,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
             applyEditorErrorMarker(monacoRef.current, ed, 'Unable to submit query. Please try again.');
             onProblemsChange?.([buildProblem('Unable to submit query. Please try again.', 'error', defaultMarkerRange)]);
         }
-    };
+    }, [onGraphChange, onProblemsChange]);
 
     const runQuery = useCallback((editorInstance?: MonacoEditor.ICodeEditor) => {
         const activeEditor = editorInstance ?? editorInstanceRef.current;

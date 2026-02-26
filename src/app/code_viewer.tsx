@@ -4,6 +4,7 @@ import { Editor, Monaco } from "@monaco-editor/react";
 import type * as monaco from 'monaco-editor';
 import * as monacoEditor from 'monaco-editor';
 import { getLineColumnFromOffset, parseOffset, type OffsetValue } from './lib/offsets';
+import { registerMakefile } from './monaco-makefile-language';
 
 export interface CodeFocus {
     file_id: string;
@@ -12,6 +13,7 @@ export interface CodeFocus {
 }
 
 export interface EditorParams {
+    fileId?: string;
     path: string;
     language: string;
     value: string;
@@ -36,6 +38,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
     const layoutListenerRef = useRef<monaco.IDisposable | null>(null);
     const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingOffsetRef = useRef<number | null>(null);
+    const centerRequestedLocationRef = useRef<() => void>(() => {});
 
     const clearRetryTimeout = useCallback(() => {
         if (retryTimeoutRef.current) {
@@ -55,6 +58,14 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         return location ?? { lineNumber: 1, column: 1 };
     }, [editorParams.value, resolveFocusOffset]);
 
+    const scheduleCenterRetry = useCallback(() => {
+        clearRetryTimeout();
+        retryTimeoutRef.current = setTimeout(() => {
+            retryTimeoutRef.current = null;
+            centerRequestedLocationRef.current();
+        }, RETRY_DELAY_MS);
+    }, [clearRetryTimeout]);
+
     const centerRequestedLocation = useCallback(() => {
         const editor = editorRef.current;
         const targetOffset = pendingOffsetRef.current;
@@ -67,11 +78,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
 
         const layoutInfo = editor.getLayoutInfo();
         if (!layoutInfo || layoutInfo.height < 10) {
-            clearRetryTimeout();
-            retryTimeoutRef.current = setTimeout(() => {
-                retryTimeoutRef.current = null;
-                centerRequestedLocation();
-            }, RETRY_DELAY_MS);
+            scheduleCenterRetry();
             return;
         }
 
@@ -93,7 +100,11 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         editor.revealPositionInCenter({ lineNumber: clampedLine, column });
         editor.focus();
 
-    }, [clearRetryTimeout, resolveFocusLocation, resolveFocusOffset]);
+    }, [clearRetryTimeout, resolveFocusLocation, resolveFocusOffset, scheduleCenterRetry]);
+
+    useEffect(() => {
+        centerRequestedLocationRef.current = centerRequestedLocation;
+    }, [centerRequestedLocation]);
 
     useEffect(() => {
         const editor = editorRef.current;
@@ -104,16 +115,13 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         if (isVisible) {
             centerRequestedLocation();
         } else {
-            clearRetryTimeout();
-            retryTimeoutRef.current = setTimeout(() => {
-                retryTimeoutRef.current = null;
-                centerRequestedLocation();
-            }, RETRY_DELAY_MS);
+            scheduleCenterRetry();
         }
-    }, [editorParams, centerRequestedLocation, clearRetryTimeout, resolveFocusOffset]);
+    }, [editorParams, centerRequestedLocation, resolveFocusOffset, scheduleCenterRetry]);
 
     const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
         editorRef.current = editor;
+        registerMakefile(monacoInstance);
 
         if (layoutListenerRef.current) {
             layoutListenerRef.current.dispose();
@@ -134,5 +142,9 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
         };
     }, [clearRetryTimeout]);
 
-    return <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} />;
+    return (
+        <div className="h-full w-full" data-testid="code-viewer" data-file-id={editorParams.fileId ?? ''}>
+            <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} />
+        </div>
+    );
 }

@@ -25,8 +25,13 @@ export interface Edge {
     from_offset_end: OffsetValue;
 }
 
+export interface GraphFile {
+    path: string;
+    project_id: string | null;
+}
+
 export interface Graph {
     nodes: Map<string, Node>;
     edges: Map<string, Array<Edge>>;
-    files: Map<string, string>;
+    files: Map<string, GraphFile>;
 }

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { LuArrowUpRight, LuCopy, LuFocus } from 'react-icons/lu';
 import { CodeFocus } from './code_viewer';
 import { Edge, Declaration, Node, Graph } from './graph';
+import { copyToClipboard } from './lib/clipboard';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
 
 type DeclarationSortInfo = {
@@ -16,7 +17,7 @@ function resolveDeclarationSortInfo(
   graph: Graph,
   fileContents: Map<string, string>,
 ): DeclarationSortInfo {
-  const path = graph.files.get(declaration.file_id) ?? declaration.file_id;
+  const path = graph.files.get(declaration.file_id)?.path ?? declaration.file_id;
   const content = fileContents.get(declaration.file_id);
   const location = content ? getLineColumnFromOffset(content, declaration.start_offset) : null;
   const line = location?.lineNumber ?? Number.MAX_SAFE_INTEGER;
@@ -48,13 +49,6 @@ function compareDeclarations(
   return leftInfo.offset - rightInfo.offset;
 }
 
-function copyToClipboard(value: string) {
-  if (typeof navigator === 'undefined') {
-    return;
-  }
-  navigator.clipboard?.writeText(value).catch(() => {});
-}
-
 interface DeclarationHoverProps {
   declaration: Declaration;
   graph: Graph;
@@ -63,7 +57,7 @@ interface DeclarationHoverProps {
 }
 
 function DeclarationHover({ declaration, graph, setCodeFocus, fileContents }: DeclarationHoverProps) {
-  const filePath = graph.files.get(declaration.file_id) ?? 'Undefined';
+  const filePath = graph.files.get(declaration.file_id)?.path ?? 'Undefined';
   const location = formatOffsetLocation(
     fileContents.get(declaration.file_id),
     declaration.start_offset,
@@ -78,7 +72,7 @@ function DeclarationHover({ declaration, graph, setCodeFocus, fileContents }: De
   }
 
   function copyPath() {
-    copyToClipboard(filePath);
+    void copyToClipboard(filePath);
   }
 
   return (
@@ -204,7 +198,7 @@ export function NodeHover({
         <button type="button" className="node-hover-icon" onClick={() => focusNode(node.id)} title="Focus node">
           <LuFocus />
         </button>
-        <button type="button" className="node-hover-icon" onClick={() => copyToClipboard(node.label)} title="Copy symbol name">
+        <button type="button" className="node-hover-icon" onClick={() => void copyToClipboard(node.label)} title="Copy symbol name">
           <LuCopy />
         </button>
       </div>
@@ -252,7 +246,7 @@ function resolveEdgeSortInfo(
   fileContents: Map<string, string>,
 ) {
   const fileId = resolveEdgeFileId(edge, graph);
-  const path = fileId ? graph.files.get(fileId) ?? fileId : 'Undefined';
+  const path = fileId ? graph.files.get(fileId)?.path ?? fileId : 'Undefined';
   const content = fileId ? fileContents.get(fileId) : undefined;
   const location = content ? getLineColumnFromOffset(content, edge.from_offset_start) : null;
   const line = location?.lineNumber ?? Number.MAX_SAFE_INTEGER;
@@ -284,7 +278,7 @@ function compareEdges(
 
 function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) {
   const fileId = resolveEdgeFileId(edge, graph);
-  const filePath = fileId ? graph.files.get(fileId) ?? fileId : 'Undefined';
+  const filePath = fileId ? graph.files.get(fileId)?.path ?? fileId : 'Undefined';
   const location = formatOffsetLocation(fileId ? fileContents.get(fileId) : undefined, edge.from_offset_start);
 
   function openInEditor() {
@@ -299,7 +293,7 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) 
   }
 
   function copyPath() {
-    copyToClipboard(filePath);
+    void copyToClipboard(filePath);
   }
 
   return (
