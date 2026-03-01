@@ -3,6 +3,7 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
+import AnalyticsScript from './components/AnalyticsScript'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,13 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <Script
-          defer
-          data-domain="ui.codevyr.com"
-          src="https://plausible.codevyr.com/js/script.js"
-        />
+        <Script src="/runtime-env.js" strategy="beforeInteractive" />
       </head>
       <body className={inter.className}>
+        <AnalyticsScript />
         {children}
       </body>
     </html>
