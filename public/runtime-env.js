@@ -1,0 +1,4 @@
+window.__RUNTIME_ENV__ = {
+  NEXT_PUBLIC_ENABLE_ANALYTICS: "",
+  NEXT_PUBLIC_ASKLD_URL: ""
+};

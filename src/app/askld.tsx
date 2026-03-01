@@ -1,4 +1,11 @@
-export const askldUrl = process.env.NEXT_PUBLIC_ASKLD_URL || 'https://api.codevyr.com';
+import { getRuntimeEnv } from './lib/runtime_env';
+
+const runtimeEnv = getRuntimeEnv();
+
+export const askldUrl =
+  runtimeEnv?.NEXT_PUBLIC_ASKLD_URL ||
+  process.env.NEXT_PUBLIC_ASKLD_URL ||
+  'https://api.codevyr.com';
 
 export interface ProjectSummary {
   id: string;

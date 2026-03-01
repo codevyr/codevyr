@@ -11,7 +11,6 @@ RUN npm ci
 # -------- Build stage
 FROM node:24-alpine AS builder
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Build the app to standalone output
@@ -35,6 +34,10 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 # Public assets (if any)
 COPY --from=builder /app/public ./public
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+
+RUN chmod 755 /app/docker-entrypoint.sh \
+  && chown -R nextjs:nodejs /app/public
 
 # Drop privileges
 USER nextjs
@@ -43,4 +46,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/ || exit 1
 
-CMD ["node", "server.js"]
+CMD ["/app/docker-entrypoint.sh"]
