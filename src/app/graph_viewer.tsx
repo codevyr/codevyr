@@ -28,7 +28,7 @@ export interface GraphProps {
   graph: Graph;
   selectFile: (codeFocus: CodeFocus) => void;
   fileContents: Map<string, string>;
-  ensureFileContent: (fileId: string) => void;
+  ensureFileContent: (objectId: string) => void;
 }
 
 type GraphNodeData = {
@@ -36,7 +36,7 @@ type GraphNodeData = {
   node: GraphNode;
   graph: Graph;
   fileContents: Map<string, string>;
-  ensureFileContent: (fileId: string) => void;
+  ensureFileContent: (objectId: string) => void;
   selectFile: (codeFocus: CodeFocus) => void;
   focusNode: (nodeId: string) => void;
 };
@@ -45,7 +45,7 @@ type GraphEdgeData = {
   edges: Array<GraphEdge>;
   graph: Graph;
   fileContents: Map<string, string>;
-  ensureFileContent: (fileId: string) => void;
+  ensureFileContent: (objectId: string) => void;
   selectFile: (codeFocus: CodeFocus) => void;
 };
 
@@ -229,13 +229,13 @@ function buildDisplayLabelMap(graph: Graph) {
   return displayMap;
 }
 
-function resolveEdgeFileId(edge: GraphEdge, graph: Graph): string | null {
-  if (edge.from_file) {
-    return edge.from_file;
+function resolveEdgeObjectId(edge: GraphEdge, graph: Graph): string | null {
+  if (edge.from_object) {
+    return edge.from_object;
   }
 
   const node = graph.nodes.get(edge.from);
-  return node?.declarations[0]?.file_id ?? null;
+  return node?.symbol_instances[0]?.object_id ?? null;
 }
 
 function hasNodeOverlap(previous: Graph | null, next: Graph) {
@@ -264,23 +264,23 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
     : undefined;
   const isOpen = activeMenu?.kind === 'node' && activeMenu.id === id;
   const isSelected = lastSelected?.kind === 'node' && lastSelected.id === id;
-  const declarationCount = node.declarations.length;
+  const instanceCount = node.symbol_instances.length;
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       setLastSelected?.({ kind: 'node', id });
-      if (declarationCount === 1) {
-        const decl = node.declarations[0];
+      if (instanceCount === 1) {
+        const inst = node.symbol_instances[0];
         selectFile({
-          file_id: decl.file_id,
-          start_offset: decl.start_offset,
-          end_offset: decl.end_offset,
+          object_id: inst.object_id,
+          start_offset: inst.start_offset,
+          end_offset: inst.end_offset,
         });
         setActiveMenu?.(null);
         return;
       }
 
-      if (declarationCount > 1) {
+      if (instanceCount > 1) {
         if (isOpen) {
           setActiveMenu?.(null);
           return;
@@ -288,7 +288,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
         triggerContextMenu(event);
       }
     },
-    [declarationCount, id, isOpen, node, selectFile, setActiveMenu, setLastSelected],
+    [instanceCount, id, isOpen, node, selectFile, setActiveMenu, setLastSelected],
   );
 
   const handleOpenChange = useCallback(
@@ -441,12 +441,12 @@ function GraphEdgeComponent({
         if (!graph || !selectFile) {
           return;
         }
-        const fileId = resolveEdgeFileId(edge, graph);
-        if (!fileId) {
+        const objectId = resolveEdgeObjectId(edge, graph);
+        if (!objectId) {
           return;
         }
         selectFile({
-          file_id: fileId,
+          object_id: objectId,
           start_offset: edge.from_offset_start,
           end_offset: edge.from_offset_end,
         });

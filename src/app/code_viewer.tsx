@@ -7,7 +7,7 @@ import { getLineColumnFromOffset, parseOffset, type OffsetValue } from './lib/of
 import { registerMakefile } from './monaco-makefile-language';
 
 export interface CodeFocus {
-    file_id: string;
+    object_id: string;
     start_offset: OffsetValue;
     end_offset?: OffsetValue | null;
 }

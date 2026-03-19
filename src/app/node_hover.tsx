@@ -1,40 +1,40 @@
 import { useEffect } from 'react';
 import { LuArrowUpRight, LuCopy, LuFocus } from 'react-icons/lu';
 import { CodeFocus } from './code_viewer';
-import { Edge, Declaration, Node, Graph } from './graph';
+import { Edge, SymbolInstance, Node, Graph } from './graph';
 import { copyToClipboard } from './lib/clipboard';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
 
-type DeclarationSortInfo = {
+type SymbolInstanceSortInfo = {
   path: string;
   line: number;
   column: number;
   offset: number;
 };
 
-function resolveDeclarationSortInfo(
-  declaration: Declaration,
+function resolveSymbolInstanceSortInfo(
+  instance: SymbolInstance,
   graph: Graph,
   fileContents: Map<string, string>,
-): DeclarationSortInfo {
-  const path = graph.files.get(declaration.file_id)?.path ?? declaration.file_id;
-  const content = fileContents.get(declaration.file_id);
-  const location = content ? getLineColumnFromOffset(content, declaration.start_offset) : null;
+): SymbolInstanceSortInfo {
+  const path = graph.objects.get(instance.object_id)?.path ?? instance.object_id;
+  const content = fileContents.get(instance.object_id);
+  const location = content ? getLineColumnFromOffset(content, instance.start_offset) : null;
   const line = location?.lineNumber ?? Number.MAX_SAFE_INTEGER;
   const column = location?.column ?? Number.MAX_SAFE_INTEGER;
-  const offset = parseOffset(declaration.start_offset) ?? Number.MAX_SAFE_INTEGER;
+  const offset = parseOffset(instance.start_offset) ?? Number.MAX_SAFE_INTEGER;
 
   return { path, line, column, offset };
 }
 
-function compareDeclarations(
-  left: Declaration,
-  right: Declaration,
+function compareSymbolInstances(
+  left: SymbolInstance,
+  right: SymbolInstance,
   graph: Graph,
   fileContents: Map<string, string>,
 ) {
-  const leftInfo = resolveDeclarationSortInfo(left, graph, fileContents);
-  const rightInfo = resolveDeclarationSortInfo(right, graph, fileContents);
+  const leftInfo = resolveSymbolInstanceSortInfo(left, graph, fileContents);
+  const rightInfo = resolveSymbolInstanceSortInfo(right, graph, fileContents);
 
   const pathCompare = leftInfo.path.localeCompare(rightInfo.path);
   if (pathCompare !== 0) {
@@ -49,25 +49,25 @@ function compareDeclarations(
   return leftInfo.offset - rightInfo.offset;
 }
 
-interface DeclarationHoverProps {
-  declaration: Declaration;
+interface SymbolInstanceHoverProps {
+  instance: SymbolInstance;
   graph: Graph;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
 }
 
-function DeclarationHover({ declaration, graph, setCodeFocus, fileContents }: DeclarationHoverProps) {
-  const filePath = graph.files.get(declaration.file_id)?.path ?? 'Undefined';
+function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents }: SymbolInstanceHoverProps) {
+  const filePath = graph.objects.get(instance.object_id)?.path ?? 'Undefined';
   const location = formatOffsetLocation(
-    fileContents.get(declaration.file_id),
-    declaration.start_offset,
+    fileContents.get(instance.object_id),
+    instance.start_offset,
   );
 
   function openInEditor() {
     setCodeFocus({
-      file_id: declaration.file_id,
-      start_offset: declaration.start_offset,
-      end_offset: declaration.end_offset,
+      object_id: instance.object_id,
+      start_offset: instance.start_offset,
+      end_offset: instance.end_offset,
     });
   }
 
@@ -110,7 +110,7 @@ function DeclarationHover({ declaration, graph, setCodeFocus, fileContents }: De
 interface NodeHoverSectionProps {
   sectionName: string;
   showHeader: boolean;
-  declarations: Declaration[];
+  instances: SymbolInstance[];
   graph: Graph;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
@@ -119,17 +119,17 @@ interface NodeHoverSectionProps {
 function NodeHoverSection({
   sectionName,
   showHeader,
-  declarations,
+  instances,
   graph,
   setCodeFocus,
   fileContents,
 }: NodeHoverSectionProps) {
-  if (declarations.length === 0) {
+  if (instances.length === 0) {
     return null;
   }
 
-  const sortedDeclarations = [...declarations].sort((left, right) =>
-    compareDeclarations(left, right, graph, fileContents),
+  const sortedInstances = [...instances].sort((left, right) =>
+    compareSymbolInstances(left, right, graph, fileContents),
   );
 
   return (
@@ -143,10 +143,10 @@ function NodeHoverSection({
       )}
 
       <tbody>
-        {sortedDeclarations.map((declaration) => (
-          <DeclarationHover
-            key={declaration.id}
-            declaration={declaration}
+        {sortedInstances.map((instance) => (
+          <SymbolInstanceHover
+            key={instance.id}
+            instance={instance}
             graph={graph}
             setCodeFocus={setCodeFocus}
             fileContents={fileContents}
@@ -163,7 +163,7 @@ export interface NodeHoverProps {
   setCodeFocus: (type: CodeFocus) => void;
   focusNode: (nodeId: string) => void;
   fileContents: Map<string, string>;
-  ensureFileContent: (fileId: string) => void;
+  ensureFileContent: (objectId: string) => void;
 }
 
 export function NodeHover({
@@ -174,18 +174,18 @@ export function NodeHover({
   fileContents,
   ensureFileContent,
 }: NodeHoverProps) {
-  const definitionDeclarations = node.declarations.filter((d) => d.symbol_type === 'Definition');
-  const declarationDeclarations = node.declarations.filter((d) => d.symbol_type === 'Declaration');
-  const hasBothSections = definitionDeclarations.length > 0 && declarationDeclarations.length > 0;
+  const definitionInstances = node.symbol_instances.filter((d) => d.symbol_type === 'Definition');
+  const declarationInstances = node.symbol_instances.filter((d) => d.symbol_type === 'Declaration');
+  const hasBothSections = definitionInstances.length > 0 && declarationInstances.length > 0;
 
   useEffect(() => {
     const seen = new Set<string>();
-    node.declarations.forEach((declaration) => {
-      if (seen.has(declaration.file_id)) {
+    node.symbol_instances.forEach((instance) => {
+      if (seen.has(instance.object_id)) {
         return;
       }
-      seen.add(declaration.file_id);
-      ensureFileContent(declaration.file_id);
+      seen.add(instance.object_id);
+      ensureFileContent(instance.object_id);
     });
   }, [node, ensureFileContent]);
 
@@ -206,7 +206,7 @@ export function NodeHover({
         <NodeHoverSection
           sectionName="Definition"
           showHeader={hasBothSections}
-          declarations={definitionDeclarations}
+          instances={definitionInstances}
           graph={graph}
           setCodeFocus={setCodeFocus}
           fileContents={fileContents}
@@ -214,7 +214,7 @@ export function NodeHover({
         <NodeHoverSection
           sectionName="Declaration"
           showHeader={hasBothSections}
-          declarations={declarationDeclarations}
+          instances={declarationInstances}
           graph={graph}
           setCodeFocus={setCodeFocus}
           fileContents={fileContents}
@@ -231,13 +231,13 @@ interface EdgeHoverProps {
   fileContents: Map<string, string>;
 }
 
-function resolveEdgeFileId(edge: Edge, graph: Graph): string | null {
-  if (edge.from_file) {
-    return edge.from_file;
+function resolveEdgeObjectId(edge: Edge, graph: Graph): string | null {
+  if (edge.from_object) {
+    return edge.from_object;
   }
 
   const node = graph.nodes.get(edge.from);
-  return node?.declarations[0]?.file_id ?? null;
+  return node?.symbol_instances[0]?.object_id ?? null;
 }
 
 function resolveEdgeSortInfo(
@@ -245,9 +245,9 @@ function resolveEdgeSortInfo(
   graph: Graph,
   fileContents: Map<string, string>,
 ) {
-  const fileId = resolveEdgeFileId(edge, graph);
-  const path = fileId ? graph.files.get(fileId)?.path ?? fileId : 'Undefined';
-  const content = fileId ? fileContents.get(fileId) : undefined;
+  const objectId = resolveEdgeObjectId(edge, graph);
+  const path = objectId ? graph.objects.get(objectId)?.path ?? objectId : 'Undefined';
+  const content = objectId ? fileContents.get(objectId) : undefined;
   const location = content ? getLineColumnFromOffset(content, edge.from_offset_start) : null;
   const line = location?.lineNumber ?? Number.MAX_SAFE_INTEGER;
   const column = location?.column ?? Number.MAX_SAFE_INTEGER;
@@ -277,16 +277,16 @@ function compareEdges(
 }
 
 function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) {
-  const fileId = resolveEdgeFileId(edge, graph);
-  const filePath = fileId ? graph.files.get(fileId)?.path ?? fileId : 'Undefined';
-  const location = formatOffsetLocation(fileId ? fileContents.get(fileId) : undefined, edge.from_offset_start);
+  const objectId = resolveEdgeObjectId(edge, graph);
+  const filePath = objectId ? graph.objects.get(objectId)?.path ?? objectId : 'Undefined';
+  const location = formatOffsetLocation(objectId ? fileContents.get(objectId) : undefined, edge.from_offset_start);
 
   function openInEditor() {
-    if (!fileId) {
+    if (!objectId) {
       return;
     }
     setCodeFocus({
-      file_id: fileId,
+      object_id: objectId,
       start_offset: edge.from_offset_start,
       end_offset: edge.from_offset_end,
     });
@@ -333,15 +333,15 @@ export interface EdgesHoverProps {
   graph: Graph;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
-  ensureFileContent: (fileId: string) => void;
+  ensureFileContent: (objectId: string) => void;
 }
 
 export function EdgesHover({ edges, setCodeFocus, graph, fileContents, ensureFileContent }: EdgesHoverProps) {
   useEffect(() => {
     edges.forEach((edge) => {
-      const fileId = resolveEdgeFileId(edge, graph);
-      if (fileId) {
-        ensureFileContent(fileId);
+      const objectId = resolveEdgeObjectId(edge, graph);
+      if (objectId) {
+        ensureFileContent(objectId);
       }
     });
   }, [edges, graph, ensureFileContent]);
