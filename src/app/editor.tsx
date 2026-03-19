@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditor, IRange } from 'monaco-editor';
-import { Node, Edge, Graph, GraphFile } from './graph';
+import { Node, Edge, Graph, GraphObject } from './graph';
 import { setupEditorTestApis } from './testing/editor_test_utils';
 
 import { fetchQuery } from './askld';
@@ -24,12 +24,12 @@ interface EditorProps {
     onProblemsChange?: (problems: Problem[]) => void;
 }
 
-type RustGraphFileEntry = { file_id: string; path: string; project_id?: string | null };
+type RustGraphObjectEntry = { object_id: string; path: string; project_id?: string | null };
 
 interface RustGraph {
     nodes: Map<string, Node>;
     edges: Set<Edge>;
-    files: Array<RustGraphFileEntry>;
+    objects: Array<RustGraphObjectEntry>;
     warnings?: QueryDiagnostic[];
 }
 
@@ -272,16 +272,16 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 nodes.set(node.id, node)
             })
 
-            let files = new Map<string, GraphFile>()
-            data.files.forEach((entry) => {
+            let objects = new Map<string, GraphObject>()
+            data.objects.forEach((entry) => {
                 if (!entry || typeof entry !== 'object') {
                     return;
                 }
-                const info = entry as { file_id?: unknown; path?: unknown; project_id?: unknown };
-                if (typeof info.file_id !== 'string' || typeof info.path !== 'string') {
+                const info = entry as { object_id?: unknown; path?: unknown; project_id?: unknown };
+                if (typeof info.object_id !== 'string' || typeof info.path !== 'string') {
                     return;
                 }
-                files.set(info.file_id, {
+                objects.set(info.object_id, {
                     path: info.path,
                     project_id: typeof info.project_id === 'string' ? info.project_id : null,
                 });
@@ -296,9 +296,9 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 edgeMap.get(edge.id)!.push(edge);
             });
 
-            console.log("FILES", files, edgeMap, nodes)
+            console.log("OBJECTS", objects, edgeMap, nodes)
             onGraphChange(
-                { nodes: nodes, edges: edgeMap, files: files }
+                { nodes: nodes, edges: edgeMap, objects: objects }
             );
             clearEditorErrorMarker(monacoRef.current, ed);
             const warningProblems = buildProblemsFromWarnings(data.warnings, queryText);

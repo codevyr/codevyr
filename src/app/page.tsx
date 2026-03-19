@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout, Model, TabNode, type IJsonModel, Actions } from 'flexlayout-react';
 import 'flexlayout-react/style/light.css';
 import { EditorComponent, EditorHandle } from './editor';
-import { Graph, GraphFile, Node, Edge } from './graph';
+import { Graph, GraphObject, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus } from './code_viewer';
 import { GraphViewer } from './graph_viewer';
 import { DEFAULT_QUERY } from './default-queries';
@@ -133,19 +133,19 @@ function GraphCode({ graph, fileContents }: GraphCodeProps) {
     }
   }
 
-  function resolveEdgeFileId(edge: Edge): string | null {
-    if (edge.from_file) {
-      return edge.from_file;
+  function resolveEdgeObjectId(edge: Edge): string | null {
+    if (edge.from_object) {
+      return edge.from_object;
     }
 
     const node = graph.nodes.get(edge.from);
-    return node?.declarations[0]?.file_id ?? null;
+    return node?.symbol_instances[0]?.object_id ?? null;
   }
 
   function get_loc(edge: Edge): string {
-    const fileId = resolveEdgeFileId(edge);
-    const filePath = fileId ? graph.files.get(fileId)?.path ?? fileId : 'Unknown';
-    const location = formatOffsetLocation(fileId ? fileContents.get(fileId) : undefined, edge.from_offset_start);
+    const objectId = resolveEdgeObjectId(edge);
+    const filePath = objectId ? graph.objects.get(objectId)?.path ?? objectId : 'Unknown';
+    const location = formatOffsetLocation(objectId ? fileContents.get(objectId) : undefined, edge.from_offset_start);
     return `${filePath}:${location}`;
   }
 
@@ -171,7 +171,7 @@ export default function Home() {
   const [queryGraph, setQueryGraph] = useState<Graph>({
     nodes: new Map<string, Node>(),
     edges: new Map<string, Array<Edge>>(),
-    files: new Map<string, GraphFile>(),
+    objects: new Map<string, GraphObject>(),
   });
   const [problems, setProblems] = useState<Problem[]>([]);
   const editorHandleRef = useRef<EditorHandle | null>(null);
@@ -273,12 +273,12 @@ export default function Home() {
   }, []);
 
   const handleSelectFile = useCallback((focus: CodeFocus) => {
-    const { file_id: fileId, start_offset: startOffset, end_offset: endOffset } = focus;
-    const fileInfo = queryGraph.files.get(fileId);
-    const filePath = fileInfo?.path ?? null;
-    const projectId = fileInfo?.project_id ?? null;
+    const { object_id: objectId, start_offset: startOffset, end_offset: endOffset } = focus;
+    const objectInfo = queryGraph.objects.get(objectId);
+    const filePath = objectInfo?.path ?? null;
+    const projectId = objectInfo?.project_id ?? null;
     void revealFile(
-      { fileId, path: filePath, projectId, startOffset, endOffset: endOffset ?? null },
+      { fileId: objectId, path: filePath, projectId, startOffset, endOffset: endOffset ?? null },
       { cache: fileTreeCache, openFileById },
     ).then((resolved) => {
       if (!resolved.projectId || !resolved.path) {
