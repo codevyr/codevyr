@@ -174,9 +174,18 @@ export function NodeHover({
   fileContents,
   ensureFileContent,
 }: NodeHoverProps) {
-  const definitionInstances = node.symbol_instances.filter((d) => d.symbol_type === 'Definition');
-  const declarationInstances = node.symbol_instances.filter((d) => d.symbol_type === 'Declaration');
-  const hasBothSections = definitionInstances.length > 0 && declarationInstances.length > 0;
+  // Group instances by symbol_type
+  const instancesByType = new Map<string, SymbolInstance[]>();
+  node.symbol_instances.forEach((instance) => {
+    const type = instance.symbol_type;
+    if (!instancesByType.has(type)) {
+      instancesByType.set(type, []);
+    }
+    instancesByType.get(type)!.push(instance);
+  });
+
+  // Determine if we need section headers (multiple types present)
+  const hasMultipleSections = instancesByType.size > 1;
 
   useEffect(() => {
     const seen = new Set<string>();
@@ -203,22 +212,17 @@ export function NodeHover({
         </button>
       </div>
       <table>
-        <NodeHoverSection
-          sectionName="Definition"
-          showHeader={hasBothSections}
-          instances={definitionInstances}
-          graph={graph}
-          setCodeFocus={setCodeFocus}
-          fileContents={fileContents}
-        />
-        <NodeHoverSection
-          sectionName="Declaration"
-          showHeader={hasBothSections}
-          instances={declarationInstances}
-          graph={graph}
-          setCodeFocus={setCodeFocus}
-          fileContents={fileContents}
-        />
+        {Array.from(instancesByType.entries()).map(([typeName, instances]) => (
+          <NodeHoverSection
+            key={typeName}
+            sectionName={typeName}
+            showHeader={hasMultipleSections}
+            instances={instances}
+            graph={graph}
+            setCodeFocus={setCodeFocus}
+            fileContents={fileContents}
+          />
+        ))}
       </table>
     </div>
   );
