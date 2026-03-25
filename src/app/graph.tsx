@@ -25,6 +25,12 @@ export interface Edge {
     from_offset_end: OffsetValue;
 }
 
+export interface HasEdge {
+    id: string;
+    parent: string;
+    child: string;
+}
+
 export interface GraphObject {
     path: string;
     project_id: string | null;
@@ -33,5 +39,6 @@ export interface GraphObject {
 export interface Graph {
     nodes: Map<string, Node>;
     edges: Map<string, Array<Edge>>;
+    has_edges: Array<HasEdge>;
     objects: Map<string, GraphObject>;
 }
