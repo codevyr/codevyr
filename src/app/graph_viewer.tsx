@@ -17,18 +17,29 @@ import ReactFlow, {
   useNodesState,
 } from 'reactflow';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { Edge as GraphEdge, Graph, Node as GraphNode } from './graph';
+import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, buildHierarchy, filterRedundantEdges } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
 import { layoutGraphWithDagre, layoutGraphWithElk } from './lib/graph_layout';
+import { parseOffset } from './lib/offsets';
+import { SymbolInstance } from './graph';
 import { setupGraphTestApis } from './testing/graph_test_utils';
+
+function isDirectoryInstance(inst: SymbolInstance): boolean {
+  return inst.symbol_type === 'Directory';
+}
+
+function isSelfReference(inst: SymbolInstance): boolean {
+  return parseOffset(inst.start_offset) === 1 && parseOffset(inst.end_offset) === 0;
+}
 
 export interface GraphProps {
   graph: Graph;
   selectFile: (codeFocus: CodeFocus) => void;
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
+  revealDirectory: (objectId: string) => void;
 }
 
 type GraphNodeData = {
@@ -39,6 +50,8 @@ type GraphNodeData = {
   ensureFileContent: (objectId: string) => void;
   selectFile: (codeFocus: CodeFocus) => void;
   focusNode: (nodeId: string) => void;
+  revealDirectory: (objectId: string) => void;
+  isGroupNode?: boolean;
 };
 
 type GraphEdgeData = {
@@ -79,9 +92,11 @@ function applyLayoutPadding(
   if (nodes.length === 0) {
     return nodes;
   }
+  // Only consider root-level nodes (no parent) for min computation
+  const rootNodes = nodes.filter((n) => !(n as any).parentNode);
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
-  nodes.forEach((node) => {
+  rootNodes.forEach((node) => {
     minX = Math.min(minX, node.position.x);
     minY = Math.min(minY, node.position.y);
   });
@@ -93,13 +108,17 @@ function applyLayoutPadding(
   if (offsetX === 0 && offsetY === 0) {
     return nodes;
   }
-  return nodes.map((node) => ({
-    ...node,
-    position: {
-      x: node.position.x + offsetX,
-      y: node.position.y + offsetY,
-    },
-  }));
+  // Only shift root-level nodes; child positions are relative to parent
+  return nodes.map((node) => {
+    if ((node as any).parentNode) return node;
+    return {
+      ...node,
+      position: {
+        x: node.position.x + offsetX,
+        y: node.position.y + offsetY,
+      },
+    };
+  });
 }
 
 function triggerContextMenu(event: React.MouseEvent<Element>) {
@@ -257,7 +276,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
   const selectionContext = useContext(SelectionContext);
   const lastSelected = selectionContext?.lastSelected ?? null;
   const setLastSelected = selectionContext?.setLastSelected;
-  const { node, graph, fileContents, ensureFileContent, selectFile } = data;
+  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory } = data;
   const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
     ? ({ '--graph-node-color': node.color } as React.CSSProperties)
@@ -265,10 +284,31 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
   const isOpen = activeMenu?.kind === 'node' && activeMenu.id === id;
   const isSelected = lastSelected?.kind === 'node' && lastSelected.id === id;
   const instanceCount = node.symbol_instances.length;
+  const isDirectoryNode = isGroupNode || node.symbol_instances.every((inst) => isDirectoryInstance(inst));
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       setLastSelected?.({ kind: 'node', id });
+
+      if (isDirectoryNode) {
+        const realInstances = node.symbol_instances.filter((inst) => !isDirectoryInstance(inst));
+        if (realInstances.length > 0) {
+          if (isOpen) {
+            setActiveMenu?.(null);
+            return;
+          }
+          triggerContextMenu(event);
+          return;
+        }
+        // Only directory instances — reveal directory in tree
+        const selfRef = node.symbol_instances.find((inst) => isSelfReference(inst)) ?? node.symbol_instances[0];
+        if (selfRef) {
+          revealDirectory(selfRef.object_id);
+        }
+        setActiveMenu?.(null);
+        return;
+      }
+
       if (instanceCount === 1) {
         const inst = node.symbol_instances[0];
         selectFile({
@@ -288,7 +328,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
         triggerContextMenu(event);
       }
     },
-    [instanceCount, id, isOpen, node, selectFile, setActiveMenu, setLastSelected],
+    [instanceCount, id, isDirectoryNode, isOpen, node, revealDirectory, selectFile, setActiveMenu, setLastSelected],
   );
 
   const handleOpenChange = useCallback(
@@ -302,15 +342,19 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
     <ContextMenu.Root onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         <div
-          className={`graph-node${isSelected ? ' graph-node-selected' : ''}`}
+          className={isGroupNode
+            ? `graph-group-node${isSelected ? ' graph-group-node-selected' : ''}`
+            : `graph-node${isSelected ? ' graph-node-selected' : ''}`}
           data-testid={`graph-node-${id}`}
-          style={nodeStyle}
+          style={isGroupNode ? { width: '100%', height: '100%' } : nodeStyle}
           title={node.label}
           onClick={handleClick}
           onContextMenu={(event) => event.stopPropagation()}
         >
           <Handle id="target-top" type="target" position={Position.Top} />
-          {displayLabel}
+          {isGroupNode
+            ? <div className="graph-group-node-header">{displayLabel}</div>
+            : displayLabel}
           <Handle id="source-bottom" type="source" position={Position.Bottom} />
           <Handle
             id="target-top-right"
@@ -339,6 +383,8 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
             focusNode={data.focusNode}
             fileContents={fileContents}
             ensureFileContent={ensureFileContent}
+            isGroupNode={isDirectoryNode}
+            revealDirectory={revealDirectory}
           />
         </ContextMenu.Content>
       </ContextMenu.Portal>
@@ -516,6 +562,7 @@ export function GraphViewer({
   selectFile,
   fileContents,
   ensureFileContent,
+  revealDirectory,
 }: GraphProps) {
   const [nodes, setNodes] = useNodesState<GraphNodeData>([]);
   const [edges, setEdges] = useEdgesState<GraphEdgeData>([]);
@@ -588,8 +635,9 @@ export function GraphViewer({
       }
       const width = targetNode.width ?? (targetNode as any).measured?.width ?? 0;
       const height = targetNode.height ?? (targetNode as any).measured?.height ?? 0;
-      const centerX = targetNode.position.x + width / 2;
-      const centerY = targetNode.position.y + height / 2;
+      const pos = (targetNode as any).positionAbsolute ?? targetNode.position;
+      const centerX = pos.x + width / 2;
+      const centerY = pos.y + height / 2;
       const currentZoom = reactFlowInstanceRef.current?.getViewport().zoom ?? 1;
       reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: currentZoom });
     },
@@ -607,12 +655,27 @@ export function GraphViewer({
       }
     });
 
+    const hierarchy = buildHierarchy(graph.has_edges, graph.nodes);
+    const { childToParent, parentToChildren } = hierarchy;
+
+    const filteredEdges = filterRedundantEdges(graph.edges, parentToChildren, graph.nodes);
+
+    // Build a lookup of existing nodes to preserve layout-computed style (width/height on group nodes)
+    const existingNodeMap = new Map(
+      nodesRef.current.map((n) => [n.id, n]),
+    );
+
     graph.nodes.forEach((node) => {
       const position = positionsRef.current.get(node.id) ?? { x: 0, y: 0 };
-      nextNodes.push({
+      const isGroup = parentToChildren.has(node.id);
+      const parentId = childToParent.get(node.id);
+      const existing = existingNodeMap.get(node.id);
+      const flowNode: FlowNode<GraphNodeData> = {
         id: node.id,
         type: 'graphNode',
         position,
+        // Preserve layout-computed style (width/height) on group nodes
+        ...(isGroup && existing?.style ? { style: existing.style } : {}),
         data: {
           label: displayLabels.get(node.id),
           node,
@@ -621,18 +684,31 @@ export function GraphViewer({
           ensureFileContent,
           selectFile,
           focusNode,
+          revealDirectory,
+          isGroupNode: isGroup,
         },
-      });
+      };
+      if (parentId) {
+        (flowNode as any).parentNode = parentId;
+        (flowNode as any).extent = 'parent';
+      }
+      nextNodes.push(flowNode);
     });
 
-    graph.edges.forEach((edgeArray, edgeId) => {
-      const edge = edgeArray[0];
-      if (!edge) {
-        return;
-      }
-      if (!graph.nodes.has(edge.from) || !graph.nodes.has(edge.to)) {
-        return;
-      }
+    // Sort so parents come before children (ReactFlow requirement)
+    const depthCache = new Map<string, number>();
+    function getDepth(nodeId: string): number {
+      if (depthCache.has(nodeId)) return depthCache.get(nodeId)!;
+      const parent = childToParent.get(nodeId);
+      const depth = parent ? getDepth(parent) + 1 : 0;
+      depthCache.set(nodeId, depth);
+      return depth;
+    }
+    nextNodes.sort((a, b) => getDepth(a.id) - getDepth(b.id));
+
+    // filterRedundantEdges guarantees non-empty edgeArray with valid from/to nodes
+    filteredEdges.forEach((edgeArray, edgeId) => {
+      const edge = edgeArray[0]!;
       const isSelfLoop = edge.from === edge.to;
       nextEdges.push({
         id: edgeId,
@@ -661,11 +737,11 @@ export function GraphViewer({
       });
     });
 
-    return { nextNodes, nextEdges };
-  }, [graph, fileContents, ensureFileContent, selectFile, focusNode]);
+    return { nextNodes, nextEdges, hierarchy };
+  }, [graph, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory]);
 
   useEffect(() => {
-    const { nextNodes, nextEdges } = buildFlowElements();
+    const { nextNodes, nextEdges, hierarchy } = buildFlowElements();
     setEdges(nextEdges);
     setNodes(nextNodes);
 
@@ -675,7 +751,8 @@ export function GraphViewer({
     }
 
     const graphChanged = graphRef.current !== graph;
-    const shouldUseDagre = !hasNodeOverlap(graphRef.current, graph);
+    const hasHierarchy = hierarchy.childToParent.size > 0;
+    const shouldUseDagre = !hasHierarchy && !hasNodeOverlap(graphRef.current, graph);
     graphRef.current = graph;
 
     if (!graphChanged) {
@@ -684,14 +761,15 @@ export function GraphViewer({
 
     const layoutRunId = ++layoutRunIdRef.current;
     const shouldApplyInitialPadding = positionsRef.current.size === 0;
-    const preserveExisting = !shouldUseDagre && positionsRef.current.size > 0;
-    const shouldFitView = shouldUseDagre || !preserveExisting;
+    const preserveExisting = !shouldUseDagre && !hasHierarchy && positionsRef.current.size > 0;
+    const shouldFitView = shouldUseDagre || hasHierarchy || !preserveExisting;
     const layoutPromise = shouldUseDagre
       ? layoutGraphWithDagre(nextNodes, nextEdges)
       : layoutGraphWithElk(nextNodes, nextEdges, {
           preserveExisting,
           positions: positionsRef.current,
           incremental: preserveExisting,
+          hierarchy: hasHierarchy ? hierarchy : undefined,
         });
 
     layoutPromise.then((layoutedNodes) => {
@@ -730,7 +808,13 @@ export function GraphViewer({
     }
 
     const layoutRunId = ++layoutRunIdRef.current;
-    layoutGraphWithDagre(nodes, edges).then((layoutedNodes) => {
+    const hasHierarchy = graph.has_edges.length > 0;
+    const layoutPromise = hasHierarchy
+      ? layoutGraphWithElk(nodes, edges, {
+          hierarchy: buildHierarchy(graph.has_edges, graph.nodes),
+        })
+      : layoutGraphWithDagre(nodes, edges);
+    layoutPromise.then((layoutedNodes) => {
       if (layoutRunId !== layoutRunIdRef.current) {
         return;
       }
@@ -742,7 +826,7 @@ export function GraphViewer({
         reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
       });
     });
-  }, [edges, nodes, setNodes]);
+  }, [edges, graph, nodes, setNodes]);
 
   const handleCenterGraph = useCallback(() => {
     if (nodes.length === 0) {

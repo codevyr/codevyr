@@ -1,9 +1,17 @@
 import { useEffect } from 'react';
-import { LuArrowUpRight, LuCopy, LuFocus } from 'react-icons/lu';
+import { LuArrowUpRight, LuCopy, LuFocus, LuFolderOpen } from 'react-icons/lu';
 import { CodeFocus } from './code_viewer';
 import { Edge, SymbolInstance, Node, Graph } from './graph';
 import { copyToClipboard } from './lib/clipboard';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
+
+function isDirectoryInstance(inst: SymbolInstance): boolean {
+  return inst.symbol_type === 'Directory';
+}
+
+function isSelfReference(inst: SymbolInstance): boolean {
+  return parseOffset(inst.start_offset) === 1 && parseOffset(inst.end_offset) === 0;
+}
 
 type SymbolInstanceSortInfo = {
   path: string;
@@ -164,6 +172,8 @@ export interface NodeHoverProps {
   focusNode: (nodeId: string) => void;
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
+  isGroupNode?: boolean;
+  revealDirectory?: (objectId: string) => void;
 }
 
 export function NodeHover({
@@ -173,10 +183,20 @@ export function NodeHover({
   graph,
   fileContents,
   ensureFileContent,
+  isGroupNode,
+  revealDirectory,
 }: NodeHoverProps) {
+  // For group nodes, separate directory instances from real code references
+  const realInstances = isGroupNode
+    ? node.symbol_instances.filter((inst) => !isDirectoryInstance(inst))
+    : node.symbol_instances;
+  const selfRefInstance = isGroupNode
+    ? node.symbol_instances.find((inst) => isSelfReference(inst)) ?? node.symbol_instances.find((inst) => isDirectoryInstance(inst))
+    : undefined;
+
   // Group instances by symbol_type
   const instancesByType = new Map<string, SymbolInstance[]>();
-  node.symbol_instances.forEach((instance) => {
+  realInstances.forEach((instance) => {
     const type = instance.symbol_type;
     if (!instancesByType.has(type)) {
       instancesByType.set(type, []);
@@ -189,14 +209,18 @@ export function NodeHover({
 
   useEffect(() => {
     const seen = new Set<string>();
-    node.symbol_instances.forEach((instance) => {
+    realInstances.forEach((instance) => {
       if (seen.has(instance.object_id)) {
         return;
       }
       seen.add(instance.object_id);
       ensureFileContent(instance.object_id);
     });
-  }, [node, ensureFileContent]);
+  }, [node, ensureFileContent, realInstances]);
+
+  const dirPath = selfRefInstance
+    ? graph.objects.get(selfRefInstance.object_id)?.path
+    : undefined;
 
   return (
     <div className="node-hover">
@@ -204,6 +228,16 @@ export function NodeHover({
         <div className="node-hover-title" title={node.label}>
           {node.label}
         </div>
+        {isGroupNode && revealDirectory && selfRefInstance && (
+          <button
+            type="button"
+            className="node-hover-icon"
+            onClick={() => revealDirectory(selfRefInstance.object_id)}
+            title="Reveal in tree"
+          >
+            <LuFolderOpen />
+          </button>
+        )}
         <button type="button" className="node-hover-icon" onClick={() => focusNode(node.id)} title="Focus node">
           <LuFocus />
         </button>
@@ -211,6 +245,9 @@ export function NodeHover({
           <LuCopy />
         </button>
       </div>
+      {isGroupNode && realInstances.length === 0 && dirPath && (
+        <div className="node-hover-dir-path">{dirPath}</div>
+      )}
       <table>
         {Array.from(instancesByType.entries()).map(([typeName, instances]) => (
           <NodeHoverSection

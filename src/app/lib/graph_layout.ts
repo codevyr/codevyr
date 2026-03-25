@@ -1,6 +1,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import dagre from 'dagre';
 import type { Edge as FlowEdge, Node as FlowNode } from 'reactflow';
+import type { HierarchyInfo } from '../graph';
 
 const elk = new ELK();
 
@@ -93,6 +94,8 @@ function pruneEdgesForLayout(edges: FlowEdge[]) {
   return pruned;
 }
 
+export type { HierarchyInfo };
+
 export type LayoutOptions = {
   direction?: 'DOWN' | 'RIGHT';
   layerSpacing?: number;
@@ -100,9 +103,82 @@ export type LayoutOptions = {
   preserveExisting?: boolean;
   positions?: Map<string, { x: number; y: number }>;
   incremental?: boolean;
+  hierarchy?: HierarchyInfo;
 };
 
 export type DagreLayoutOptions = Pick<LayoutOptions, 'direction' | 'layerSpacing' | 'nodeSpacing'>;
+
+function buildElkNode(
+  node: FlowNode,
+  preserveExisting: boolean,
+  positions: Map<string, { x: number; y: number }>,
+) {
+  const { width, height } = resolveNodeSize(node);
+  const existingPosition = positions.get(node.id);
+  const shouldPreserve = preserveExisting && existingPosition;
+  return {
+    id: node.id,
+    width,
+    height,
+    ...(shouldPreserve
+      ? { x: existingPosition.x, y: existingPosition.y }
+      : {}),
+    layoutOptions: shouldPreserve ? { 'elk.fixed': 'true' } : undefined,
+  };
+}
+
+function buildNestedElkChildren(
+  nodeIds: string[],
+  nodeMap: Map<string, FlowNode>,
+  hierarchy: HierarchyInfo,
+  preserveExisting: boolean,
+  positions: Map<string, { x: number; y: number }>,
+): any[] {
+  const result: any[] = [];
+  for (const id of nodeIds) {
+    const node = nodeMap.get(id);
+    if (!node) continue;
+    const children = hierarchy.parentToChildren.get(id);
+    if (children && children.size > 0) {
+      // Parent node — don't set width/height, let ELK compute from children
+      const existingPosition = positions.get(id);
+      const shouldPreserve = preserveExisting && existingPosition;
+      result.push({
+        id,
+        ...(shouldPreserve
+          ? { x: existingPosition.x, y: existingPosition.y }
+          : {}),
+        layoutOptions: {
+          ...(shouldPreserve ? { 'elk.fixed': 'true' } : {}),
+          'elk.padding': '[top=40,left=10,bottom=10,right=10]',
+          'elk.algorithm': 'layered',
+        },
+        children: buildNestedElkChildren(
+          Array.from(children),
+          nodeMap,
+          hierarchy,
+          preserveExisting,
+          positions,
+        ),
+      });
+    } else {
+      result.push(buildElkNode(node, preserveExisting, positions));
+    }
+  }
+  return result;
+}
+
+function collectLayoutNodes(
+  elkChildren: any[],
+  layoutNodes: Map<string, any>,
+) {
+  for (const child of elkChildren) {
+    layoutNodes.set(child.id, child);
+    if (child.children) {
+      collectLayoutNodes(child.children, layoutNodes);
+    }
+  }
+}
 
 export async function layoutGraphWithElk(
   nodes: FlowNode[],
@@ -114,6 +190,7 @@ export async function layoutGraphWithElk(
     preserveExisting = false,
     positions = new Map<string, { x: number; y: number }>(),
     incremental = true,
+    hierarchy,
   }: LayoutOptions,
 ) {
   const layoutEdges = pruneEdgesForLayout(edges);
@@ -121,6 +198,28 @@ export async function layoutGraphWithElk(
   const resolvedNodeSpacing = nodeSpacing;
   const resolvedEdgeSpacing = 1;
   const edgeTrackFactor = 0.5;
+
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const hasHierarchy = hierarchy && hierarchy.childToParent.size > 0;
+
+  let elkChildren: any[];
+  if (hasHierarchy) {
+    // Build root-level node IDs (those without a parent)
+    const rootNodeIds = nodes
+      .map((n) => n.id)
+      .filter((id) => !hierarchy.childToParent.has(id));
+    elkChildren = buildNestedElkChildren(
+      rootNodeIds,
+      nodeMap,
+      hierarchy,
+      preserveExisting,
+      positions,
+    );
+  } else {
+    elkChildren = nodes.map((node) =>
+      buildElkNode(node, preserveExisting, positions),
+    );
+  }
 
   const elkGraph = {
     id: 'root',
@@ -135,24 +234,12 @@ export async function layoutGraphWithElk(
       'elk.layered.edgeRouting.splines.sloppy.layerSpacingFactor': String(edgeTrackFactor),
       'elk.edgeRouting': 'POLYLINE',
       'elk.incremental': String(incremental),
+      ...(hasHierarchy
+        ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' }
+        : {}),
     },
-    children: nodes.map((node) => {
-      const { width, height } = resolveNodeSize(node);
-      const existingPosition = positions.get(node.id);
-      const shouldPreserve = preserveExisting && existingPosition;
-      return {
-        id: node.id,
-        width,
-        height,
-        ...(shouldPreserve
-          ? {
-              x: existingPosition.x,
-              y: existingPosition.y,
-            }
-          : {}),
-        layoutOptions: shouldPreserve ? { 'elk.fixed': 'true' } : undefined,
-      };
-    }),
+    children: elkChildren,
+    // All edges at root level — ELK handles cross-hierarchy routing
     edges: layoutEdges.map((edge) => ({
       id: edge.id,
       sources: [edge.source],
@@ -161,9 +248,8 @@ export async function layoutGraphWithElk(
   };
 
   const layout = await elk.layout(elkGraph);
-  const layoutNodes = new Map(
-    (layout.children ?? []).map((node: any) => [node.id, node]),
-  );
+  const layoutNodes = new Map<string, any>();
+  collectLayoutNodes(layout.children ?? [], layoutNodes);
 
   return nodes.map((node) => {
     const layoutNode = layoutNodes.get(node.id);
@@ -173,13 +259,23 @@ export async function layoutGraphWithElk(
     if (preserveExisting && positions.has(node.id)) {
       return { ...node, position: positions.get(node.id)! };
     }
-    return {
+    const isParent =
+      hasHierarchy && hierarchy.parentToChildren.has(node.id);
+    const result: FlowNode = {
       ...node,
       position: {
         x: layoutNode.x ?? node.position.x,
         y: layoutNode.y ?? node.position.y,
       },
     };
+    if (isParent) {
+      result.style = {
+        ...(result.style ?? {}),
+        width: layoutNode.width,
+        height: layoutNode.height,
+      };
+    }
+    return result;
   });
 }
 

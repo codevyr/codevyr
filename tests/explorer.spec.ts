@@ -119,12 +119,12 @@ const graphResponse = {
     {
       id: '1',
       label: 'k8s.io/kubernetes/cmd/kubelet.main',
-      declarations: [
+      symbol_instances: [
         {
           id: '1',
           symbol: '1',
-          file_id: '1',
-          symbol_type: 'Declaration',
+          object_id: '1',
+          symbol_type: 'Function',
           start_offset: 0,
           end_offset: 1,
         },
@@ -133,12 +133,12 @@ const graphResponse = {
     {
       id: '201',
       label: 'k8s.io/component-base/logs.InitLogs',
-      declarations: [
+      symbol_instances: [
         {
           id: '201',
           symbol: '201',
-          file_id: '11',
-          symbol_type: 'Declaration',
+          object_id: '11',
+          symbol_type: 'Function',
           start_offset: 0,
           end_offset: 1,
         },
@@ -146,9 +146,9 @@ const graphResponse = {
     },
   ],
   edges: [],
-  files: [
-    { file_id: '1', path: fileIdToPath['1'], project_id: PROJECT_ID },
-    { file_id: '11', path: fileIdToPath['11'], project_id: PROJECT_ID },
+  objects: [
+    { object_id: '1', path: fileIdToPath['1'], project_id: PROJECT_ID },
+    { object_id: '11', path: fileIdToPath['11'], project_id: PROJECT_ID },
   ],
 };
 

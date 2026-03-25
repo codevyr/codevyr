@@ -118,6 +118,19 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollKeyRef = useRef<string | null>(null);
 
+  // Track when the active file last changed (in Date.now() scale) so we can
+  // compare against revealRequest.nonce to determine which happened more recently.
+  const fileOpenTimestampRef = useRef(0);
+  useEffect(() => {
+    if (activeFileNonce > 0) {
+      fileOpenTimestampRef.current = Date.now();
+    }
+  }, [activeFileNonce]);
+
+  // Combined nonce that changes on both file opens and directory reveals,
+  // so that manual collapse overrides are invalidated by either action.
+  const navigationNonce = Math.max(activeFileNonce, revealRequest?.nonce ?? 0);
+
   useEffect(() => {
     nodeMapRef.current = nodeMap;
   }, [nodeMap]);
@@ -160,6 +173,16 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
   }, [activeFileId, getFileLocation]);
 
   const revealTarget = useMemo(() => {
+    // If a reveal request arrived after the last file open, prefer it.
+    // This allows directory reveals to override the active file location.
+    const revealIsNewer = revealRequest != null &&
+      revealRequest.nonce > fileOpenTimestampRef.current;
+    if (revealIsNewer) {
+      return {
+        projectId: revealRequest.projectId,
+        path: normalizePath(revealRequest.path),
+      };
+    }
     if (activeLocation) {
       return activeLocation;
     }
@@ -184,29 +207,26 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
     userOverrides.forEach((entry, key) => {
       if (entry.action === 'expand') {
         next.add(key);
-      } else if (entry.scopeKey === activeFileNonce) {
+      } else if (entry.scopeKey === navigationNonce) {
         next.delete(key);
       }
     });
     return next;
-  }, [activeFileNonce, autoExpandedKeys, userOverrides]);
+  }, [navigationNonce, autoExpandedKeys, userOverrides]);
 
   const activePathKey = useMemo(() => {
-    if (!activeFileId) {
-      return null;
+    if (revealTarget) {
+      return nodeKey(revealTarget.projectId, revealTarget.path);
     }
-    if (activeLocation) {
-      return nodeKey(activeLocation.projectId, activeLocation.path);
-    }
-    return revealTarget ? nodeKey(revealTarget.projectId, revealTarget.path) : null;
-  }, [activeFileId, activeLocation, revealTarget]);
+    return null;
+  }, [revealTarget]);
 
   const toggleProject = useCallback((projectId: string) => {
     const key = projectKey(projectId);
     setUserOverrides((prev) => {
       const overrides = new Map(prev);
       if (expandedKeys.has(key)) {
-        overrides.set(key, { action: 'collapse', scopeKey: activeFileNonce });
+        overrides.set(key, { action: 'collapse', scopeKey: navigationNonce });
       } else {
         overrides.set(key, { action: 'expand' });
       }
@@ -215,7 +235,7 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
     if (!expandedKeys.has(key)) {
       loadDirectory(projectId, '/');
     }
-  }, [activeFileNonce, expandedKeys, loadDirectory]);
+  }, [navigationNonce, expandedKeys, loadDirectory]);
 
   const toggleDirectory = useCallback((node: FileNode) => {
     if (node.node_type !== 'dir') {
@@ -227,7 +247,7 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
     setUserOverrides((prev) => {
       const overrides = new Map(prev);
       if (isExpanded) {
-        overrides.set(key, { action: 'collapse', scopeKey: activeFileNonce });
+        overrides.set(key, { action: 'collapse', scopeKey: navigationNonce });
       } else {
         overrides.set(key, { action: 'expand' });
       }
@@ -236,7 +256,7 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
     if (!isExpanded) {
       loadDirectory(node.projectId, loadPath);
     }
-  }, [activeFileNonce, expandedKeys, loadDirectory]);
+  }, [navigationNonce, expandedKeys, loadDirectory]);
 
   const handleFileClick = useCallback((node: FileNode) => {
     if (!node.file_id) {
