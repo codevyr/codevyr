@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditor, IRange } from 'monaco-editor';
-import { Node, Edge, Graph, GraphObject } from './graph';
+import { Node, Edge, HasEdge, Graph, GraphObject } from './graph';
 import { setupEditorTestApis } from './testing/editor_test_utils';
 
 import { fetchQuery } from './askld';
@@ -29,6 +29,7 @@ type RustGraphObjectEntry = { object_id: string; path: string; project_id?: stri
 interface RustGraph {
     nodes: Map<string, Node>;
     edges: Set<Edge>;
+    has_edges?: Array<HasEdge>;
     objects: Array<RustGraphObjectEntry>;
     warnings?: QueryDiagnostic[];
 }
@@ -298,7 +299,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
 
             console.log("OBJECTS", objects, edgeMap, nodes)
             onGraphChange(
-                { nodes: nodes, edges: edgeMap, objects: objects }
+                { nodes: nodes, edges: edgeMap, has_edges: data.has_edges ?? [], objects: objects }
             );
             clearEditorErrorMarker(monacoRef.current, ed);
             const warningProblems = buildProblemsFromWarnings(data.warnings, queryText);

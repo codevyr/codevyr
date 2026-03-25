@@ -171,6 +171,7 @@ export default function Home() {
   const [queryGraph, setQueryGraph] = useState<Graph>({
     nodes: new Map<string, Node>(),
     edges: new Map<string, Array<Edge>>(),
+    has_edges: [],
     objects: new Map<string, GraphObject>(),
   });
   const [problems, setProblems] = useState<Problem[]>([]);
