@@ -145,6 +145,26 @@ body {
   pointer-events: stroke;
 }
 
+.graph-group-node {
+  background: rgba(219,234,254,0.3);
+  border: 1.5px dashed #93c5fd;
+  border-radius: 8px;
+}
+
+.graph-group-node-header {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid rgba(147,197,253,0.4);
+}
+
+.graph-group-node-selected {
+  border-color: color-mix(in srgb, #93c5fd 70%, #000);
+  box-shadow: 0 0 0 2px color-mix(in srgb, #93c5fd 60%, #000),
+    0 8px 18px color-mix(in srgb, #93c5fd 50%, #000);
+}
+
 .graph-handle-hidden {
   opacity: 0;
   width: 1px;

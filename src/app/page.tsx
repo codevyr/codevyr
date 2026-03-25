@@ -294,6 +294,24 @@ export default function Home() {
     });
   }, [fileTreeCache, openFileById, queryGraph]);
 
+  const handleRevealDirectory = useCallback((objectId: string) => {
+    const objectInfo = queryGraph.objects.get(objectId);
+    const filePath = objectInfo?.path ?? null;
+    const projectId = objectInfo?.project_id ?? null;
+    if (!projectId || !filePath) return;
+    fileTreeCache.registerFileLocation(objectId, projectId, filePath);
+    void fileTreeCache.ensurePath(projectId, filePath).then(() => {
+      // Also load the directory's own children so it expands with contents
+      fileTreeCache.loadDirectory(projectId, filePath);
+      setExplorerReveal({
+        fileId: objectId,
+        projectId,
+        path: filePath,
+        nonce: Date.now(),
+      });
+    });
+  }, [fileTreeCache, queryGraph]);
+
   const handleOpenFileFromExplorer = useCallback((fileId: string, filePath: string, projectId: string, fileType?: string | null) => {
     void revealFile(
       { fileId, path: filePath, projectId, fileType: fileType ?? null, startOffset: 0, endOffset: null },
@@ -361,6 +379,7 @@ export default function Home() {
             selectFile={handleSelectFile}
             fileContents={fileContents}
             ensureFileContent={ensureFileContent}
+            revealDirectory={handleRevealDirectory}
           />
         );
       case PROBLEMS_TAB_ID:
@@ -368,7 +387,7 @@ export default function Home() {
       default:
         return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [activeFileId, activeFileNonce, codeTabs, codeTabsRef, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRunQuery, handleSelectFile, handleShare, problems, query, queryGraph, shareStatus]);
+  }, [activeFileId, activeFileNonce, codeTabs, codeTabsRef, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRunQuery, handleSelectFile, handleShare, problems, query, queryGraph, shareStatus]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">

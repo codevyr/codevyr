@@ -4,7 +4,7 @@ import { resolve } from 'path';
 type MockGraphResponse = {
   nodes: Array<unknown>;
   edges: Array<unknown>;
-  files: Array<{ file_id: string; path: string; project_id?: string }>;
+  objects: Array<{ object_id: string; path: string; project_id?: string }>;
 };
 
 const mockDir = resolve(__dirname, 'mock');
@@ -70,12 +70,12 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
     {
       id: '4',
       label: 'k8s.io/component-base/cli.Run',
-      declarations: [
+      symbol_instances: [
         {
           id: '4',
           symbol: '4',
-          file_id: '4',
-          symbol_type: 'Declaration',
+          object_id: '4',
+          symbol_type: 'Function',
           start_offset: offsetFromLineCol('4', 43, 1),
           end_offset: offsetFromLineCol('4', 77, 2),
         },
@@ -84,12 +84,12 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
     {
       id: '22',
       label: 'k8s.io/component-base/cli.run',
-      declarations: [
+      symbol_instances: [
         {
           id: '22',
           symbol: '22',
-          file_id: '4',
-          symbol_type: 'Declaration',
+          object_id: '4',
+          symbol_type: 'Function',
           start_offset: offsetFromLineCol('4', 86, 1),
           end_offset: offsetFromLineCol('4', 145, 2),
         },
@@ -98,12 +98,12 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
     {
       id: '1',
       label: 'k8s.io/kubernetes/cmd/kubelet.main',
-      declarations: [
+      symbol_instances: [
         {
           id: '1',
           symbol: '1',
-          file_id: '1',
-          symbol_type: 'Declaration',
+          object_id: '1',
+          symbol_type: 'Function',
           start_offset: offsetFromLineCol('1', 34, 1),
           end_offset: offsetFromLineCol('1', 38, 2),
         },
@@ -115,7 +115,7 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
       id: '1-4',
       from: '1',
       to: '4',
-      from_file: '1',
+      from_object: '1',
       from_offset_start: offsetSpanForLine('1', 36).start,
       from_offset_end: offsetSpanForLine('1', 36).end,
     },
@@ -123,14 +123,14 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
       id: '4-22',
       from: '4',
       to: '22',
-      from_file: '4',
+      from_object: '4',
       from_offset_start: offsetSpanForLine('4', 44).start,
       from_offset_end: offsetSpanForLine('4', 44).end,
     },
   ],
-  files: [
-    { file_id: '4', path: 'mock/run.go', project_id: '1' },
-    { file_id: '1', path: 'mock/kubelet.go', project_id: '1' },
+  objects: [
+    { object_id: '4', path: 'mock/run.go', project_id: '1' },
+    { object_id: '1', path: 'mock/kubelet.go', project_id: '1' },
   ],
 };
 
@@ -139,12 +139,12 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
     {
       id: '22',
       label: 'k8s.io/component-base/cli.run',
-      declarations: [
+      symbol_instances: [
         {
           id: '22',
           symbol: '22',
-          file_id: '4',
-          symbol_type: 'Declaration',
+          object_id: '4',
+          symbol_type: 'Function',
           start_offset: offsetFromLineCol('4', 86, 1),
           end_offset: offsetFromLineCol('4', 145, 2),
         },
@@ -153,12 +153,12 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
     {
       id: '201',
       label: 'k8s.io/component-base/logs.InitLogs',
-      declarations: [
+      symbol_instances: [
         {
           id: '201',
           symbol: '201',
-          file_id: '11',
-          symbol_type: 'Declaration',
+          object_id: '11',
+          symbol_type: 'Function',
           start_offset: offsetFromLineCol('11', 161, 1),
           end_offset: offsetFromLineCol('11', 173, 2),
         },
@@ -167,12 +167,12 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
     {
       id: '4',
       label: 'k8s.io/component-base/cli.Run',
-      declarations: [
+      symbol_instances: [
         {
           id: '4',
           symbol: '4',
-          file_id: '4',
-          symbol_type: 'Declaration',
+          object_id: '4',
+          symbol_type: 'Function',
           start_offset: offsetFromLineCol('4', 43, 1),
           end_offset: offsetFromLineCol('4', 77, 2),
         },
@@ -181,12 +181,12 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
     {
       id: '1',
       label: 'k8s.io/kubernetes/cmd/kubelet.main',
-      declarations: [
+      symbol_instances: [
         {
           id: '1',
           symbol: '1',
-          file_id: '1',
-          symbol_type: 'Declaration',
+          object_id: '1',
+          symbol_type: 'Function',
           start_offset: offsetFromLineCol('1', 34, 1),
           end_offset: offsetFromLineCol('1', 38, 2),
         },
@@ -198,7 +198,7 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
       id: '22-201',
       from: '22',
       to: '201',
-      from_file: '4',
+      from_object: '4',
       from_offset_start: offsetSpanForLine('4', 132).start,
       from_offset_end: offsetSpanForLine('4', 132).end,
     },
@@ -206,7 +206,7 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
       id: '22-201',
       from: '22',
       to: '201',
-      from_file: '4',
+      from_object: '4',
       from_offset_start: offsetSpanForLine('4', 138).start,
       from_offset_end: offsetSpanForLine('4', 138).end,
     },
@@ -214,7 +214,7 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
       id: '22-201',
       from: '22',
       to: '201',
-      from_file: '4',
+      from_object: '4',
       from_offset_start: offsetSpanForLine('4', 125).start,
       from_offset_end: offsetSpanForLine('4', 125).end,
     },
@@ -222,7 +222,7 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
       id: '4-22',
       from: '4',
       to: '22',
-      from_file: '4',
+      from_object: '4',
       from_offset_start: offsetSpanForLine('4', 44).start,
       from_offset_end: offsetSpanForLine('4', 44).end,
     },
@@ -230,15 +230,15 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
       id: '1-4',
       from: '1',
       to: '4',
-      from_file: '1',
+      from_object: '1',
       from_offset_start: offsetSpanForLine('1', 36).start,
       from_offset_end: offsetSpanForLine('1', 36).end,
     },
   ],
-  files: [
-    { file_id: '4', path: 'mock/run.go', project_id: '1' },
-    { file_id: '11', path: 'mock/logs.go', project_id: '1' },
-    { file_id: '1', path: 'mock/kubelet.go', project_id: '1' },
+  objects: [
+    { object_id: '4', path: 'mock/run.go', project_id: '1' },
+    { object_id: '11', path: 'mock/logs.go', project_id: '1' },
+    { object_id: '1', path: 'mock/kubelet.go', project_id: '1' },
   ],
 };
 
