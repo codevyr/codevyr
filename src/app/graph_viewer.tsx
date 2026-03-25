@@ -21,7 +21,7 @@ import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, buildH
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
-import { layoutGraphWithDagre, layoutGraphWithElk } from './lib/graph_layout';
+import { GROUP_PAD_BOTTOM, GROUP_PAD_LEFT, GROUP_PAD_RIGHT, GROUP_PAD_TOP, layoutGraphWithDagre, layoutGraphWithElk, resolveNodeSize } from './lib/graph_layout';
 import { parseOffset } from './lib/offsets';
 import { SymbolInstance } from './graph';
 import { setupGraphTestApis } from './testing/graph_test_utils';
@@ -557,6 +557,81 @@ function GraphEdgeComponent({
   );
 }
 
+function resizeParentsForNode(
+  draggedNodeId: string,
+  currentNodes: FlowNode<GraphNodeData>[],
+  hierarchy: HierarchyInfo,
+): FlowNode<GraphNodeData>[] {
+  const nodes = currentNodes.map((n) => ({ ...n, position: { ...n.position } }));
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+  let currentId: string | undefined = hierarchy.childToParent.get(draggedNodeId);
+
+  while (currentId) {
+    const parentNode = nodeMap.get(currentId);
+    if (!parentNode) break;
+
+    const childIdSet = hierarchy.parentToChildren.get(currentId);
+    if (!childIdSet || childIdSet.size === 0) break;
+
+    // Collect resolved children for this parent
+    const children: FlowNode<GraphNodeData>[] = [];
+    childIdSet.forEach((childId) => {
+      const child = nodeMap.get(childId);
+      if (child) children.push(child);
+    });
+    if (children.length === 0) break;
+
+    // Compute bounding box of all children relative to parent
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const { width, height } = resolveNodeSize(child);
+      minX = Math.min(minX, child.position.x);
+      minY = Math.min(minY, child.position.y);
+      maxX = Math.max(maxX, child.position.x + width);
+      maxY = Math.max(maxY, child.position.y + height);
+    }
+
+    if (!Number.isFinite(minX)) break;
+
+    // Normalize: shift parent so nearest child sits exactly at the padding boundary.
+    // Positive shift = children were above/left of padding (parent expands outward).
+    // Negative shift = children were below/right of padding (parent shrinks inward).
+    const shiftX = GROUP_PAD_LEFT - minX;
+    const shiftY = GROUP_PAD_TOP - minY;
+
+    if (shiftX !== 0 || shiftY !== 0) {
+      parentNode.position = {
+        x: parentNode.position.x - shiftX,
+        y: parentNode.position.y - shiftY,
+      };
+      for (let i = 0; i < children.length; i++) {
+        children[i].position = {
+          x: children[i].position.x + shiftX,
+          y: children[i].position.y + shiftY,
+        };
+      }
+      maxX += shiftX;
+      maxY += shiftY;
+    }
+
+    parentNode.style = {
+      ...(parentNode.style ?? {}),
+      width: maxX + GROUP_PAD_RIGHT,
+      height: maxY + GROUP_PAD_BOTTOM,
+    };
+
+    currentId = hierarchy.childToParent.get(currentId);
+  }
+
+  return nodes;
+}
+
 export function GraphViewer({
   graph,
   selectFile,
@@ -567,6 +642,7 @@ export function GraphViewer({
   const [nodes, setNodes] = useNodesState<GraphNodeData>([]);
   const [edges, setEdges] = useEdgesState<GraphEdgeData>([]);
   const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const hierarchyRef = useRef<HierarchyInfo>({ childToParent: new Map(), parentToChildren: new Map() });
   const nodesRef = useRef<FlowNode<GraphNodeData>[]>([]);
   const graphRef = useRef<Graph | null>(null);
   const layoutRunIdRef = useRef(0);
@@ -690,7 +766,6 @@ export function GraphViewer({
       };
       if (parentId) {
         (flowNode as any).parentNode = parentId;
-        (flowNode as any).extent = 'parent';
       }
       nextNodes.push(flowNode);
     });
@@ -742,6 +817,7 @@ export function GraphViewer({
 
   useEffect(() => {
     const { nextNodes, nextEdges, hierarchy } = buildFlowElements();
+    hierarchyRef.current = hierarchy;
     setEdges(nextEdges);
     setNodes(nextNodes);
 
@@ -840,6 +916,19 @@ export function GraphViewer({
     reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: currentZoom });
   }, [nodes]);
 
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, draggedNode: FlowNode<GraphNodeData>) => {
+      const hierarchy = hierarchyRef.current;
+      if (!hierarchy.childToParent.has(draggedNode.id)) return;
+      setNodes((currentNodes) => {
+        const resized = resizeParentsForNode(draggedNode.id, currentNodes, hierarchy);
+        positionsRef.current = new Map(resized.map((n) => [n.id, n.position]));
+        return resized;
+      });
+    },
+    [setNodes],
+  );
+
   const handleFitToView = useCallback(() => {
     reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
   }, []);
@@ -892,6 +981,7 @@ export function GraphViewer({
                 setActiveMenu(null);
               }}
               onNodeDragStart={() => setActiveMenu(null)}
+              onNodeDragStop={handleNodeDragStop}
               onlyRenderVisibleElements={shouldOnlyRenderVisibleElements}
               nodesDraggable
               panOnDrag={[0, 1]}

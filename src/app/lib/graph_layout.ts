@@ -10,6 +10,11 @@ const DEFAULT_NODE_HEIGHT = 40;
 const MAX_NODE_WIDTH = 320;
 const CHAR_WIDTH = 7;
 
+export const GROUP_PAD_TOP = 40;
+export const GROUP_PAD_LEFT = 10;
+export const GROUP_PAD_BOTTOM = 10;
+export const GROUP_PAD_RIGHT = 10;
+
 function estimateNodeSize(label: string) {
   const width = Math.min(
     MAX_NODE_WIDTH,
@@ -27,15 +32,17 @@ function resolveNodeLabel(node: FlowNode) {
     : String((node.data as any)?.node?.label ?? node.id);
 }
 
-function resolveNodeSize(node: FlowNode) {
+export function resolveNodeSize(node: FlowNode) {
   const label = resolveNodeLabel(node);
   const size = estimateNodeSize(label);
+  const styleW = typeof node.style?.width === 'number' ? node.style.width : undefined;
+  const styleH = typeof node.style?.height === 'number' ? node.style.height : undefined;
   const measuredWidth = (node as any).measured?.width ?? node.width;
   const measuredHeight = (node as any).measured?.height ?? node.height;
   return {
     label,
-    width: measuredWidth ?? size.width,
-    height: measuredHeight ?? size.height,
+    width: styleW ?? measuredWidth ?? size.width,
+    height: styleH ?? measuredHeight ?? size.height,
   };
 }
 
@@ -150,7 +157,7 @@ function buildNestedElkChildren(
           : {}),
         layoutOptions: {
           ...(shouldPreserve ? { 'elk.fixed': 'true' } : {}),
-          'elk.padding': '[top=40,left=10,bottom=10,right=10]',
+          'elk.padding': `[top=${GROUP_PAD_TOP},left=${GROUP_PAD_LEFT},bottom=${GROUP_PAD_BOTTOM},right=${GROUP_PAD_RIGHT}]`,
           'elk.algorithm': 'layered',
         },
         children: buildNestedElkChildren(
