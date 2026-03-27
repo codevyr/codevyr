@@ -17,7 +17,7 @@ import ReactFlow, {
   useNodesState,
 } from 'reactflow';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, buildHierarchy, filterRedundantEdges } from './graph';
+import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, alignToPreservedPositions, buildPreservedPositionsMap } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
@@ -81,8 +81,6 @@ type SelectionContextValue = {
 
 const SelectionContext = React.createContext<SelectionContextValue | null>(null);
 
-const nodeTypes = { graphNode: GraphNodeComponent };
-const edgeTypes = { graphEdge: GraphEdgeComponent };
 const INITIAL_NODE_OFFSET = 40;
 
 function applyLayoutPadding(
@@ -639,6 +637,8 @@ export function GraphViewer({
   ensureFileContent,
   revealDirectory,
 }: GraphProps) {
+  const nodeTypes = useMemo(() => ({ graphNode: GraphNodeComponent }), []);
+  const edgeTypes = useMemo(() => ({ graphEdge: GraphEdgeComponent }), []);
   const [nodes, setNodes] = useNodesState<GraphNodeData>([]);
   const [edges, setEdges] = useEdgesState<GraphEdgeData>([]);
   const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -646,6 +646,7 @@ export function GraphViewer({
   const nodesRef = useRef<FlowNode<GraphNodeData>[]>([]);
   const graphRef = useRef<Graph | null>(null);
   const layoutRunIdRef = useRef(0);
+  const [layoutGen, setLayoutGen] = useState(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
   const [lastSelected, setLastSelected] = useState<{
@@ -817,12 +818,12 @@ export function GraphViewer({
 
   useEffect(() => {
     const { nextNodes, nextEdges, hierarchy } = buildFlowElements();
-    hierarchyRef.current = hierarchy;
     setEdges(nextEdges);
     setNodes(nextNodes);
 
     if (nextNodes.length === 0) {
       positionsRef.current = new Map();
+      hierarchyRef.current = hierarchy;
       return;
     }
 
@@ -832,18 +833,43 @@ export function GraphViewer({
     graphRef.current = graph;
 
     if (!graphChanged) {
+      hierarchyRef.current = hierarchy;
       return;
     }
 
     const layoutRunId = ++layoutRunIdRef.current;
     const shouldApplyInitialPadding = positionsRef.current.size === 0;
-    const preserveExisting = !shouldUseDagre && !hasHierarchy && positionsRef.current.size > 0;
-    const shouldFitView = shouldUseDagre || hasHierarchy || !preserveExisting;
+
+    let preserveExisting: boolean;
+    let layoutPositions: Map<string, { x: number; y: number }>;
+
+    // When hierarchy is present, we can't use elk.fixed (causes overlaps).
+    // Instead we run ELK fresh and post-process: translate the result to
+    // align with preserved positions, then override preserved nodes.
+    const hierarchyPreservedPositions =
+      hasHierarchy && !shouldUseDagre && positionsRef.current.size > 0
+        ? buildPreservedPositionsMap(
+            getPreservableNodeIds(hierarchyRef.current, hierarchy, positionsRef.current),
+            positionsRef.current,
+          )
+        : new Map<string, { x: number; y: number }>();
+
+    if (shouldUseDagre || positionsRef.current.size === 0 || hasHierarchy) {
+      preserveExisting = false;
+      layoutPositions = new Map();
+    } else {
+      preserveExisting = true;
+      layoutPositions = positionsRef.current;
+    }
+
+    hierarchyRef.current = hierarchy;
+
+    const shouldFitView = shouldUseDagre || (!preserveExisting && hierarchyPreservedPositions.size === 0);
     const layoutPromise = shouldUseDagre
       ? layoutGraphWithDagre(nextNodes, nextEdges)
       : layoutGraphWithElk(nextNodes, nextEdges, {
           preserveExisting,
-          positions: positionsRef.current,
+          positions: layoutPositions,
           incremental: preserveExisting,
           hierarchy: hasHierarchy ? hierarchy : undefined,
         });
@@ -852,13 +878,19 @@ export function GraphViewer({
       if (layoutRunId !== layoutRunIdRef.current) {
         return;
       }
-      const paddedNodes = shouldApplyInitialPadding
-        ? applyLayoutPadding(layoutedNodes, INITIAL_NODE_OFFSET)
+
+      const finalNodes = hierarchyPreservedPositions.size > 0
+        ? alignToPreservedPositions(layoutedNodes, hierarchyPreservedPositions, hierarchy)
         : layoutedNodes;
+
+      const paddedNodes = shouldApplyInitialPadding
+        ? applyLayoutPadding(finalNodes, INITIAL_NODE_OFFSET)
+        : finalNodes;
       setNodes(paddedNodes);
       positionsRef.current = new Map(
         paddedNodes.map((node) => [node.id, node.position]),
       );
+      setLayoutGen((g) => g + 1);
       if (shouldFitView) {
         requestAnimationFrame(() => {
           reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
@@ -954,6 +986,7 @@ export function GraphViewer({
           aria-hidden="true"
           data-testid="graph-metadata"
           data-node-count={graph.nodes.size}
+          data-layout-gen={layoutGen}
           style={{ display: 'none' }}
         />
       )}

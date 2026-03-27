@@ -56,7 +56,19 @@ export async function interceptGraphEndpoints(page: Page) {
   });
 }
 
-export async function loadApp(page: Page) {
+export async function loadApp(page: Page, { mockProjects = true } = {}) {
+  if (mockProjects) {
+    // Return empty project list to suppress "Failed to load projects" errors.
+    // Tests that provide their own project data should pass { mockProjects: false }.
+    await page.route('**/v1/index/projects**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify([]),
+      });
+    });
+  }
   await page.goto('./');
   await page.waitForLoadState('networkidle');
 }

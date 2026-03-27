@@ -229,7 +229,7 @@ async function interceptEndpoints(page: Page) {
 
 async function setupAndSubmitQuery(page: Page) {
   await interceptEndpoints(page);
-  await loadApp(page);
+  await loadApp(page, { mockProjects: false });
   await ensureEditorApis(page);
   await page.locator('.monaco-editor').click();
   await setEditorQuery(page, QUERY);

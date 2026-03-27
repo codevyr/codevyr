@@ -129,8 +129,8 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
     },
   ],
   objects: [
-    { object_id: '4', path: 'mock/run.go', project_id: '1' },
-    { object_id: '1', path: 'mock/kubelet.go', project_id: '1' },
+    { object_id: '4', path: '/mock/run.go', project_id: '1' },
+    { object_id: '1', path: '/mock/kubelet.go', project_id: '1' },
   ],
 };
 
@@ -236,9 +236,9 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
     },
   ],
   objects: [
-    { object_id: '4', path: 'mock/run.go', project_id: '1' },
-    { object_id: '11', path: 'mock/logs.go', project_id: '1' },
-    { object_id: '1', path: 'mock/kubelet.go', project_id: '1' },
+    { object_id: '4', path: '/mock/run.go', project_id: '1' },
+    { object_id: '11', path: '/mock/logs.go', project_id: '1' },
+    { object_id: '1', path: '/mock/kubelet.go', project_id: '1' },
   ],
 };
 
