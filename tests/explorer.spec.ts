@@ -234,7 +234,7 @@ async function stubClipboard(page: Page) {
 test('explorer opens compact directory and copies path', async ({ page }) => {
   await stubClipboard(page);
   await interceptIndexEndpoints(page);
-  await loadApp(page);
+  await loadApp(page, { mockProjects: false });
 
   await page.locator('[data-testid="explorer-project"]').click();
 
@@ -258,7 +258,7 @@ test('explorer opens compact directory and copies path', async ({ page }) => {
 test('graph click reveals explorer and opens editor', async ({ page }) => {
   await interceptIndexEndpoints(page);
   await interceptGraphEndpoint(page);
-  await loadApp(page);
+  await loadApp(page, { mockProjects: false });
   await ensureEditorApis(page);
 
   await page.locator('.monaco-editor').click();

@@ -18,7 +18,7 @@ import {
 import { encodeQuery } from '../src/app/lib/query_share';
 
 test('has title', async ({ page }) => {
-  await page.goto('./');
+  await loadApp(page);
 
   // Expect a title "to contain" a substring.
   await expect(page).toHaveTitle(/Codevyr/);
@@ -34,6 +34,14 @@ test('get started', async ({ page }) => {
 test('loads query from share link hash', async ({ page }) => {
   const sharedQuery = 'graph {\\n  foo -> bar\\n}';
   const encoded = encodeQuery(sharedQuery);
+  // Mock projects endpoint to suppress "Failed to load projects" error
+  await page.route('**/v1/index/projects**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
+  });
   await page.goto(`./#q=${encoded}`);
   await ensureEditorApis(page);
 
