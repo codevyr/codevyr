@@ -36,7 +36,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 end: /^\s*\}\s*$/,
             },
         },
-        wordPattern: /(-?\d*\.\d\w*)|([^\`~!@#\$%\^&*\(\)\-=\+\[\{\]\}\\\|;:'",\.<>\/?\s]+)/g,
+        wordPattern: /(-?\d*\.\d\w*)|(@@?[A-Za-z_]\w*)|(\#[A-Za-z_]\w*)|([^\`~!@#\$%\^&*\(\)\-=\+\[\{\]\}\\\|;:'",\.<>\/?\s]+)/g,
     });
 
     // 3) Monarch tokenizer
@@ -84,12 +84,18 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 // Plain filter / quoted_string: "..."
                 [/\"/, { token: 'string.quote', bracket: '@open', next: '@string' }],
 
-                // Generic verb: @ident ( ... )?
-                [/@ident/, {
-                    // If we see an identifier after '@', treat as a verb name
-                    cases: {
-                        '@default': { token: 'keyword', next: '@maybeCall' },
-                    }
+                // Inherit label shortcut: @@ident
+                [/@@[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
+
+                // Label shortcut: @ident
+                [/@[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
+
+                // Use shortcut: #ident
+                [/#[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
+
+                // Known verb names (without @)
+                [/(?:func|file|mod|dir|type|data|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive)\b/, {
+                    token: 'keyword', next: '@maybeCall',
                 }],
 
                 // Generic identifier (could be a bareword)
@@ -155,7 +161,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 [/\s+/, 'white'],
             ],
 
-            // Recognize @generic identifiers
+            // Recognize generic identifiers
             ident: [
                 [/@ident/, 'identifier']
             ],
@@ -164,7 +170,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
 
     // 4) Basic autocomplete / snippets
     monaco.languages.registerCompletionItemProvider(languageId, {
-        triggerCharacters: ['@', '!', '"', '{'],
+        triggerCharacters: ['@', '!', '"', '{', '#'],
         provideCompletionItems: (model, position) => {
             const word = model.getWordUntilPosition(position);
             const range = new monaco.Range(
@@ -176,27 +182,75 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
 
             const suggestions: monaco.languages.CompletionItem[] = [
                 {
-                    label: '@filter',
+                    label: 'filter',
                     kind: monaco.languages.CompletionItemKind.Function,
-                    insertText: '@filter("${1:pattern}")',
+                    insertText: 'filter("${1:pattern}")',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    detail: 'generic_verb',
+                    detail: 'verb',
                     range: range,
                 },
                 {
-                    label: '@ignore',
+                    label: 'ignore',
                     kind: monaco.languages.CompletionItemKind.Function,
-                    insertText: '@ignore("${1:pattern}")',
+                    insertText: 'ignore("${1:pattern}")',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    detail: 'generic_verb',
+                    detail: 'verb',
                     range: range,
                 },
                 {
-                    label: '@preamble',
+                    label: 'preamble',
                     kind: monaco.languages.CompletionItemKind.Function,
-                    insertText: '@preamble',
+                    insertText: 'preamble',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    detail: 'generic_verb',
+                    detail: 'verb',
+                    range: range,
+                },
+                {
+                    label: 'project',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'project("${1:name}")',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'verb',
+                    range: range,
+                },
+                {
+                    label: 'label',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'label("${1:name}")',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'verb',
+                    range: range,
+                },
+                {
+                    label: 'use',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'use("${1:name}")',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'verb',
+                    range: range,
+                },
+                {
+                    label: '@name — label shortcut',
+                    kind: monaco.languages.CompletionItemKind.Keyword,
+                    insertText: '@${1:name}',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'shortcut for label("name")',
+                    range: range,
+                },
+                {
+                    label: '@@name — inherit label shortcut',
+                    kind: monaco.languages.CompletionItemKind.Keyword,
+                    insertText: '@@${1:name}',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'shortcut for label("name", inherit="true")',
+                    range: range,
+                },
+                {
+                    label: '#name — use shortcut',
+                    kind: monaco.languages.CompletionItemKind.Keyword,
+                    insertText: '#${1:name}',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'shortcut for use("name")',
                     range: range,
                 },
                 {
@@ -226,11 +280,27 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
         provideHover: (model, position) => {
             const word = model.getWordAtPosition(position);
             if (!word) return null;
+            if (word.word.startsWith('@@')) {
+                return {
+                    contents: [
+                        { value: '**inherit label shortcut**' },
+                        { value: '`@@name` is shorthand for `label("name", inherit="true")`' },
+                    ],
+                };
+            }
             if (word.word.startsWith('@')) {
                 return {
                     contents: [
-                        { value: '**generic_verb**' },
-                        { value: 'Form: `@ident` or `@ident("positional", key="value")`' },
+                        { value: '**label shortcut**' },
+                        { value: '`@name` is shorthand for `label("name")`' },
+                    ],
+                };
+            }
+            if (word.word.startsWith('#')) {
+                return {
+                    contents: [
+                        { value: '**use shortcut**' },
+                        { value: '`#name` is shorthand for `use("name")`' },
                     ],
                 };
             }
