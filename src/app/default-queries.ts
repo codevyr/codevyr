@@ -1,20 +1,20 @@
 // Default queries for the application
 
-export const DEFAULT_QUERY = `@preamble {
-    @ignore(package="builtin")
-    @ignore(package="fmt")
-    @ignore(package="context")
-    @ignore(package="os")
-    @ignore(package="log")
-    @ignore(package="runtime")
-    @ignore(package="internal")
-    @ignore(package="ioutil")
-    @ignore(package="golang")
-    @ignore(package="k8s.io/klog")
+export const DEFAULT_QUERY = `preamble {
+    ignore(package="builtin")
+    ignore(package="fmt")
+    ignore(package="context")
+    ignore(package="os")
+    ignore(package="log")
+    ignore(package="runtime")
+    ignore(package="internal")
+    ignore(package="ioutil")
+    ignore(package="golang")
+    ignore(package="k8s.io/klog")
 }
 
-@preamble { /* Preamble applies the following verbs globally. */
-    @project("kubernetes")
+preamble { /* Preamble applies the following verbs globally. */
+    project("kubernetes")
 }
 
 /*
@@ -30,8 +30,8 @@ export const DEFAULT_QUERY = `@preamble {
     "cli.Run" {}
 }
 
-@preamble { /* Another preamble overwrites the previous preamble. */
-    @project("kueue")
+preamble { /* Another preamble overwrites the previous preamble. */
+    project("kueue")
 }
 "main" {
     "NewTokenBucketRateLimiter"
