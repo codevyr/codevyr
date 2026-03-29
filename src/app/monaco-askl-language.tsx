@@ -94,7 +94,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 [/#[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
 
                 // Known verb names (without @)
-                [/(?:func|file|mod|dir|type|data|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive)\b/, {
+                [/(?:func|file|mod|dir|type|data|macro|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive)\b/, {
                     token: 'keyword', next: '@maybeCall',
                 }],
 
