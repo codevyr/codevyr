@@ -203,40 +203,50 @@ function darkenColor(color: string, amount: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function splitSymbolParts(label: string) {
-  return label.split(/[^a-zA-Z0-9_]+/).filter(Boolean);
+// Split label into tokens for dedup, and record each token's start offset
+// in the original label so we can slice the original string for display.
+function splitSymbolWithOffsets(label: string): { tokens: string[]; offsets: number[] } {
+  const tokens: string[] = [];
+  const offsets: number[] = [];
+  const re = /[a-zA-Z0-9_]+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(label)) !== null) {
+    tokens.push(m[0]);
+    offsets.push(m.index);
+  }
+  return { tokens, offsets };
 }
 
 function buildDisplayLabelMap(graph: Graph) {
-  const entries = Array.from(graph.nodes.values()).map((node) => ({
-    id: node.id,
-    label: node.label,
-    parts: splitSymbolParts(node.label),
-  }));
+  const entries = Array.from(graph.nodes.values()).map((node) => {
+    const { tokens, offsets } = splitSymbolWithOffsets(node.label);
+    return { id: node.id, label: node.label, tokens, offsets };
+  });
   const suffixCounts = new Map<string, number>();
 
-  entries.forEach(({ parts, label }) => {
-    if (parts.length === 0) {
+  entries.forEach(({ tokens, label }) => {
+    if (tokens.length === 0) {
       suffixCounts.set(label, (suffixCounts.get(label) ?? 0) + 1);
       return;
     }
-    for (let start = parts.length - 1; start >= 0; start -= 1) {
-      const suffix = parts.slice(start).join('.');
+    for (let start = tokens.length - 1; start >= 0; start -= 1) {
+      const suffix = tokens.slice(start).join('\0');
       suffixCounts.set(suffix, (suffixCounts.get(suffix) ?? 0) + 1);
     }
   });
 
   const displayMap = new Map<string, string>();
-  entries.forEach(({ id, label, parts }) => {
-    if (parts.length === 0) {
+  entries.forEach(({ id, label, tokens, offsets }) => {
+    if (tokens.length === 0) {
       displayMap.set(id, label);
       return;
     }
     let resolved = label;
-    for (let len = 1; len <= parts.length; len += 1) {
-      const suffix = parts.slice(parts.length - len).join('.');
+    for (let len = 1; len <= tokens.length; len += 1) {
+      const suffix = tokens.slice(tokens.length - len).join('\0');
       if ((suffixCounts.get(suffix) ?? 0) === 1) {
-        resolved = suffix;
+        // Slice from the original label at the start of the first matched token
+        resolved = label.substring(offsets[tokens.length - len]);
         break;
       }
     }
@@ -721,8 +731,9 @@ export function GraphViewer({
     [],
   );
 
+  const displayLabels = useMemo(() => buildDisplayLabelMap(graph), [graph]);
+
   const buildFlowElements = useCallback(() => {
-    const displayLabels = buildDisplayLabelMap(graph);
     const nextNodes: FlowNode<GraphNodeData>[] = [];
     const nextEdges: FlowEdge<GraphEdgeData>[] = [];
     const nextNodeIds = new Set(graph.nodes.keys());
@@ -814,7 +825,7 @@ export function GraphViewer({
     });
 
     return { nextNodes, nextEdges, hierarchy };
-  }, [graph, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory]);
+  }, [graph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory]);
 
   useEffect(() => {
     const { nextNodes, nextEdges, hierarchy } = buildFlowElements();
