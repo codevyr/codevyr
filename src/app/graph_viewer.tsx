@@ -204,7 +204,7 @@ function darkenColor(color: string, amount: number) {
 }
 
 function splitSymbolParts(label: string) {
-  return label.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  return label.split(/[^a-zA-Z0-9_]+/).filter(Boolean);
 }
 
 function buildDisplayLabelMap(graph: Graph) {
