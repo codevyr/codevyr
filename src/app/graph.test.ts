@@ -78,6 +78,19 @@ describe('buildHierarchy', () => {
     expect(childToParent.size).toBe(0);
     expect(parentToChildren.size).toBe(0);
   });
+
+  it('breaks cycles in has_edges', () => {
+    const nodes = makeNodes('A', 'B');
+    const hasEdges = [makeHasEdge('A', 'B'), makeHasEdge('B', 'A')];
+
+    const { childToParent, parentToChildren } = buildHierarchy(hasEdges, nodes);
+
+    // First edge wins: A is parent of B. Second edge (B parent of A) is dropped.
+    expect(childToParent.size).toBe(1);
+    expect(childToParent.get('B')).toBe('A');
+    expect(parentToChildren.get('A')?.has('B')).toBe(true);
+    expect(parentToChildren.has('B')).toBe(false);
+  });
 });
 
 describe('filterRedundantEdges', () => {

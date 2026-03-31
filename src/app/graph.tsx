@@ -449,6 +449,17 @@ export function buildHierarchy(hasEdges: Array<HasEdge>, nodes: Map<string, Node
     const parentToChildren = new Map<string, Set<string>>();
     hasEdges.forEach((he) => {
         if (!nodes.has(he.parent) || !nodes.has(he.child)) return;
+        // Skip edges that would create a cycle (child is already an ancestor of parent)
+        let ancestor: string | undefined = he.parent;
+        let wouldCycle = false;
+        while (ancestor) {
+            if (ancestor === he.child) {
+                wouldCycle = true;
+                break;
+            }
+            ancestor = childToParent.get(ancestor);
+        }
+        if (wouldCycle) return;
         childToParent.set(he.child, he.parent);
         let children = parentToChildren.get(he.parent);
         if (!children) {
