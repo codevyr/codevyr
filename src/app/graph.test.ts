@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, Edge, HasEdge, HierarchyInfo, Node } from './graph';
+import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, splitMultiParentNodes, Edge, Graph, HasEdge, HierarchyInfo, Node, SymbolInstance } from './graph';
 import type { Node as FlowNode } from 'reactflow';
 
 function makeNode(id: string): Node {
@@ -364,5 +364,330 @@ describe('alignToPreservedPositions', () => {
     const result = alignToPreservedPositions(layouted, preserved, emptyHierarchy());
     expect(result[0].position).toEqual({ x: 300, y: 200 });
     expect(result[1].position).toEqual({ x: 380, y: 240 });
+  });
+});
+
+// --- splitMultiParentNodes tests ---
+
+function makeInstance(id: string, objectId: string): SymbolInstance {
+  return { id, symbol: id, object_id: objectId, symbol_type: 'Function', start_offset: 0, end_offset: 1 };
+}
+
+function makeNodeWithInstances(id: string, instances: SymbolInstance[]): Node {
+  return { id, label: id, symbol_instances: instances };
+}
+
+function makeGraph(opts: {
+  nodes: Node[];
+  edges?: [string, string, string?][];  // [from, to, from_object?]
+  hasEdges?: [string, string][];
+}): Graph {
+  const nodes = new Map(opts.nodes.map(n => [n.id, n]));
+  const edges = new Map<string, Array<Edge>>();
+  for (const [from, to, from_object] of (opts.edges ?? [])) {
+    const id = `${from}-${to}`;
+    const edge: Edge = { id, from, to, from_object, from_offset_start: 0, from_offset_end: 1 };
+    edges.set(id, [edge]);
+  }
+  const has_edges: HasEdge[] = (opts.hasEdges ?? []).map(([parent, child]) =>
+    makeHasEdge(parent, child)
+  );
+  return { nodes, edges, has_edges, objects: new Map() };
+}
+
+describe('splitMultiParentNodes', () => {
+  it('returns original graph when no multi-parent nodes exist', () => {
+    const graph = makeGraph({
+      nodes: [makeNode('A'), makeNode('B'), makeNode('C')],
+      hasEdges: [['A', 'B']],
+    });
+    const result = splitMultiParentNodes(graph);
+    expect(result).toBe(graph); // same reference
+  });
+
+  it('returns original graph when node has 0 parents', () => {
+    const graph = makeGraph({
+      nodes: [makeNode('A'), makeNode('B')],
+      edges: [['A', 'B']],
+    });
+    const result = splitMultiParentNodes(graph);
+    expect(result).toBe(graph);
+  });
+
+  it('returns original graph when node has exactly 1 parent', () => {
+    const graph = makeGraph({
+      nodes: [makeNode('A'), makeNode('B')],
+      hasEdges: [['A', 'B']],
+    });
+    const result = splitMultiParentNodes(graph);
+    expect(result).toBe(graph);
+  });
+
+  it('splits node with 2 parents into 2 split nodes with correct instances', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),  // matches A's object
+      makeInstance('b2', 'obj2'),  // matches C's object
+    ]);
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB],
+      hasEdges: [['A', 'B'], ['C', 'B']],
+    });
+
+    const result = splitMultiParentNodes(graph);
+    expect(result).not.toBe(graph);
+
+    // Original B should not exist
+    expect(result.nodes.has('B')).toBe(false);
+
+    // Split nodes should exist
+    const splitBA = result.nodes.get('B\0A');
+    const splitBC = result.nodes.get('B\0C');
+    expect(splitBA).toBeDefined();
+    expect(splitBC).toBeDefined();
+    expect(splitBA!.label).toBe('B');
+    expect(splitBC!.label).toBe('B');
+    expect(splitBA!.symbol_instances).toEqual([makeInstance('b1', 'obj1')]);
+    expect(splitBC!.symbol_instances).toEqual([makeInstance('b2', 'obj2')]);
+
+    // Has edges should point to split nodes
+    const hasEdgeParents = result.has_edges.map(he => [he.parent, he.child]);
+    expect(hasEdgeParents).toContainEqual(['A', 'B\0A']);
+    expect(hasEdgeParents).toContainEqual(['C', 'B\0C']);
+  });
+
+  it('creates root split for leftover instances matching no parent', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),  // matches A
+      makeInstance('b2', 'obj2'),  // matches C
+      makeInstance('b3', 'obj99'), // matches nobody
+    ]);
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB],
+      hasEdges: [['A', 'B'], ['C', 'B']],
+    });
+
+    const result = splitMultiParentNodes(graph);
+    const splitRoot = result.nodes.get('B\0root');
+    expect(splitRoot).toBeDefined();
+    expect(splitRoot!.symbol_instances).toEqual([makeInstance('b3', 'obj99')]);
+    // Root split should not have a has_edge (it's at root level)
+    const rootHasEdges = result.has_edges.filter(he => he.child === 'B\0root');
+    expect(rootHasEdges).toHaveLength(0);
+  });
+
+  it('remaps "from" edge by from_object to correct split', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),
+      makeInstance('b2', 'obj2'),
+    ]);
+    const targetD = makeNode('D');
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB, targetD],
+      hasEdges: [['A', 'B'], ['C', 'B']],
+      edges: [['B', 'D', 'obj1']],  // from_object matches A's object
+    });
+
+    const result = splitMultiParentNodes(graph);
+    // Edge should be remapped to B\0A (the split whose instances include obj1)
+    const edgeEntries = Array.from(result.edges.values());
+    expect(edgeEntries.length).toBe(1);
+    expect(edgeEntries[0][0].from).toBe('B\0A');
+    expect(edgeEntries[0][0].to).toBe('D');
+  });
+
+  it('remaps "to" edge by shared parent context', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),
+      makeInstance('b2', 'obj2'),
+    ]);
+    // X is a child of A
+    const nodeX = makeNode('X');
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB, nodeX],
+      hasEdges: [['A', 'B'], ['C', 'B'], ['A', 'X']],
+      edges: [['X', 'B']],  // X is inside A, so should route to B\0A
+    });
+
+    const result = splitMultiParentNodes(graph);
+    const edgeEntries = Array.from(result.edges.values());
+    expect(edgeEntries.length).toBe(1);
+    expect(edgeEntries[0][0].from).toBe('X');
+    expect(edgeEntries[0][0].to).toBe('B\0A');
+  });
+
+  it('duplicates "to" edge to all splits when no shared parent', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),
+      makeInstance('b2', 'obj2'),
+    ]);
+    const nodeX = makeNode('X');  // top-level, not related to A or C
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB, nodeX],
+      hasEdges: [['A', 'B'], ['C', 'B']],
+      edges: [['X', 'B']],
+    });
+
+    const result = splitMultiParentNodes(graph);
+    const edgeEntries = Array.from(result.edges.values());
+    expect(edgeEntries.length).toBe(2); // duplicated to both splits
+    const targets = edgeEntries.map(e => e[0].to).sort();
+    expect(targets).toEqual(['B\0A', 'B\0C']);
+  });
+
+  it('duplicates self-loops to each split', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),
+      makeInstance('b2', 'obj2'),
+    ]);
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB],
+      hasEdges: [['A', 'B'], ['C', 'B']],
+      edges: [['B', 'B']],
+    });
+
+    const result = splitMultiParentNodes(graph);
+    const edgeEntries = Array.from(result.edges.values());
+    expect(edgeEntries.length).toBe(2);
+    for (const entry of edgeEntries) {
+      expect(entry[0].from).toBe(entry[0].to); // still a self-loop
+    }
+  });
+
+  it('preserves non-split nodes unchanged', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),
+      makeInstance('b2', 'obj2'),
+    ]);
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB],
+      hasEdges: [['A', 'B'], ['C', 'B']],
+    });
+
+    const result = splitMultiParentNodes(graph);
+    expect(result.nodes.get('A')).toBe(parentA);
+    expect(result.nodes.get('C')).toBe(parentC);
+  });
+
+  it('skips split creation for empty partitions', () => {
+    // B has instances only matching A, none matching C
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const childB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),  // only matches A
+    ]);
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, childB],
+      hasEdges: [['A', 'B'], ['C', 'B']],
+    });
+
+    const result = splitMultiParentNodes(graph);
+    expect(result.nodes.has('B\0A')).toBe(true);
+    expect(result.nodes.has('B\0C')).toBe(false); // empty partition, no node created
+  });
+
+  it('remaps has_edges when split node is also a parent', () => {
+    // X contains A, Y contains A, A contains B
+    // A gets split → B's has_edge parent must be remapped to the correct A-split
+    const nodeX = makeNodeWithInstances('X', [makeInstance('x1', 'obj1')]);
+    const nodeY = makeNodeWithInstances('Y', [makeInstance('y1', 'obj2')]);
+    const nodeA = makeNodeWithInstances('A', [
+      makeInstance('a1', 'obj1'),  // matches X
+      makeInstance('a2', 'obj2'),  // matches Y
+    ]);
+    const nodeB = makeNodeWithInstances('B', [makeInstance('b1', 'obj1')]);
+
+    const graph = makeGraph({
+      nodes: [nodeX, nodeY, nodeA, nodeB],
+      hasEdges: [['X', 'A'], ['Y', 'A'], ['A', 'B']],
+    });
+
+    const result = splitMultiParentNodes(graph);
+
+    // A should be split
+    expect(result.nodes.has('A')).toBe(false);
+    expect(result.nodes.has('A\0X')).toBe(true);
+    expect(result.nodes.has('A\0Y')).toBe(true);
+
+    // B should still exist (single parent, not split)
+    expect(result.nodes.has('B')).toBe(true);
+
+    // B's has_edge should be remapped to A\0X (B's obj1 matches A\0X's instances)
+    const bParentEdge = result.has_edges.find(he => he.child === 'B');
+    expect(bParentEdge).toBeDefined();
+    expect(bParentEdge!.parent).toBe('A\0X');
+  });
+
+  it('remaps edges when both from and to are split by same parents', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const nodeB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),
+      makeInstance('b2', 'obj2'),
+    ]);
+    const nodeD = makeNodeWithInstances('D', [
+      makeInstance('d1', 'obj1'),
+      makeInstance('d2', 'obj2'),
+    ]);
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, nodeB, nodeD],
+      hasEdges: [['A', 'B'], ['C', 'B'], ['A', 'D'], ['C', 'D']],
+      edges: [['B', 'D', 'obj1']],  // from_object pins to the A-context split
+    });
+
+    const result = splitMultiParentNodes(graph);
+    const edgeEntries = Array.from(result.edges.values());
+    // Only one edge: B\0A → D\0A (matched by from_object and same parent A)
+    expect(edgeEntries.length).toBe(1);
+    expect(edgeEntries[0][0].from).toBe('B\0A');
+    expect(edgeEntries[0][0].to).toBe('D\0A');
+  });
+
+  it('remaps both-split edges to matching parent contexts without from_object', () => {
+    const parentA = makeNodeWithInstances('A', [makeInstance('a1', 'obj1')]);
+    const parentC = makeNodeWithInstances('C', [makeInstance('c1', 'obj2')]);
+    const nodeB = makeNodeWithInstances('B', [
+      makeInstance('b1', 'obj1'),
+      makeInstance('b2', 'obj2'),
+    ]);
+    const nodeD = makeNodeWithInstances('D', [
+      makeInstance('d1', 'obj1'),
+      makeInstance('d2', 'obj2'),
+    ]);
+
+    const graph = makeGraph({
+      nodes: [parentA, parentC, nodeB, nodeD],
+      hasEdges: [['A', 'B'], ['C', 'B'], ['A', 'D'], ['C', 'D']],
+      edges: [['B', 'D']],  // no from_object
+    });
+
+    const result = splitMultiParentNodes(graph);
+    const edgeEntries = Array.from(result.edges.values());
+    // Two edges: B\0A → D\0A and B\0C → D\0C (matched by parent context)
+    expect(edgeEntries.length).toBe(2);
+    const pairs = edgeEntries.map(e => [e[0].from, e[0].to]).sort();
+    expect(pairs).toEqual([['B\0A', 'D\0A'], ['B\0C', 'D\0C']]);
   });
 });
