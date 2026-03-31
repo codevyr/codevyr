@@ -17,7 +17,7 @@ import ReactFlow, {
   useNodesState,
 } from 'reactflow';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, alignToPreservedPositions, buildPreservedPositionsMap } from './graph';
+import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, alignToPreservedPositions, buildPreservedPositionsMap, splitMultiParentNodes } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
@@ -663,18 +663,20 @@ export function GraphViewer({
     kind: 'node' | 'edge';
     id: string;
   } | null>(null);
+  const splitGraph = useMemo(() => splitMultiParentNodes(graph), [graph]);
+
   const resolvedActiveMenu = useMemo(() => {
     if (!activeMenu) {
       return null;
     }
-    if (activeMenu.kind === 'node' && !graph.nodes.has(activeMenu.id)) {
+    if (activeMenu.kind === 'node' && !splitGraph.nodes.has(activeMenu.id)) {
       return null;
     }
-    if (activeMenu.kind === 'edge' && !graph.edges.has(activeMenu.id)) {
+    if (activeMenu.kind === 'edge' && !splitGraph.edges.has(activeMenu.id)) {
       return null;
     }
     return activeMenu;
-  }, [activeMenu, graph]);
+  }, [activeMenu, splitGraph]);
 
   const menuContextValue = useMemo(
     () => ({ activeMenu: resolvedActiveMenu, setActiveMenu }),
@@ -731,29 +733,29 @@ export function GraphViewer({
     [],
   );
 
-  const displayLabels = useMemo(() => buildDisplayLabelMap(graph), [graph]);
+  const displayLabels = useMemo(() => buildDisplayLabelMap(splitGraph), [splitGraph]);
 
   const buildFlowElements = useCallback(() => {
     const nextNodes: FlowNode<GraphNodeData>[] = [];
     const nextEdges: FlowEdge<GraphEdgeData>[] = [];
-    const nextNodeIds = new Set(graph.nodes.keys());
+    const nextNodeIds = new Set(splitGraph.nodes.keys());
     positionsRef.current.forEach((_pos, id) => {
       if (!nextNodeIds.has(id)) {
         positionsRef.current.delete(id);
       }
     });
 
-    const hierarchy = buildHierarchy(graph.has_edges, graph.nodes);
+    const hierarchy = buildHierarchy(splitGraph.has_edges, splitGraph.nodes);
     const { childToParent, parentToChildren } = hierarchy;
 
-    const filteredEdges = filterRedundantEdges(graph.edges, parentToChildren, graph.nodes);
+    const filteredEdges = filterRedundantEdges(splitGraph.edges, parentToChildren, splitGraph.nodes);
 
     // Build a lookup of existing nodes to preserve layout-computed style (width/height on group nodes)
     const existingNodeMap = new Map(
       nodesRef.current.map((n) => [n.id, n]),
     );
 
-    graph.nodes.forEach((node) => {
+    splitGraph.nodes.forEach((node) => {
       const position = positionsRef.current.get(node.id) ?? { x: 0, y: 0 };
       const isGroup = parentToChildren.has(node.id);
       const parentId = childToParent.get(node.id);
@@ -767,7 +769,7 @@ export function GraphViewer({
         data: {
           label: displayLabels.get(node.id),
           node,
-          graph,
+          graph: splitGraph,
           fileContents,
           ensureFileContent,
           selectFile,
@@ -816,7 +818,7 @@ export function GraphViewer({
         style: { stroke: 'var(--graph-edge-color)', strokeWidth: 3 },
         data: {
           edges: edgeArray,
-          graph,
+          graph: splitGraph,
           fileContents,
           ensureFileContent,
           selectFile,
@@ -825,7 +827,7 @@ export function GraphViewer({
     });
 
     return { nextNodes, nextEdges, hierarchy };
-  }, [graph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory]);
+  }, [splitGraph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory]);
 
   useEffect(() => {
     const { nextNodes, nextEdges, hierarchy } = buildFlowElements();
@@ -838,10 +840,10 @@ export function GraphViewer({
       return;
     }
 
-    const graphChanged = graphRef.current !== graph;
+    const graphChanged = graphRef.current !== splitGraph;
     const hasHierarchy = hierarchy.childToParent.size > 0;
-    const shouldUseDagre = !hasHierarchy && !hasNodeOverlap(graphRef.current, graph);
-    graphRef.current = graph;
+    const shouldUseDagre = !hasHierarchy && !hasNodeOverlap(graphRef.current, splitGraph);
+    graphRef.current = splitGraph;
 
     if (!graphChanged) {
       hierarchyRef.current = hierarchy;
@@ -908,7 +910,7 @@ export function GraphViewer({
         });
       }
     });
-  }, [buildFlowElements, graph, setEdges, setNodes]);
+  }, [buildFlowElements, splitGraph, setEdges, setNodes]);
 
   useEffect(() => {
     const cleanup = setupGraphTestApis();
@@ -927,10 +929,10 @@ export function GraphViewer({
     }
 
     const layoutRunId = ++layoutRunIdRef.current;
-    const hasHierarchy = graph.has_edges.length > 0;
+    const hasHierarchy = splitGraph.has_edges.length > 0;
     const layoutPromise = hasHierarchy
       ? layoutGraphWithElk(nodes, edges, {
-          hierarchy: buildHierarchy(graph.has_edges, graph.nodes),
+          hierarchy: buildHierarchy(splitGraph.has_edges, splitGraph.nodes),
         })
       : layoutGraphWithDagre(nodes, edges);
     layoutPromise.then((layoutedNodes) => {
@@ -945,7 +947,7 @@ export function GraphViewer({
         reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
       });
     });
-  }, [edges, graph, nodes, setNodes]);
+  }, [edges, splitGraph, nodes, setNodes]);
 
   const handleCenterGraph = useCallback(() => {
     if (nodes.length === 0) {
@@ -996,7 +998,7 @@ export function GraphViewer({
         <div
           aria-hidden="true"
           data-testid="graph-metadata"
-          data-node-count={graph.nodes.size}
+          data-node-count={splitGraph.nodes.size}
           data-layout-gen={layoutGen}
           style={{ display: 'none' }}
         />
