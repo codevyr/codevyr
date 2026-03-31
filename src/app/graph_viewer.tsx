@@ -300,7 +300,17 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 
       if (isDirectoryNode) {
         const realInstances = node.symbol_instances.filter((inst) => !isDirectoryInstance(inst));
-        if (realInstances.length > 0) {
+        if (realInstances.length === 1) {
+          const inst = realInstances[0];
+          selectFile({
+            object_id: inst.object_id,
+            start_offset: inst.start_offset,
+            end_offset: inst.end_offset,
+          });
+          setActiveMenu?.(null);
+          return;
+        }
+        if (realInstances.length > 1) {
           if (isOpen) {
             setActiveMenu?.(null);
             return;
