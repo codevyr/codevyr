@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, splitMultiParentNodes, Edge, Graph, HasEdge, HierarchyInfo, Node, SymbolInstance } from './graph';
+import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, splitMultiParentNodes, Edge, FilteredEdgesResult, Graph, HasEdge, HierarchyInfo, Node, SymbolInstance } from './graph';
 import type { Node as FlowNode } from 'reactflow';
 
 function makeNode(id: string): Node {
@@ -35,8 +35,8 @@ function makeHierarchy(parentChildPairs: [string, string][]): Map<string, Set<st
   return m;
 }
 
-function edgeIds(result: Map<string, Array<Edge>>): string[] {
-  return Array.from(result.keys()).sort();
+function edgeIds(result: FilteredEdgesResult): string[] {
+  return Array.from(result.visible.keys()).sort();
 }
 
 function makeHasEdge(parent: string, child: string): HasEdge {
@@ -97,7 +97,7 @@ describe('filterRedundantEdges', () => {
   it('returns all edges when there is no containment hierarchy', () => {
     const nodes = makeNodes('A', 'B', 'C');
     const edges = makeEdges(['A', 'C'], ['B', 'C']);
-    const hierarchy = new Map<string, Set<string>>();
+    const hierarchy = makeHierarchy([]);
 
     const result = filterRedundantEdges(edges, hierarchy, nodes);
     expect(edgeIds(result)).toEqual(['A-C', 'B-C']);
@@ -162,14 +162,17 @@ describe('filterRedundantEdges', () => {
     const hierarchy = makeHierarchy([['A', 'B']]);
 
     // A→A: descendants of A are {B}. Does B have edge to A? Yes (B→A). Filter A→A.
+    // B→A: B is a child of A (has edge), so this ref is hidden by has-edge dedup.
     const result = filterRedundantEdges(edges, hierarchy, nodes);
-    expect(edgeIds(result)).toEqual(['B-A']);
+    expect(edgeIds(result)).toEqual([]);
+    // B→A goes into hiddenByHas keyed by edge.to = 'A'
+    expect(result.hiddenByHas.get('A')!.map(e => e.id)).toEqual(['B-A']);
   });
 
   it('skips edges referencing unknown nodes', () => {
     const nodes = makeNodes('A', 'B');
     const edges = makeEdges(['A', 'B'], ['A', 'UNKNOWN']);
-    const hierarchy = new Map<string, Set<string>>();
+    const hierarchy = makeHierarchy([]);
 
     const result = filterRedundantEdges(edges, hierarchy, nodes);
     expect(edgeIds(result)).toEqual(['A-B']);
@@ -177,7 +180,30 @@ describe('filterRedundantEdges', () => {
 
   it('returns empty map for empty inputs', () => {
     const result = filterRedundantEdges(new Map(), new Map(), new Map());
-    expect(result.size).toBe(0);
+    expect(result.visible.size).toBe(0);
+  });
+
+  it('hides ref edges that duplicate has edges and puts them in hiddenByHas', () => {
+    // A contains B (has edge). A→B ref edge should be hidden.
+    const nodes = makeNodes('A', 'B', 'C');
+    const edges = makeEdges(['A', 'B'], ['A', 'C']);
+    const hierarchy = makeHierarchy([['A', 'B']]);
+
+    const result = filterRedundantEdges(edges, hierarchy, nodes);
+    expect(edgeIds(result)).toEqual(['A-C']);
+    expect(result.hiddenByHas.has('B')).toBe(true);
+    expect(result.hiddenByHas.get('B')!.map(e => e.id)).toEqual(['A-B']);
+  });
+
+  it('hides ref edges between deeply nested ancestor-descendant pairs', () => {
+    // A contains B, B contains C.  A→C ref edge should be hidden (grandparent).
+    const nodes = makeNodes('A', 'B', 'C', 'D');
+    const edges = makeEdges(['A', 'C'], ['A', 'D']);
+    const hierarchy = makeHierarchy([['A', 'B'], ['B', 'C']]);
+
+    const result = filterRedundantEdges(edges, hierarchy, nodes);
+    expect(edgeIds(result)).toEqual(['A-D']);
+    expect(result.hiddenByHas.get('C')!.map(e => e.id)).toEqual(['A-C']);
   });
 });
 

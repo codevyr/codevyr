@@ -52,6 +52,7 @@ type GraphNodeData = {
   focusNode: (nodeId: string) => void;
   revealDirectory: (objectId: string) => void;
   isGroupNode?: boolean;
+  hiddenRefEdges?: Array<GraphEdge>;
 };
 
 type GraphEdgeData = {
@@ -284,7 +285,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
   const selectionContext = useContext(SelectionContext);
   const lastSelected = selectionContext?.lastSelected ?? null;
   const setLastSelected = selectionContext?.setLastSelected;
-  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory } = data;
+  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, hiddenRefEdges } = data;
   const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
     ? ({ '--graph-node-color': node.color } as React.CSSProperties)
@@ -294,13 +295,15 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
   const instanceCount = node.symbol_instances.length;
   const isDirectoryNode = isGroupNode || node.symbol_instances.every((inst) => isDirectoryInstance(inst));
 
+  const hasHiddenRefs = (hiddenRefEdges?.length ?? 0) > 0;
+
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       setLastSelected?.({ kind: 'node', id });
 
       if (isDirectoryNode) {
         const realInstances = node.symbol_instances.filter((inst) => !isDirectoryInstance(inst));
-        if (realInstances.length === 1) {
+        if (realInstances.length === 1 && !hasHiddenRefs) {
           const inst = realInstances[0];
           selectFile({
             object_id: inst.object_id,
@@ -310,7 +313,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
           setActiveMenu?.(null);
           return;
         }
-        if (realInstances.length > 1) {
+        if (realInstances.length > 1 || hasHiddenRefs) {
           if (isOpen) {
             setActiveMenu?.(null);
             return;
@@ -327,7 +330,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
         return;
       }
 
-      if (instanceCount === 1) {
+      if (instanceCount === 1 && !hasHiddenRefs) {
         const inst = node.symbol_instances[0];
         selectFile({
           object_id: inst.object_id,
@@ -338,7 +341,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
         return;
       }
 
-      if (instanceCount > 1) {
+      if (instanceCount > 1 || hasHiddenRefs) {
         if (isOpen) {
           setActiveMenu?.(null);
           return;
@@ -346,7 +349,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
         triggerContextMenu(event);
       }
     },
-    [instanceCount, id, isDirectoryNode, isOpen, node, revealDirectory, selectFile, setActiveMenu, setLastSelected],
+    [instanceCount, id, isDirectoryNode, isOpen, hasHiddenRefs, node, revealDirectory, selectFile, setActiveMenu, setLastSelected],
   );
 
   const handleOpenChange = useCallback(
@@ -403,6 +406,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
             ensureFileContent={ensureFileContent}
             isGroupNode={isDirectoryNode}
             revealDirectory={revealDirectory}
+            hiddenRefEdges={hiddenRefEdges}
           />
         </ContextMenu.Content>
       </ContextMenu.Portal>
@@ -758,7 +762,7 @@ export function GraphViewer({
     const hierarchy = buildHierarchy(splitGraph.has_edges, splitGraph.nodes);
     const { childToParent, parentToChildren } = hierarchy;
 
-    const filteredEdges = filterRedundantEdges(splitGraph.edges, parentToChildren, splitGraph.nodes);
+    const { visible: filteredEdges, hiddenByHas } = filterRedundantEdges(splitGraph.edges, parentToChildren, splitGraph.nodes);
 
     // Build a lookup of existing nodes to preserve layout-computed style (width/height on group nodes)
     const existingNodeMap = new Map(
@@ -786,6 +790,7 @@ export function GraphViewer({
           focusNode,
           revealDirectory,
           isGroupNode: isGroup,
+          hiddenRefEdges: hiddenByHas.get(node.id),
         },
       };
       if (parentId) {
