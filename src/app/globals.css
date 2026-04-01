@@ -145,7 +145,17 @@ body {
   pointer-events: stroke;
 }
 
+/*
+ * Group nodes pass through pointer events so edges and inner nodes
+ * underneath remain clickable.  The header re-enables pointer events
+ * for group interaction (click, context menu, drag).
+ */
+.react-flow__node:has(> .graph-group-node) {
+  pointer-events: none !important;
+}
+
 .graph-group-node {
+  pointer-events: none;
   background: rgba(219,234,254,0.3);
   border: 1.5px dashed #93c5fd;
   border-radius: 8px;
@@ -157,6 +167,8 @@ body {
   font-weight: 600;
   color: #475569;
   border-bottom: 1px solid rgba(147,197,253,0.4);
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .graph-group-node-selected {
