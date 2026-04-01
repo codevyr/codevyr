@@ -120,6 +120,17 @@ function applyLayoutPadding(
   });
 }
 
+function getNodeAbsolutePosition(node: FlowNode<GraphNodeData>): { x: number; y: number } {
+  return (node as any).positionAbsolute ?? node.position;
+}
+
+function getNodeSize(node: FlowNode<GraphNodeData>): { width: number; height: number } {
+  return {
+    width: node.width ?? (node as any).measured?.width ?? 0,
+    height: node.height ?? (node as any).measured?.height ?? 0,
+  };
+}
+
 function triggerContextMenu(event: React.MouseEvent<Element>) {
   event.preventDefault();
   event.stopPropagation();
@@ -736,9 +747,8 @@ export function GraphViewer({
       if (!targetNode) {
         return;
       }
-      const width = targetNode.width ?? (targetNode as any).measured?.width ?? 0;
-      const height = targetNode.height ?? (targetNode as any).measured?.height ?? 0;
-      const pos = (targetNode as any).positionAbsolute ?? targetNode.position;
+      const { width, height } = getNodeSize(targetNode);
+      const pos = getNodeAbsolutePosition(targetNode);
       const centerX = pos.x + width / 2;
       const centerY = pos.y + height / 2;
       const currentZoom = reactFlowInstanceRef.current?.getViewport().zoom ?? 1;
@@ -1003,6 +1013,66 @@ export function GraphViewer({
     reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: 1 });
   }, [nodes]);
 
+  // Group node bodies have pointer-events: none so edges underneath stay clickable.
+  // When a pane click/contextmenu falls inside a group, forward it to the group's
+  // header element.  Reads only from refs — stable with empty deps.
+  const forwardPaneEventToGroup = useCallback(
+    (clientX: number, clientY: number, action: (header: HTMLElement) => void) => {
+      setActiveMenu(null);
+      const instance = reactFlowInstanceRef.current;
+      if (!instance) return;
+      const flowPos = instance.screenToFlowPosition({ x: clientX, y: clientY });
+      // Find the innermost (deepest) group node containing the click point.
+      let bestNode: FlowNode<GraphNodeData> | null = null;
+      let bestDepth = -1;
+      for (const node of nodesRef.current) {
+        if (!node.data.isGroupNode) continue;
+        const pos = getNodeAbsolutePosition(node);
+        const { width, height } = getNodeSize(node);
+        if (flowPos.x >= pos.x && flowPos.x <= pos.x + width &&
+            flowPos.y >= pos.y && flowPos.y <= pos.y + height) {
+          let depth = 0;
+          let parentId = hierarchyRef.current.childToParent.get(node.id);
+          while (parentId) {
+            depth++;
+            parentId = hierarchyRef.current.childToParent.get(parentId);
+          }
+          if (depth > bestDepth) {
+            bestDepth = depth;
+            bestNode = node;
+          }
+        }
+      }
+      if (!bestNode) return;
+      const header = document.querySelector(
+        `[data-testid="graph-node-${bestNode.id}"] .graph-group-node-header`,
+      ) as HTMLElement | null;
+      if (header) action(header);
+    },
+    [setActiveMenu],
+  );
+
+  const handlePaneClick = useCallback(
+    (event: React.MouseEvent) => {
+      forwardPaneEventToGroup(event.clientX, event.clientY, (header) => header.click());
+    },
+    [forwardPaneEventToGroup],
+  );
+
+  const handlePaneContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      forwardPaneEventToGroup(event.clientX, event.clientY, (header) => {
+        header.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        }));
+      });
+    },
+    [forwardPaneEventToGroup],
+  );
+
   const shouldExposeMetadata = process.env.NODE_ENV !== 'production';
   const shouldOnlyRenderVisibleElements =
     typeof navigator === 'undefined' ? true : !navigator.webdriver;
@@ -1036,11 +1106,8 @@ export function GraphViewer({
               onEdgesChange={handleEdgesChange}
               onInit={handleInit}
               minZoom={0.1}
-              onPaneClick={() => setActiveMenu(null)}
-              onPaneContextMenu={(event) => {
-                event.preventDefault();
-                setActiveMenu(null);
-              }}
+              onPaneClick={handlePaneClick}
+              onPaneContextMenu={handlePaneContextMenu}
               onNodeDragStart={() => setActiveMenu(null)}
               onNodeDragStop={handleNodeDragStop}
               onlyRenderVisibleElements={shouldOnlyRenderVisibleElements}

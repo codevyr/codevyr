@@ -218,7 +218,7 @@ function hierarchyFromPairs(pairs: [string, string][]): HierarchyInfo {
     allIds.add(child);
     return makeHasEdge(parent, child);
   });
-  const nodes = makeNodes(...allIds);
+  const nodes = makeNodes(...Array.from(allIds));
   return buildHierarchy(hasEdges, nodes);
 }
 
