@@ -564,5 +564,19 @@ export function filterRedundantEdges(
         }
     });
 
+    // Post-process: deduplicate hidden edges the same way visible edges are deduped.
+    // If A→C and B→C are both hidden, and B is a descendant of A, drop A→C.
+    hiddenByHas.forEach((edgeArray, targetId) => {
+        const sources = new Set(edgeArray.map(e => e.from));
+        const filtered = edgeArray.filter(e => {
+            const descendants = getDescendants(e.from);
+            for (const desc of Array.from(descendants)) {
+                if (sources.has(desc)) return false;
+            }
+            return true;
+        });
+        hiddenByHas.set(targetId, filtered);
+    });
+
     return { visible: result, hiddenByHas };
 }

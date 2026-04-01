@@ -195,6 +195,19 @@ describe('filterRedundantEdges', () => {
     expect(result.hiddenByHas.get('B')!.map(e => e.id)).toEqual(['A-B']);
   });
 
+  it('deduplicates hidden ref edges by descendant logic', () => {
+    // A contains B, B contains C.  Both A→C and B→C ref edges exist.
+    // B→C is more specific (B is a descendant of A), so A→C should be dropped.
+    const nodes = makeNodes('A', 'B', 'C');
+    const edges = makeEdges(['A', 'C'], ['B', 'C']);
+    const hierarchy = makeHierarchy([['A', 'B'], ['B', 'C']]);
+
+    const result = filterRedundantEdges(edges, hierarchy, nodes);
+    expect(edgeIds(result)).toEqual([]);
+    // Only B→C should remain in hiddenByHas, A→C is redundant
+    expect(result.hiddenByHas.get('C')!.map(e => e.id)).toEqual(['B-C']);
+  });
+
   it('hides ref edges between deeply nested ancestor-descendant pairs', () => {
     // A contains B, B contains C.  A→C ref edge should be hidden (grandparent).
     const nodes = makeNodes('A', 'B', 'C', 'D');
