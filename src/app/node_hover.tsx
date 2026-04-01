@@ -174,6 +174,7 @@ export interface NodeHoverProps {
   ensureFileContent: (objectId: string) => void;
   isGroupNode?: boolean;
   revealDirectory?: (objectId: string) => void;
+  hiddenRefEdges?: Array<Edge>;
 }
 
 export function NodeHover({
@@ -185,6 +186,7 @@ export function NodeHover({
   ensureFileContent,
   isGroupNode,
   revealDirectory,
+  hiddenRefEdges,
 }: NodeHoverProps) {
   // For group nodes, separate directory instances from real code references
   const realInstances = isGroupNode
@@ -205,7 +207,8 @@ export function NodeHover({
   });
 
   // Determine if we need section headers (multiple types present)
-  const hasMultipleSections = instancesByType.size > 1;
+  const hasMultipleSections = instancesByType.size > 1
+    || (instancesByType.size >= 1 && (hiddenRefEdges?.length ?? 0) > 0);
 
   useEffect(() => {
     const seen = new Set<string>();
@@ -216,7 +219,14 @@ export function NodeHover({
       seen.add(instance.object_id);
       ensureFileContent(instance.object_id);
     });
-  }, [node, ensureFileContent, realInstances]);
+    hiddenRefEdges?.forEach((edge) => {
+      const objectId = resolveEdgeObjectId(edge, graph);
+      if (objectId && !seen.has(objectId)) {
+        seen.add(objectId);
+        ensureFileContent(objectId);
+      }
+    });
+  }, [node, ensureFileContent, realInstances, hiddenRefEdges, graph]);
 
   const dirPath = selfRefInstance
     ? graph.objects.get(selfRefInstance.object_id)?.path
@@ -261,6 +271,28 @@ export function NodeHover({
           />
         ))}
       </table>
+      {hiddenRefEdges && hiddenRefEdges.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th colSpan={3}>References</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...hiddenRefEdges]
+              .sort((a, b) => compareEdges(a, b, graph, fileContents))
+              .map((edge) => (
+                <EdgeHover
+                  key={`${edge.id}-${edge.from_offset_start}`}
+                  edge={edge}
+                  graph={graph}
+                  setCodeFocus={setCodeFocus}
+                  fileContents={fileContents}
+                />
+              ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

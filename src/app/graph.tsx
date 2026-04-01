@@ -476,11 +476,17 @@ export function buildHierarchy(hasEdges: Array<HasEdge>, nodes: Map<string, Node
  * An edge X→T is redundant if any descendant of X (via parentToChildren)
  * also has an edge to T.
  */
+export interface FilteredEdgesResult {
+    visible: Map<string, Array<Edge>>;
+    /** Ref edges hidden because a has (containment) edge exists between the same nodes, keyed by the ref edge's target node ID. */
+    hiddenByHas: Map<string, Array<Edge>>;
+}
+
 export function filterRedundantEdges(
     edges: Map<string, Array<Edge>>,
     parentToChildren: Map<string, Set<string>>,
     nodes: Map<string, Node>,
-): Map<string, Array<Edge>> {
+): FilteredEdgesResult {
     // Build a Map<source, Set<target>> for O(1) pair lookups without string encoding
     const edgeTargetsBySource = new Map<string, Set<string>>();
     edges.forEach((edgeArray) => {
@@ -532,15 +538,31 @@ export function filterRedundantEdges(
     }
 
     const result = new Map<string, Array<Edge>>();
+    const hiddenByHas = new Map<string, Array<Edge>>();
     edges.forEach((edgeArray, edgeId) => {
         const edge = edgeArray[0];
         if (!edge) return;
         if (!nodes.has(edge.from) || !nodes.has(edge.to)) return;
+
+        // Skip ref edges between nodes that already have an ancestor-descendant
+        // containment relationship.  Collect them so they can be shown in the
+        // target node's context menu.
+        const fromDescendants = getDescendants(edge.from);
+        const toDescendants = getDescendants(edge.to);
+        if (fromDescendants.has(edge.to) || toDescendants.has(edge.from)) {
+            const existing = hiddenByHas.get(edge.to);
+            if (existing) {
+                existing.push(...edgeArray);
+            } else {
+                hiddenByHas.set(edge.to, [...edgeArray]);
+            }
+            return;
+        }
 
         if (!hasEdgeFromDescendant(edge.from, edge.to)) {
             result.set(edgeId, edgeArray);
         }
     });
 
-    return result;
+    return { visible: result, hiddenByHas };
 }
