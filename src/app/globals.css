@@ -118,6 +118,8 @@ body {
   padding: 6px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
   z-index: 50;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .graph-node {
