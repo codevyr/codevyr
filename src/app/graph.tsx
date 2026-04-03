@@ -30,6 +30,8 @@ export interface HasEdge {
     id: string;
     parent: string;
     child: string;
+    parent_instance: string;
+    child_instance: string;
 }
 
 export interface GraphObject {
@@ -162,30 +164,82 @@ export function buildPreservedPositionsMap(
 }
 
 /**
- * Split nodes that have multiple parents (via has_edges) into separate visual
- * nodes — one per parent — each containing only the symbol instances relevant
- * to that container.  Returns a full Graph so all downstream code works unchanged.
+ * Split nodes based on instance-level containment from has_edges.
  *
- * Split node IDs use `${nodeId}\0${parentId}` (NUL separator avoids collisions).
- * Instances with no matching parent get a `${nodeId}\0root` split.
+ * Each has_edge now carries parent_instance and child_instance IDs, enabling
+ * precise per-instance grouping. A node is split when its instances fall into
+ * different containment contexts (different parents, or some contained and some
+ * not, or some acting as groups and some not).
+ *
+ * Split node IDs use `${nodeId}\0${contextKey}` (NUL separator avoids collisions).
  */
 export function splitMultiParentNodes(graph: Graph): Graph {
-    // 1. Build childToParents: Map<childId, Set<parentId>>
-    const childToParents = new Map<string, Set<string>>();
-    let hasMultiParent = false;
+    // 1. Build instance-level maps from has_edges
+    // childInstToParent: which parent instance contains this child instance
+    const childInstToParent = new Map<string, { parentSymbol: string; parentInstance: string }>();
+    // parentInstChildren: which child *symbols* each parent instance contains
+    const parentInstChildren = new Map<string, Set<string>>();
+
     for (const he of graph.has_edges) {
         if (!graph.nodes.has(he.parent) || !graph.nodes.has(he.child)) continue;
-        let parents = childToParents.get(he.child);
-        if (!parents) {
-            parents = new Set<string>();
-            childToParents.set(he.child, parents);
+        childInstToParent.set(he.child_instance, {
+            parentSymbol: he.parent,
+            parentInstance: he.parent_instance,
+        });
+        let children = parentInstChildren.get(he.parent_instance);
+        if (!children) {
+            children = new Set<string>();
+            parentInstChildren.set(he.parent_instance, children);
         }
-        parents.add(he.parent);
-        if (parents.size > 1) hasMultiParent = true;
+        children.add(he.child);
     }
 
-    // 2. Fast path: no multi-parent nodes → return graph unchanged
-    if (!hasMultiParent) return graph;
+    // 2. Classify each instance into a context key
+    // context = `{containment}:{childrenKey}`
+    // containment = `contained-by:{parentSymbol}` if instance is a child_instance, else `root`
+    // childrenKey = sorted child symbol IDs joined by ',' if instance is a parent, else `leaf`
+
+    // instanceToContext: instanceId → contextKey
+    const instanceToContext = new Map<string, string>();
+
+    // Track which nodes need splitting (have multiple context keys)
+    const nodeContextKeys = new Map<string, Set<string>>(); // nodeId → set of context keys
+
+    graph.nodes.forEach((node, nodeId) => {
+        const contextKeys = new Set<string>();
+        for (const inst of node.symbol_instances) {
+            const parentInfo = childInstToParent.get(inst.id);
+            const containment = parentInfo
+                ? `contained-by:${parentInfo.parentSymbol}`
+                : 'root';
+            const childSymbols = parentInstChildren.get(inst.id);
+            const childrenKey = childSymbols
+                ? Array.from(childSymbols).sort().join(',')
+                : 'leaf';
+            const contextKey = `${containment}:${childrenKey}`;
+            instanceToContext.set(inst.id, contextKey);
+            contextKeys.add(contextKey);
+        }
+        nodeContextKeys.set(nodeId, contextKeys);
+    });
+
+    // 3. Fast path: no node has multiple context keys → return graph unchanged
+    let needsSplit = false;
+    for (const keys of nodeContextKeys.values()) {
+        if (keys.size > 1) { needsSplit = true; break; }
+    }
+    if (!needsSplit) return graph;
+
+    // 4. Build split nodes, new has_edges, and remapping info
+    const newNodes = new Map<string, Node>();
+    // instanceId → splitNodeId (for edge remapping)
+    const instanceToSplit = new Map<string, string>();
+    // splitId → set of object_ids in that split (for edge remapping)
+    const splitObjectIds = new Map<string, Set<string>>();
+    // splitId → parentSymbol (for "to" edge routing)
+    const splitParent = new Map<string, string>();
+    // originalId → splitId[]
+    const splitLookup = new Map<string, string[]>();
 
     function collectObjectIds(instances: SymbolInstance[]): Set<string> {
         const ids = new Set<string>();
@@ -193,128 +247,76 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         return ids;
     }
 
-    // 3. Build split nodes, new has_edges, and remapping info
-    const newNodes = new Map<string, Node>();
-    const newHasEdges: HasEdge[] = [];
-    // originalId → Map<parentId|"root", splitId>
-    const splitNodeIds = new Map<string, Map<string, string>>();
-    // splitId → set of object_ids in that split (for edge remapping)
-    const splitObjectIds = new Map<string, Set<string>>();
-    // splitId → parentId (for "to" edge routing)
-    const splitParent = new Map<string, string>();
-
-    // Collect parent object_ids once (lazy cache)
-    const parentObjectIdSets = new Map<string, Set<string>>();
-    function getParentObjectIds(parentId: string): Set<string> {
-        let s = parentObjectIdSets.get(parentId);
-        if (s) return s;
-        const parentNode = graph.nodes.get(parentId);
-        s = parentNode ? collectObjectIds(parentNode.symbol_instances) : new Set();
-        parentObjectIdSets.set(parentId, s);
-        return s;
-    }
-
-    function addSplitNode(splitId: string, node: Node, instances: SymbolInstance[], parentId?: string): void {
-        newNodes.set(splitId, {
-            id: splitId,
-            label: node.label,
-            symbol_instances: instances,
-            color: node.color,
-        });
-        splitObjectIds.set(splitId, collectObjectIds(instances));
-        if (parentId) splitParent.set(splitId, parentId);
-    }
-
     graph.nodes.forEach((node, nodeId) => {
-        const parents = childToParents.get(nodeId);
-        if (!parents || parents.size <= 1) {
+        const contextKeys = nodeContextKeys.get(nodeId)!;
+
+        if (contextKeys.size <= 1) {
+            // No split needed — keep original node
             newNodes.set(nodeId, node);
+            for (const inst of node.symbol_instances) {
+                instanceToSplit.set(inst.id, nodeId);
+            }
+            splitObjectIds.set(nodeId, collectObjectIds(node.symbol_instances));
             return;
         }
 
-        // Multi-parent node: partition instances
-        const parentIdArray = Array.from(parents);
-        const assignedInstances = new Map<string, SymbolInstance[]>();
-        for (const pid of parentIdArray) {
-            assignedInstances.set(pid, []);
-        }
-        const leftover: SymbolInstance[] = [];
-
+        // Group instances by context key
+        const groups = new Map<string, SymbolInstance[]>();
         for (const inst of node.symbol_instances) {
-            let matched = false;
-            for (const pid of parentIdArray) {
-                if (getParentObjectIds(pid).has(inst.object_id)) {
-                    assignedInstances.get(pid)!.push(inst);
-                    matched = true;
-                    break;
-                }
+            const ctx = instanceToContext.get(inst.id)!;
+            let arr = groups.get(ctx);
+            if (!arr) {
+                arr = [];
+                groups.set(ctx, arr);
             }
-            if (!matched) leftover.push(inst);
+            arr.push(inst);
         }
 
-        const splits = new Map<string, string>();
-        splitNodeIds.set(nodeId, splits);
-
-        for (const pid of parentIdArray) {
-            const instances = assignedInstances.get(pid)!;
-            if (instances.length === 0) continue;
-            const splitId = `${nodeId}\0${pid}`;
-            splits.set(pid, splitId);
-            addSplitNode(splitId, node, instances, pid);
-            newHasEdges.push({ id: `has-${pid}-${splitId}`, parent: pid, child: splitId });
-        }
-
-        if (leftover.length > 0) {
-            const splitId = `${nodeId}\0root`;
-            splits.set('root', splitId);
-            addSplitNode(splitId, node, leftover);
-        }
+        const splits: string[] = [];
+        groups.forEach((instances, contextKey) => {
+            const splitId = `${nodeId}\0${contextKey}`;
+            splits.push(splitId);
+            newNodes.set(splitId, {
+                id: splitId,
+                label: node.label,
+                symbol_instances: instances,
+                color: node.color,
+            });
+            splitObjectIds.set(splitId, collectObjectIds(instances));
+            for (const inst of instances) {
+                instanceToSplit.set(inst.id, splitId);
+            }
+            // Record parent for containment routing
+            const parentInfo = childInstToParent.get(instances[0].id);
+            if (parentInfo) {
+                splitParent.set(splitId, parentInfo.parentSymbol);
+            }
+        });
+        splitLookup.set(nodeId, splits);
     });
 
-    // Copy non-split has_edges, remapping parent if it was split.
-    // Pre-compute child object_ids for nodes whose parent was split.
-    const childObjectIdCache = new Map<string, Set<string>>();
+    // 5. Create has_edges between split nodes using instanceToSplit lookup
+    const hasEdgePairsSeen = new Set<string>();
+    const newHasEdges: HasEdge[] = [];
+
     for (const he of graph.has_edges) {
         if (!graph.nodes.has(he.parent) || !graph.nodes.has(he.child)) continue;
-        if (splitNodeIds.has(he.child)) continue; // already handled above
-        const parentSplits = splitNodeIds.get(he.parent);
-        if (!parentSplits) {
-            newHasEdges.push(he);
-            continue;
-        }
-        // Parent was split — find which split shares object_ids with the child
-        let childObjIds = childObjectIdCache.get(he.child);
-        if (!childObjIds) {
-            const childNode = graph.nodes.get(he.child);
-            childObjIds = childNode ? collectObjectIds(childNode.symbol_instances) : new Set();
-            childObjectIdCache.set(he.child, childObjIds);
-        }
-        let remappedParent: string | undefined;
-        parentSplits.forEach((splitId) => {
-            if (remappedParent) return;
-            const objIds = splitObjectIds.get(splitId);
-            if (!objIds) return;
-            objIds.forEach((oid) => {
-                if (!remappedParent && childObjIds.has(oid)) {
-                    remappedParent = splitId;
-                }
-            });
+        const parentSplitId = instanceToSplit.get(he.parent_instance);
+        const childSplitId = instanceToSplit.get(he.child_instance);
+        if (!parentSplitId || !childSplitId) continue;
+        const pairKey = `${parentSplitId}\0${childSplitId}`;
+        if (hasEdgePairsSeen.has(pairKey)) continue;
+        hasEdgePairsSeen.add(pairKey);
+        newHasEdges.push({
+            id: `has-${parentSplitId}-${childSplitId}`,
+            parent: parentSplitId,
+            child: childSplitId,
+            parent_instance: he.parent_instance,
+            child_instance: he.child_instance,
         });
-        if (!remappedParent) {
-            remappedParent = parentSplits.values().next().value;
-        }
-        if (remappedParent) {
-            newHasEdges.push({ id: he.id, parent: remappedParent, child: he.child });
-        }
     }
 
-    // 4. Remap edges
-    // Build lookup: originalId → splitId[] and parentChain helpers
-    const splitLookup = new Map<string, string[]>();
-    splitNodeIds.forEach((splits, origId) => {
-        splitLookup.set(origId, Array.from(splits.values()));
-    });
-
+    // 6. Remap ref edges using instanceToSplit and object_id matching
     // Build childToParent from newHasEdges for ancestor walking
     const newChildToParent = new Map<string, string>();
     for (const he of newHasEdges) {
@@ -324,7 +326,7 @@ export function splitMultiParentNodes(graph: Graph): Graph {
     function getAncestors(nodeId: string): Set<string> {
         const result = new Set<string>();
         let current = newChildToParent.get(nodeId);
-        while (current) {
+        while (current && !result.has(current)) {
             result.add(current);
             current = newChildToParent.get(current);
         }
@@ -341,7 +343,6 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         const toSplits = splitLookup.get(edge.to);
 
         if (!fromSplits && !toSplits) {
-            // Neither end is split — copy unchanged
             newEdges.set(edgeId, edgeArray);
             return;
         }
@@ -360,7 +361,7 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         }
 
         if (fromSplits && !toSplits) {
-            // "from" is split: match from_object to the split whose parent has that object_id
+            // "from" is split: match from_object to the split that contains it
             let matchedSplitId: string | undefined;
             if (edge.from_object) {
                 for (const splitId of fromSplits) {
@@ -378,10 +379,9 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         }
 
         if (!fromSplits && toSplits) {
-            // "to" is split: route to the split that shares a parent context with "from"
+            // "to" is split: route to the split sharing containment parent with "from"
             const fromAncestors = getAncestors(edge.from);
-            fromAncestors.add(edge.from); // include self
-            // Also check direct parent of from
+            fromAncestors.add(edge.from);
             let matchedSplitId: string | undefined;
             for (const splitId of toSplits) {
                 const pid = splitParent.get(splitId);
@@ -394,7 +394,6 @@ export function splitMultiParentNodes(graph: Graph): Graph {
                 const newEdgeId = `${edgeId}\0${matchedSplitId}`;
                 newEdges.set(newEdgeId, edgeArray.map(e => ({ ...e, to: matchedSplitId! })));
             } else {
-                // No shared parent: duplicate to all splits
                 for (const splitId of toSplits) {
                     const newEdgeId = `${edgeId}\0${splitId}`;
                     newEdges.set(newEdgeId, edgeArray.map(e => ({ ...e, to: splitId })));
@@ -407,7 +406,6 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         if (fromSplits && toSplits) {
             for (const fromSplitId of fromSplits) {
                 const fromPid = splitParent.get(fromSplitId);
-                // Try to find a matching to-split in the same parent context
                 let matchedToSplit: string | undefined;
                 if (fromPid) {
                     for (const toSplitId of toSplits) {
