@@ -1,17 +1,9 @@
 import { useEffect } from 'react';
 import { LuArrowUpRight, LuCopy, LuFocus, LuFolderOpen } from 'react-icons/lu';
 import { CodeFocus } from './code_viewer';
-import { Edge, SymbolInstance, Node, Graph } from './graph';
+import { Edge, SymbolInstance, Node, Graph, isDirectoryInstance, isSelfReference } from './graph';
 import { copyToClipboard } from './lib/clipboard';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
-
-function isDirectoryInstance(inst: SymbolInstance): boolean {
-  return inst.symbol_type === 'Directory';
-}
-
-function isSelfReference(inst: SymbolInstance): boolean {
-  return parseOffset(inst.start_offset) === 1 && parseOffset(inst.end_offset) === 0;
-}
 
 type SymbolInstanceSortInfo = {
   path: string;
@@ -117,16 +109,18 @@ function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents }: Sy
 
 interface NodeHoverSectionProps {
   sectionName: string;
-  showHeader: boolean;
   instances: SymbolInstance[];
   graph: Graph;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
 }
 
+function capitalizeInstanceType(type: string): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
 function NodeHoverSection({
   sectionName,
-  showHeader,
   instances,
   graph,
   setCodeFocus,
@@ -142,13 +136,11 @@ function NodeHoverSection({
 
   return (
     <>
-      {showHeader && (
-        <thead>
-          <tr>
-            <th colSpan={3}>{sectionName}</th>
-          </tr>
-        </thead>
-      )}
+      <thead>
+        <tr>
+          <th colSpan={3}>{sectionName}</th>
+        </tr>
+      </thead>
 
       <tbody>
         {sortedInstances.map((instance) => (
@@ -196,19 +188,16 @@ export function NodeHover({
     ? node.symbol_instances.find((inst) => isSelfReference(inst)) ?? node.symbol_instances.find((inst) => isDirectoryInstance(inst))
     : undefined;
 
-  // Group instances by symbol_type
+  // Group instances by instance_type, skipping "unspecified"
   const instancesByType = new Map<string, SymbolInstance[]>();
   realInstances.forEach((instance) => {
-    const type = instance.symbol_type;
+    const type = instance.instance_type;
+    if (type === 'unspecified') return;
     if (!instancesByType.has(type)) {
       instancesByType.set(type, []);
     }
     instancesByType.get(type)!.push(instance);
   });
-
-  // Determine if we need section headers (multiple types present)
-  const hasMultipleSections = instancesByType.size > 1
-    || (instancesByType.size >= 1 && (hiddenRefEdges?.length ?? 0) > 0);
 
   useEffect(() => {
     const seen = new Set<string>();
@@ -262,8 +251,7 @@ export function NodeHover({
         {Array.from(instancesByType.entries()).map(([typeName, instances]) => (
           <NodeHoverSection
             key={typeName}
-            sectionName={typeName}
-            showHeader={hasMultipleSections}
+            sectionName={capitalizeInstanceType(typeName)}
             instances={instances}
             graph={graph}
             setCodeFocus={setCodeFocus}

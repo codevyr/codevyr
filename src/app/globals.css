@@ -33,6 +33,10 @@ body {
   background: #ffffff;
 }
 
+.node-hover th {
+  text-align: left;
+}
+
 .node-hover-header {
   display: flex;
   align-items: center;
