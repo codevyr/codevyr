@@ -16,28 +16,28 @@ const firstResponse = {
       id: 'A',
       label: 'A',
       symbol_instances: [
-        { id: 'si_A', symbol: 'A', object_id: 'obj_A', symbol_type: 'Directory', start_offset: 0, end_offset: 100 },
+        { id: 'si_A', symbol: 'A', object_id: 'obj_A', symbol_type: 'Directory', instance_type: 'containment', start_offset: 0, end_offset: 100 },
       ],
     },
     {
       id: 'B',
       label: 'B',
       symbol_instances: [
-        { id: 'si_B', symbol: 'B', object_id: 'obj_A', symbol_type: 'Function', start_offset: 0, end_offset: 50 },
+        { id: 'si_B', symbol: 'B', object_id: 'obj_A', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 50 },
       ],
     },
     {
       id: 'C',
       label: 'C',
       symbol_instances: [
-        { id: 'si_C', symbol: 'C', object_id: 'obj_A', symbol_type: 'Function', start_offset: 50, end_offset: 80 },
+        { id: 'si_C', symbol: 'C', object_id: 'obj_A', symbol_type: 'Function', instance_type: 'definition', start_offset: 50, end_offset: 80 },
       ],
     },
     {
       id: 'D',
       label: 'D',
       symbol_instances: [
-        { id: 'si_D', symbol: 'D', object_id: 'obj_D', symbol_type: 'Function', start_offset: 0, end_offset: 10 },
+        { id: 'si_D', symbol: 'D', object_id: 'obj_D', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 10 },
       ],
     },
   ],
@@ -65,7 +65,7 @@ const secondResponseSameHierarchy = {
       id: 'E',
       label: 'E',
       symbol_instances: [
-        { id: 'si_E', symbol: 'E', object_id: 'obj_D', symbol_type: 'Function', start_offset: 10, end_offset: 20 },
+        { id: 'si_E', symbol: 'E', object_id: 'obj_D', symbol_type: 'Function', instance_type: 'definition', start_offset: 10, end_offset: 20 },
       ],
     },
   ],

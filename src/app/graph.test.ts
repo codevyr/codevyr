@@ -424,7 +424,7 @@ describe('alignToPreservedPositions', () => {
 // --- splitMultiParentNodes tests ---
 
 function makeInstance(id: string, objectId: string): SymbolInstance {
-  return { id, symbol: id, object_id: objectId, symbol_type: 'Function', start_offset: 0, end_offset: 1 };
+  return { id, symbol: id, object_id: objectId, symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 1 };
 }
 
 function makeNodeWithInstances(id: string, instances: SymbolInstance[]): Node {

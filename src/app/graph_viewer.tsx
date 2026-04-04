@@ -17,22 +17,13 @@ import ReactFlow, {
   useNodesState,
 } from 'reactflow';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, alignToPreservedPositions, buildPreservedPositionsMap, splitMultiParentNodes } from './graph';
+import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, SymbolInstance, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, alignToPreservedPositions, buildPreservedPositionsMap, splitMultiParentNodes, isDirectoryInstance, isSelfReference } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
 import { GROUP_PAD_BOTTOM, GROUP_PAD_LEFT, GROUP_PAD_RIGHT, GROUP_PAD_TOP, layoutGraphWithDagre, layoutGraphWithElk, resolveNodeSize } from './lib/graph_layout';
 import { parseOffset } from './lib/offsets';
-import { SymbolInstance } from './graph';
 import { setupGraphTestApis } from './testing/graph_test_utils';
-
-function isDirectoryInstance(inst: SymbolInstance): boolean {
-  return inst.symbol_type === 'Directory';
-}
-
-function isSelfReference(inst: SymbolInstance): boolean {
-  return parseOffset(inst.start_offset) === 1 && parseOffset(inst.end_offset) === 0;
-}
 
 export interface GraphProps {
   graph: Graph;
