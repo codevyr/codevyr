@@ -11,6 +11,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
     // 2) Language configuration (brackets, comments, auto-closing, folding)
     monaco.languages.setLanguageConfiguration(languageId, {
         comments: {
+            lineComment: '//',
             blockComment: ['/*', '*/'],
         },
         brackets: [
@@ -68,7 +69,8 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 // Whitespace
                 { include: '@whitespace' },
 
-                // Comments: /* ... */
+                // Comments: // ... and /* ... */
+                [/\/\/.*$/, 'comment'],
                 [/\/\*/, 'comment', '@comment'],
 
                 // Delimiters & operators
