@@ -157,6 +157,19 @@ function NodeHoverSection({
   );
 }
 
+const INSTANCE_TYPE_ORDER: Record<string, number> = {
+  sentinel: 1,
+  header: 2,
+  source: 3,
+  build: 4,
+  file: 5,
+  containment: 6,
+  documentation: 7,
+  declaration: 8,
+  definition: 9,
+  expansion: 10,
+};
+
 export interface NodeHoverProps {
   node: Node;
   graph: Graph;
@@ -248,7 +261,9 @@ export function NodeHover({
         <div className="node-hover-dir-path">{dirPath}</div>
       )}
       <table>
-        {Array.from(instancesByType.entries()).map(([typeName, instances]) => (
+        {Array.from(instancesByType.entries())
+          .sort(([a], [b]) => (INSTANCE_TYPE_ORDER[a] ?? 99) - (INSTANCE_TYPE_ORDER[b] ?? 99))
+          .map(([typeName, instances]) => (
           <NodeHoverSection
             key={typeName}
             sectionName={capitalizeInstanceType(typeName)}
