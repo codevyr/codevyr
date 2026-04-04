@@ -94,7 +94,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 [/#[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
 
                 // Known verb names (without @)
-                [/(?:func|file|mod|dir|type|data|macro|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive|unnest)\b/, {
+                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive|unnest)\b/, {
                     token: 'keyword', next: '@maybeCall',
                 }],
 
@@ -259,6 +259,22 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     insertText: '!"${1:verb}"',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                     detail: 'special_verb (forced_verb)',
+                    range: range,
+                },
+                {
+                    label: 'field',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'field("${1:name}")',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'selector: struct field / dispatch point',
+                    range: range,
+                },
+                {
+                    label: 'method',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'method("${1:name}")',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'selector: interface method (alias for field)',
                     range: range,
                 },
                 {

@@ -225,7 +225,7 @@ export function splitMultiParentNodes(graph: Graph): Graph {
 
     // 3. Fast path: no node has multiple context keys → return graph unchanged
     let needsSplit = false;
-    for (const keys of nodeContextKeys.values()) {
+    for (const keys of Array.from(nodeContextKeys.values())) {
         if (keys.size > 1) { needsSplit = true; break; }
     }
     if (!needsSplit) return graph;
