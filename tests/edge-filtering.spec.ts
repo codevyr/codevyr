@@ -17,28 +17,28 @@ const graphResponse = {
       id: 'A',
       label: 'A',
       symbol_instances: [
-        { id: 'si_A', symbol: 'A', object_id: 'obj_A', symbol_type: 'Directory', start_offset: 0, end_offset: 100 },
+        { id: 'si_A', symbol: 'A', object_id: 'obj_A', symbol_type: 'Directory', instance_type: 'containment', start_offset: 0, end_offset: 100 },
       ],
     },
     {
       id: 'B',
       label: 'B',
       symbol_instances: [
-        { id: 'si_B', symbol: 'B', object_id: 'obj_A', symbol_type: 'File', start_offset: 0, end_offset: 50 },
+        { id: 'si_B', symbol: 'B', object_id: 'obj_A', symbol_type: 'File', instance_type: 'source', start_offset: 0, end_offset: 50 },
       ],
     },
     {
       id: 'C',
       label: 'C',
       symbol_instances: [
-        { id: 'si_C', symbol: 'C', object_id: 'obj_A', symbol_type: 'Function', start_offset: 0, end_offset: 20 },
+        { id: 'si_C', symbol: 'C', object_id: 'obj_A', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 20 },
       ],
     },
     {
       id: 'D',
       label: 'D',
       symbol_instances: [
-        { id: 'si_D', symbol: 'D', object_id: 'obj_D', symbol_type: 'Function', start_offset: 0, end_offset: 10 },
+        { id: 'si_D', symbol: 'D', object_id: 'obj_D', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 10 },
       ],
     },
   ],
@@ -68,49 +68,49 @@ const multiBranchResponse = {
       id: 'A',
       label: 'A',
       symbol_instances: [
-        { id: 'si_A', symbol: 'A', object_id: 'obj_A', symbol_type: 'Directory', start_offset: 0, end_offset: 100 },
+        { id: 'si_A', symbol: 'A', object_id: 'obj_A', symbol_type: 'Directory', instance_type: 'containment', start_offset: 0, end_offset: 100 },
       ],
     },
     {
       id: 'B1',
       label: 'B1',
       symbol_instances: [
-        { id: 'si_B1', symbol: 'B1', object_id: 'obj_A', symbol_type: 'File', start_offset: 0, end_offset: 50 },
+        { id: 'si_B1', symbol: 'B1', object_id: 'obj_A', symbol_type: 'File', instance_type: 'source', start_offset: 0, end_offset: 50 },
       ],
     },
     {
       id: 'B2',
       label: 'B2',
       symbol_instances: [
-        { id: 'si_B2', symbol: 'B2', object_id: 'obj_A', symbol_type: 'File', start_offset: 50, end_offset: 100 },
+        { id: 'si_B2', symbol: 'B2', object_id: 'obj_A', symbol_type: 'File', instance_type: 'source', start_offset: 50, end_offset: 100 },
       ],
     },
     {
       id: 'C1',
       label: 'C1',
       symbol_instances: [
-        { id: 'si_C1', symbol: 'C1', object_id: 'obj_A', symbol_type: 'Function', start_offset: 0, end_offset: 20 },
+        { id: 'si_C1', symbol: 'C1', object_id: 'obj_A', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 20 },
       ],
     },
     {
       id: 'C2',
       label: 'C2',
       symbol_instances: [
-        { id: 'si_C2', symbol: 'C2', object_id: 'obj_A', symbol_type: 'Function', start_offset: 50, end_offset: 70 },
+        { id: 'si_C2', symbol: 'C2', object_id: 'obj_A', symbol_type: 'Function', instance_type: 'definition', start_offset: 50, end_offset: 70 },
       ],
     },
     {
       id: 'D',
       label: 'D',
       symbol_instances: [
-        { id: 'si_D', symbol: 'D', object_id: 'obj_D', symbol_type: 'Function', start_offset: 0, end_offset: 10 },
+        { id: 'si_D', symbol: 'D', object_id: 'obj_D', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 10 },
       ],
     },
     {
       id: 'E',
       label: 'E',
       symbol_instances: [
-        { id: 'si_E', symbol: 'E', object_id: 'obj_D', symbol_type: 'Function', start_offset: 10, end_offset: 20 },
+        { id: 'si_E', symbol: 'E', object_id: 'obj_D', symbol_type: 'Function', instance_type: 'definition', start_offset: 10, end_offset: 20 },
       ],
     },
   ],

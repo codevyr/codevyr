@@ -1,13 +1,23 @@
 import type { Node as FlowNode } from 'reactflow';
 import type { OffsetValue } from './lib/offsets';
+import { parseOffset } from './lib/offsets';
 
 export interface SymbolInstance {
     id: string;
     symbol: string;
     object_id: string;
     symbol_type: string;
+    instance_type: string;
     start_offset: OffsetValue;
     end_offset: OffsetValue;
+}
+
+export function isDirectoryInstance(inst: SymbolInstance): boolean {
+    return inst.instance_type === 'sentinel' || inst.instance_type === 'containment';
+}
+
+export function isSelfReference(inst: SymbolInstance): boolean {
+    return parseOffset(inst.start_offset) === 1 && parseOffset(inst.end_offset) === 0;
 }
 
 export interface Node {
