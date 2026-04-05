@@ -229,6 +229,25 @@ body {
   @apply flex items-center text-xs text-gray-500;
 }
 
+/* Split button: join two toolbar-btn halves, unified focus ring */
+.save-split-button {
+  @apply flex items-center rounded-md
+         focus-within:ring-2 focus-within:ring-blue-500;
+}
+.save-split-main   { @apply rounded-r-none border-r-0 focus:ring-0; }
+.save-split-chevron { @apply rounded-l-none px-1.5 self-stretch focus:ring-0; }
+
+/* Dropdown menu items (reuses context-menu-content for container) */
+.dropdown-menu-item {
+  @apply flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700
+         rounded cursor-pointer outline-none
+         data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900;
+}
+.dropdown-menu-item-name   { @apply truncate max-w-[250px]; }
+.dropdown-menu-item-danger { @apply text-red-600 data-[highlighted]:bg-red-50 data-[highlighted]:text-red-700; }
+.dropdown-menu-separator   { @apply h-px bg-gray-200 my-1 mx-2; }
+.dropdown-menu-empty       { @apply px-3 py-2 text-xs text-gray-400 italic; }
+
 .step-badge{
   width:34px;height:34px;border-radius:9999px;
   display:inline-flex;align-items:center;justify-content:center;

@@ -351,7 +351,13 @@ export default function Home() {
       case "query-editor":
         return (
           <div className="flex flex-col h-full">
-            <QueryToolbar onRunQuery={handleRunQuery} onShare={handleShare} status={shareStatus} />
+            <QueryToolbar
+              onRunQuery={handleRunQuery}
+              onShare={handleShare}
+              onGetQuery={() => editorHandleRef.current?.getQuery() ?? ''}
+              onLoadQuery={(q) => editorHandleRef.current?.setQuery(q)}
+              status={shareStatus}
+            />
             <div className="flex-1">
               <EditorComponent
                 ref={editorHandleRef}
