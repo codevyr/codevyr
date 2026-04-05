@@ -144,7 +144,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
 
     return (
         <div className="h-full w-full" data-testid="code-viewer" data-file-id={editorParams.fileId ?? ''}>
-            <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} />
+            <Editor height="100%" onMount={handleEditorDidMount} value={editorParams.value} language={editorParams.language} path={editorParams.path} options={{ readOnly: true }} />
         </div>
     );
 }
