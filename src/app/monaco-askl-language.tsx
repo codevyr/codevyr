@@ -96,7 +96,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 [/#[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
 
                 // Known verb names (without @)
-                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive|unnest)\b/, {
+                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive|unnest|any)\b/, {
                     token: 'keyword', next: '@maybeCall',
                 }],
 
@@ -284,7 +284,15 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     kind: monaco.languages.CompletionItemKind.Function,
                     insertText: 'unnest',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    detail: 'modifier: include transitive children/refs',
+                    detail: 'modifier: include transitive children/refs and all containment levels',
+                    range: range,
+                },
+                {
+                    label: 'any',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'any',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'modifier: remove inherited type filtering',
                     range: range,
                 },
                 {
