@@ -234,8 +234,9 @@ function buildProblemsFromWarnings(warnings: QueryDiagnostic[] | undefined, sour
 }
 
 async function handleQueryFailure(response: Response, monacoInstance: Monaco | null, editor: MonacoEditor.ICodeEditor, sourceText: string): Promise<Problem[]> {
+    const body = await response.text().catch(() => '');
     try {
-        const errorData: QueryDiagnostic = await response.json();
+        const errorData: QueryDiagnostic = JSON.parse(body);
         const range = getRangeFromLocation(sourceText, errorData.location, errorData.line_col);
         applyEditorErrorMarker(monacoInstance, editor, errorData.message || 'Query failed', range);
         return [
@@ -244,10 +245,10 @@ async function handleQueryFailure(response: Response, monacoInstance: Monaco | n
                 lineText: errorData.line ?? null,
             }),
         ];
-    } catch (parseError) {
-        console.error('Failed to parse query error response', parseError);
-        applyEditorErrorMarker(monacoInstance, editor, `Query failed (${response.status})`);
-        return [buildProblem(`Query failed (${response.status})`, 'error', defaultMarkerRange)];
+    } catch {
+        const msg = body || `Query failed (${response.status})`;
+        applyEditorErrorMarker(monacoInstance, editor, msg);
+        return [buildProblem(msg, 'error', defaultMarkerRange)];
     }
 }
 

@@ -38,14 +38,21 @@ export interface ProjectTreeResponse {
 }
 
 
+let queryAbortController: AbortController | null = null;
+
 export function fetchQuery(query: string): Promise<Response> {
+  if (queryAbortController) {
+    queryAbortController.abort();
+  }
+  queryAbortController = new AbortController();
   console.log(`${askldUrl}`, query);
   return fetch(`${askldUrl}/query`, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain'
     },
-    body: query
+    body: query,
+    signal: queryAbortController.signal,
   });
 }
 
