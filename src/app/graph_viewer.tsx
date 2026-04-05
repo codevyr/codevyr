@@ -122,6 +122,10 @@ function getNodeSize(node: FlowNode<GraphNodeData>): { width: number; height: nu
   };
 }
 
+function dismissContextMenu() {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+}
+
 function triggerContextMenu(event: React.MouseEvent<Element>) {
   event.preventDefault();
   event.stopPropagation();
@@ -308,6 +312,32 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 
   const hasHiddenRefs = (hiddenRefEdges?.length ?? 0) > 0;
 
+  const closeMenu = useCallback(() => dismissContextMenu(), []);
+
+  const wrappedSelectFile = useCallback(
+    (codeFocus: CodeFocus) => {
+      selectFile(codeFocus);
+      closeMenu();
+    },
+    [selectFile, closeMenu],
+  );
+
+  const wrappedFocusNode = useCallback(
+    (nodeId: string) => {
+      data.focusNode(nodeId);
+      closeMenu();
+    },
+    [data.focusNode, closeMenu],
+  );
+
+  const wrappedRevealDirectory = useCallback(
+    (objectId: string) => {
+      revealDirectory(objectId);
+      closeMenu();
+    },
+    [revealDirectory, closeMenu],
+  );
+
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       setLastSelected?.({ kind: 'node', id });
@@ -411,13 +441,14 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
           <NodeHover
             node={node}
             graph={graph}
-            setCodeFocus={selectFile}
-            focusNode={data.focusNode}
+            setCodeFocus={wrappedSelectFile}
+            focusNode={wrappedFocusNode}
             fileContents={fileContents}
             ensureFileContent={ensureFileContent}
             isGroupNode={isDirectoryNode}
-            revealDirectory={revealDirectory}
+            revealDirectory={wrappedRevealDirectory}
             hiddenRefEdges={hiddenRefEdges}
+            onAction={closeMenu}
           />
         </ContextMenu.Content>
       </ContextMenu.Portal>
@@ -452,6 +483,17 @@ function GraphEdgeComponent({
   const isOpen = activeMenu?.kind === 'edge' && activeMenu.id === id;
   const isSelected = lastSelected?.kind === 'edge' && lastSelected.id === id;
   const isSelfLoop = source === target;
+
+  const closeMenu = useCallback(() => dismissContextMenu(), []);
+
+  const wrappedSelectFile = useCallback(
+    (codeFocus: CodeFocus) => {
+      selectFile?.(codeFocus);
+      closeMenu();
+    },
+    [selectFile, closeMenu],
+  );
+
   let edgePath = '';
   const edgeBaseColor =
     typeof style?.stroke === 'string'
@@ -580,9 +622,10 @@ function GraphEdgeComponent({
           <EdgesHover
             edges={edgesList}
             graph={data.graph}
-            setCodeFocus={data.selectFile}
+            setCodeFocus={wrappedSelectFile}
             fileContents={data.fileContents}
             ensureFileContent={data.ensureFileContent}
+            onAction={closeMenu}
           />
         </ContextMenu.Content>
       </ContextMenu.Portal>

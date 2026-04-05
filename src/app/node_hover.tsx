@@ -54,9 +54,10 @@ interface SymbolInstanceHoverProps {
   graph: Graph;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
+  onAction?: () => void;
 }
 
-function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents }: SymbolInstanceHoverProps) {
+function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents, onAction }: SymbolInstanceHoverProps) {
   const filePath = graph.objects.get(instance.object_id)?.path ?? 'Undefined';
   const location = formatOffsetLocation(
     fileContents.get(instance.object_id),
@@ -73,6 +74,7 @@ function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents }: Sy
 
   function copyPath() {
     void copyToClipboard(filePath);
+    onAction?.();
   }
 
   return (
@@ -113,6 +115,7 @@ interface NodeHoverSectionProps {
   graph: Graph;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
+  onAction?: () => void;
 }
 
 function capitalizeInstanceType(type: string): string {
@@ -125,6 +128,7 @@ function NodeHoverSection({
   graph,
   setCodeFocus,
   fileContents,
+  onAction,
 }: NodeHoverSectionProps) {
   if (instances.length === 0) {
     return null;
@@ -150,6 +154,7 @@ function NodeHoverSection({
             graph={graph}
             setCodeFocus={setCodeFocus}
             fileContents={fileContents}
+            onAction={onAction}
           />
         ))}
       </tbody>
@@ -180,6 +185,7 @@ export interface NodeHoverProps {
   isGroupNode?: boolean;
   revealDirectory?: (objectId: string) => void;
   hiddenRefEdges?: Array<Edge>;
+  onAction?: () => void;
 }
 
 export function NodeHover({
@@ -192,6 +198,7 @@ export function NodeHover({
   isGroupNode,
   revealDirectory,
   hiddenRefEdges,
+  onAction,
 }: NodeHoverProps) {
   // For group nodes, separate directory instances from real code references
   const realInstances = isGroupNode
@@ -253,7 +260,7 @@ export function NodeHover({
         <button type="button" className="node-hover-icon" onClick={() => focusNode(node.id)} title="Focus node">
           <LuFocus />
         </button>
-        <button type="button" className="node-hover-icon" onClick={() => void copyToClipboard(node.label)} title="Copy symbol name">
+        <button type="button" className="node-hover-icon" onClick={() => { void copyToClipboard(node.label); onAction?.(); }} title="Copy symbol name">
           <LuCopy />
         </button>
       </div>
@@ -271,6 +278,7 @@ export function NodeHover({
             graph={graph}
             setCodeFocus={setCodeFocus}
             fileContents={fileContents}
+            onAction={onAction}
           />
         ))}
       </table>
@@ -291,6 +299,7 @@ export function NodeHover({
                   graph={graph}
                   setCodeFocus={setCodeFocus}
                   fileContents={fileContents}
+                  onAction={onAction}
                 />
               ))}
           </tbody>
@@ -305,6 +314,7 @@ interface EdgeHoverProps {
   graph: Graph;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
+  onAction?: () => void;
 }
 
 function resolveEdgeObjectId(edge: Edge, graph: Graph): string | null {
@@ -352,7 +362,7 @@ function compareEdges(
   return leftInfo.offset - rightInfo.offset;
 }
 
-function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) {
+function EdgeHover({ edge, graph, setCodeFocus, fileContents, onAction }: EdgeHoverProps) {
   const objectId = resolveEdgeObjectId(edge, graph);
   const filePath = objectId ? graph.objects.get(objectId)?.path ?? objectId : 'Undefined';
   const location = formatOffsetLocation(objectId ? fileContents.get(objectId) : undefined, edge.from_offset_start);
@@ -370,6 +380,7 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents }: EdgeHoverProps) 
 
   function copyPath() {
     void copyToClipboard(filePath);
+    onAction?.();
   }
 
   return (
@@ -410,9 +421,10 @@ export interface EdgesHoverProps {
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
+  onAction?: () => void;
 }
 
-export function EdgesHover({ edges, setCodeFocus, graph, fileContents, ensureFileContent }: EdgesHoverProps) {
+export function EdgesHover({ edges, setCodeFocus, graph, fileContents, ensureFileContent, onAction }: EdgesHoverProps) {
   useEffect(() => {
     edges.forEach((edge) => {
       const objectId = resolveEdgeObjectId(edge, graph);
@@ -456,6 +468,7 @@ export function EdgesHover({ edges, setCodeFocus, graph, fileContents, ensureFil
               graph={graph}
               setCodeFocus={setCodeFocus}
               fileContents={fileContents}
+              onAction={onAction}
             />
           ))}
         </tbody>
