@@ -211,7 +211,7 @@ function darkenColor(color: string, amount: number) {
 function splitSymbolWithOffsets(label: string): { tokens: string[]; offsets: number[] } {
   const tokens: string[] = [];
   const offsets: number[] = [];
-  const re = /[a-zA-Z0-9_]+/g;
+  const re = /[^/]+/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(label)) !== null) {
     tokens.push(m[0]);
@@ -225,9 +225,18 @@ function buildDisplayLabelMap(graph: Graph) {
     const { tokens, offsets } = splitSymbolWithOffsets(node.label);
     return { id: node.id, label: node.label, tokens, offsets };
   });
+  // Deduplicate by label so split nodes with identical names don't
+  // inflate suffix counts and prevent shortening.
+  const seen = new Set<string>();
+  const uniqueEntries = entries.filter(({ label }) => {
+    if (seen.has(label)) return false;
+    seen.add(label);
+    return true;
+  });
+
   const suffixCounts = new Map<string, number>();
 
-  entries.forEach(({ tokens, label }) => {
+  uniqueEntries.forEach(({ tokens, label }) => {
     if (tokens.length === 0) {
       suffixCounts.set(label, (suffixCounts.get(label) ?? 0) + 1);
       return;
