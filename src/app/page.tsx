@@ -11,6 +11,7 @@ import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
 import { formatOffsetLocation } from './lib/offsets';
 import { QueryToolbar, ShareStatus } from './query_toolbar';
+import { readLastQuery } from './lib/use_saved_queries';
 import { buildShareUrl, getQueryFromHash } from './lib/query_share';
 import { FileExplorer } from './file_explorer';
 import { useFileTreeCache } from './lib/file_tree_cache';
@@ -167,7 +168,7 @@ function GraphCode({ graph, fileContents }: GraphCodeProps) {
 
 export default function Home() {
   const [model] = useState(() => Model.fromJson(initialLayout));
-  const [query, setQuery] = useState(DEFAULT_QUERY);
+  const [query, setQuery] = useState(() => readLastQuery() ?? DEFAULT_QUERY);
   const [queryGraph, setQueryGraph] = useState<Graph>({
     nodes: new Map<string, Node>(),
     edges: new Map<string, Array<Edge>>(),

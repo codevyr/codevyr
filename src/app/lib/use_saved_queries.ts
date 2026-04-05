@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 const STORAGE_KEY = 'askl-saved-queries';
+const LAST_QUERY_KEY = 'askl-last-query';
 const MAX_QUERIES = 10;
 
 export interface SavedQuery {
@@ -47,10 +48,10 @@ export function useSavedQueries() {
       let next: SavedQuery[];
 
       if (existingIdx !== -1) {
-        // Duplicate — update timestamp and move to front
+        // Duplicate — update timestamp and move to front, preserve custom name
         const existing = prev[existingIdx];
         next = [
-          { ...existing, savedAt: Date.now(), name: deriveQueryName(queryText) },
+          { ...existing, savedAt: Date.now() },
           ...prev.slice(0, existingIdx),
           ...prev.slice(existingIdx + 1),
         ];
@@ -93,4 +94,14 @@ export function useSavedQueries() {
   }
 
   return { savedQueries, saveQuery, renameQuery, deleteQuery, clearAll } as const;
+}
+
+export function readLastQuery(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(LAST_QUERY_KEY);
+}
+
+export function writeLastQuery(query: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAST_QUERY_KEY, query);
 }
