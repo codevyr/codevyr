@@ -10,6 +10,7 @@ import { fetchQuery } from './askld';
 import { registerAskl } from './monaco-askl-language';
 import { Problem } from './problems';
 import { getLineColumnFromOffset } from './lib/offsets';
+import { writeLastQuery } from './lib/use_saved_queries';
 
 export interface EditorHandle {
     revealRange: (range: IRange) => void;
@@ -382,5 +383,5 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
         };
     }, []);
 
-    return <Editor height="100%" defaultLanguage="askl" defaultValue={query} beforeMount={handleEditorWillMount} onMount={handleEditorDidMount} />;
+    return <Editor height="100%" defaultLanguage="askl" defaultValue={query} beforeMount={handleEditorWillMount} onMount={handleEditorDidMount} onChange={(value) => { if (value != null) writeLastQuery(value); }} />;
 });
