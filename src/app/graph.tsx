@@ -184,11 +184,9 @@ export function buildPreservedPositionsMap(
  * Split node IDs use `${nodeId}\0${contextKey}` (NUL separator avoids collisions).
  */
 export function splitMultiParentNodes(graph: Graph): Graph {
-    // 1. Build instance-level maps from has_edges
+    // 1. Build instance-level containment map from has_edges
     // childInstToParent: which parent instance contains this child instance
     const childInstToParent = new Map<string, { parentSymbol: string; parentInstance: string }>();
-    // parentInstChildren: which child *symbols* each parent instance contains
-    const parentInstChildren = new Map<string, Set<string>>();
 
     for (const he of graph.has_edges) {
         if (!graph.nodes.has(he.parent) || !graph.nodes.has(he.child)) continue;
@@ -196,18 +194,15 @@ export function splitMultiParentNodes(graph: Graph): Graph {
             parentSymbol: he.parent,
             parentInstance: he.parent_instance,
         });
-        let children = parentInstChildren.get(he.parent_instance);
-        if (!children) {
-            children = new Set<string>();
-            parentInstChildren.set(he.parent_instance, children);
-        }
-        children.add(he.child);
     }
 
-    // 2. Classify each instance into a context key
-    // context = `{containment}:{childrenKey}`
-    // containment = `contained-by:{parentSymbol}` if instance is a child_instance, else `root`
-    // childrenKey = sorted child symbol IDs joined by ',' if instance is a parent, else `leaf`
+    // 2. Classify each instance into a context key based on containment only.
+    // Instances with different parents get different keys; instances with the
+    // same parent (or all at root) share a key — regardless of which children
+    // they contain.  This avoids needlessly splitting a directory node whose
+    // instances parent different files.
+    //
+    // context = `contained-by:{parentSymbol}` | `root`
 
     // instanceToContext: instanceId → contextKey
     const instanceToContext = new Map<string, string>();
@@ -219,14 +214,9 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         const contextKeys = new Set<string>();
         for (const inst of node.symbol_instances) {
             const parentInfo = childInstToParent.get(inst.id);
-            const containment = parentInfo
+            const contextKey = parentInfo
                 ? `contained-by:${parentInfo.parentSymbol}`
                 : 'root';
-            const childSymbols = parentInstChildren.get(inst.id);
-            const childrenKey = childSymbols
-                ? Array.from(childSymbols).sort().join(',')
-                : 'leaf';
-            const contextKey = `${containment}:${childrenKey}`;
             instanceToContext.set(inst.id, contextKey);
             contextKeys.add(contextKey);
         }
@@ -266,7 +256,6 @@ export function splitMultiParentNodes(graph: Graph): Graph {
             for (const inst of node.symbol_instances) {
                 instanceToSplit.set(inst.id, nodeId);
             }
-            splitObjectIds.set(nodeId, collectObjectIds(node.symbol_instances));
             return;
         }
 
@@ -310,7 +299,6 @@ export function splitMultiParentNodes(graph: Graph): Graph {
     const newHasEdges: HasEdge[] = [];
 
     for (const he of graph.has_edges) {
-        if (!graph.nodes.has(he.parent) || !graph.nodes.has(he.child)) continue;
         const parentSplitId = instanceToSplit.get(he.parent_instance);
         const childSplitId = instanceToSplit.get(he.child_instance);
         if (!parentSplitId || !childSplitId) continue;
