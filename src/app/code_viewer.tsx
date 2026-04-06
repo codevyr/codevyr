@@ -131,7 +131,7 @@ export function CodeViewer({ editorParams }: CodeViewerProps) {
             centerRequestedLocation();
         });
 
-      
+        centerRequestedLocation();
     }, [centerRequestedLocation]);
 
     useEffect(() => {

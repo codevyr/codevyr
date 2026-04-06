@@ -36,3 +36,34 @@ func main() {
 	code := cli.Run(command)
 	os.Exit(code)
 }
+
+// setupSignalHandler registers for SIGTERM and SIGINT. A context is returned
+// which is canceled on one of these signals. If a second signal is caught, the
+// program is terminated with exit code 1.
+func setupSignalHandler() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, shutdownSignals...)
+	go func() {
+		<-c
+		cancel()
+		<-c
+		os.Exit(1)
+	}()
+	return ctx
+}
+
+// getHostname returns the hostname of the node, first attempting to read it
+// from the environment variable NODE_NAME, then falling back to os.Hostname.
+func getHostname() (string, error) {
+	if name := os.Getenv("NODE_NAME"); name != "" {
+		return name, nil
+	}
+	return os.Hostname()
+}
+
+// initConfigz initializes the /configz endpoint to report the kubelet's
+// configuration. This is useful for debugging and validation.
+func initConfigz(kc *kubeletconfiginternal.KubeletConfiguration) error {
+	return nil
+}

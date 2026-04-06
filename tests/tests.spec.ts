@@ -96,9 +96,6 @@ test('query editor highlights InitLogs and opens logs.go', async ({ page }) => {
 });
 
 test('graph selections center the focused code', async ({ page }) => {
-  return;
-
-  // The test is flaky, disabling for now.
   await interceptGraphEndpoints(page);
   await loadApp(page);
 
@@ -113,17 +110,13 @@ test('graph selections center the focused code', async ({ page }) => {
 
   await tapGraphNodeAndWaitForSource(page, '1', '1');
   await expectLineRoughlyCentered(page, 'mock/kubelet.go', 34);
-  await page.waitForTimeout(500);
 
   await tapGraphNodeAndWaitForSource(page, '4', '4');
   await expectLineRoughlyCentered(page, 'mock/run.go', 43);
-  await page.waitForTimeout(500);
 
   await tapGraphEdge(page, '1-4');
   await expectLineRoughlyCentered(page, 'mock/kubelet.go', 36);
-  await page.waitForTimeout(500);
 
   await tapGraphEdge(page, '4-22');
   await expectLineRoughlyCentered(page, 'mock/run.go', 44);
-  await page.waitForTimeout(500);
 });
