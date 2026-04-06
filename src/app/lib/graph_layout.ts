@@ -26,6 +26,39 @@ function estimateNodeSize(label: string) {
   };
 }
 
+/**
+ * Measures the per-character width and horizontal padding of a
+ * .graph-group-node-header element.  Uses the actual CSS class so the result
+ * stays correct regardless of font, DPI, or root font-size.
+ *
+ * Both values are measured with a single hidden DOM element and cached for
+ * the lifetime of the page.
+ */
+let _cachedHeaderMetrics: { charWidth: number; padding: number } | null = null;
+
+function measureHeaderMetrics(): { charWidth: number; padding: number } {
+  if (_cachedHeaderMetrics !== null) return _cachedHeaderMetrics;
+  if (typeof document === 'undefined') return { charWidth: 7, padding: 20 }; // SSR fallback
+  const span = document.createElement('span');
+  span.className = 'graph-group-node-header';
+  span.style.cssText += ';visibility:hidden;position:absolute;white-space:nowrap;pointer-events:none';
+  document.body.appendChild(span);
+  const cs = getComputedStyle(span);
+  const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  // Measure average char width with representative text, subtracting padding.
+  const sampleText = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.';
+  span.textContent = sampleText;
+  const charWidth = (span.offsetWidth - padding) / sampleText.length;
+  document.body.removeChild(span);
+  _cachedHeaderMetrics = { charWidth, padding };
+  return _cachedHeaderMetrics;
+}
+
+export function measureGroupHeaderWidth(label: string): number {
+  const { charWidth, padding } = measureHeaderMetrics();
+  return Math.ceil(label.length * charWidth + padding);
+}
+
 function resolveNodeLabel(node: FlowNode) {
   return typeof (node.data as any)?.label === 'string'
     ? (node.data as any).label
@@ -44,6 +77,108 @@ export function resolveNodeSize(node: FlowNode) {
     width: styleW ?? measuredWidth ?? size.width,
     height: styleH ?? measuredHeight ?? size.height,
   };
+}
+
+/**
+ * Recomputes a single parent's position and style from its children's bounding
+ * box.  Mutates `parentNode` and `children` in place.  Returns false if the
+ * bounding box could not be computed (no finite positions).
+ */
+export function resizeSingleParent(
+  parentNode: FlowNode,
+  children: FlowNode[],
+  measuredSizes?: Map<string, { width: number; height: number }>,
+): boolean {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const child of children) {
+    const { width, height } = measuredSizes?.get(child.id) ?? resolveNodeSize(child);
+    minX = Math.min(minX, child.position.x);
+    minY = Math.min(minY, child.position.y);
+    maxX = Math.max(maxX, child.position.x + width);
+    maxY = Math.max(maxY, child.position.y + height);
+  }
+
+  if (!Number.isFinite(minX)) return false;
+
+  const shiftX = GROUP_PAD_LEFT - minX;
+  const shiftY = GROUP_PAD_TOP - minY;
+
+  if (shiftX !== 0 || shiftY !== 0) {
+    parentNode.position = {
+      x: parentNode.position.x - shiftX,
+      y: parentNode.position.y - shiftY,
+    };
+    for (const child of children) {
+      child.position = {
+        x: child.position.x + shiftX,
+        y: child.position.y + shiftY,
+      };
+    }
+    maxX += shiftX;
+    maxY += shiftY;
+  }
+
+  const childrenWidth = maxX + GROUP_PAD_RIGHT;
+  const labelMinWidth = measureGroupHeaderWidth(resolveNodeLabel(parentNode));
+  parentNode.style = {
+    ...(parentNode.style ?? {}),
+    width: Math.max(childrenWidth, labelMinWidth),
+    height: maxY + GROUP_PAD_BOTTOM,
+  };
+
+  return true;
+}
+
+export function adjustParentDimensions(
+  nodes: FlowNode[],
+  hierarchy: HierarchyInfo,
+  measuredSizes?: Map<string, { width: number; height: number }>,
+): FlowNode[] {
+  const cloned = nodes.map((n) => ({
+    ...n,
+    position: { ...n.position },
+    style: n.style ? { ...n.style } : undefined,
+  }));
+  const nodeMap = new Map(cloned.map((n) => [n.id, n]));
+
+  // Collect all parent IDs and compute their depth (distance to root).
+  const parentIds = Array.from(hierarchy.parentToChildren.keys());
+
+  const depthCache = new Map<string, number>();
+  function getDepth(id: string): number {
+    const cached = depthCache.get(id);
+    if (cached !== undefined) return cached;
+    const parent = hierarchy.childToParent.get(id);
+    const depth = parent ? getDepth(parent) + 1 : 0;
+    depthCache.set(id, depth);
+    return depth;
+  }
+
+  // Sort deepest first (bottom-up).
+  parentIds.sort((a, b) => getDepth(b) - getDepth(a));
+
+  for (const parentId of parentIds) {
+    const parentNode = nodeMap.get(parentId);
+    if (!parentNode) continue;
+
+    const childIdSet = hierarchy.parentToChildren.get(parentId);
+    if (!childIdSet || childIdSet.size === 0) continue;
+
+    const children: FlowNode[] = [];
+    childIdSet.forEach((childId) => {
+      const child = nodeMap.get(childId);
+      if (child) children.push(child);
+    });
+    if (children.length === 0) continue;
+
+    resizeSingleParent(parentNode, children, measuredSizes);
+  }
+
+  return cloned;
 }
 
 function pruneEdgesForLayout(edges: FlowEdge[]) {

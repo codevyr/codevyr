@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, splitMultiParentNodes, Edge, FilteredEdgesResult, Graph, HasEdge, HierarchyInfo, Node, SymbolInstance } from './graph';
+import { adjustParentDimensions, measureGroupHeaderWidth, GROUP_PAD_BOTTOM, GROUP_PAD_LEFT, GROUP_PAD_RIGHT, GROUP_PAD_TOP } from './lib/graph_layout';
 import type { Node as FlowNode } from 'reactflow';
 
 function makeNode(id: string): Node {
@@ -946,5 +947,180 @@ describe('splitMultiParentNodes', () => {
     const cyParent = result.has_edges.find(he => he.child === 'child_y');
     expect(cyParent).toBeDefined();
     expect(cyParent!.parent).toBe(`func\0${ctx('file_a')}`);
+  });
+});
+
+// --- adjustParentDimensions tests ---
+
+function flowNodeSized(id: string, x: number, y: number, w: number, h: number): FlowNode {
+  return { id, position: { x, y }, data: { label: id }, style: { width: w, height: h } } as FlowNode;
+}
+
+describe('adjustParentDimensions', () => {
+  it('computes parent dimensions from children bounding box', () => {
+    const parent = flowNodeSized('A', 0, 0, 500, 500);
+    const childB = flowNodeSized('B', GROUP_PAD_LEFT, GROUP_PAD_TOP, 80, 30);
+    const childC = flowNodeSized('C', 100, GROUP_PAD_TOP, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['B', 'A'], ['C', 'A']]),
+      parentToChildren: new Map([['A', new Set(['B', 'C'])]]),
+    };
+    const result = adjustParentDimensions([parent, childB, childC], hierarchy);
+    const p = result.find((n) => n.id === 'A')!;
+    // maxX = 100 + 80 = 180, width = 180 + PAD_RIGHT = 190
+    expect(p.style!.width).toBe(180 + GROUP_PAD_RIGHT);
+    // maxY = 40 + 30 = 70, height = 70 + PAD_BOTTOM = 80
+    expect(p.style!.height).toBe(GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM);
+  });
+
+  it('parent grows when a child is added at a wider position', () => {
+    const parent = flowNodeSized('A', 0, 0, 190, 80);
+    const childB = flowNodeSized('B', GROUP_PAD_LEFT, GROUP_PAD_TOP, 80, 30);
+    const childC = flowNodeSized('C', 100, GROUP_PAD_TOP, 80, 30);
+    const childD = flowNodeSized('D', 200, GROUP_PAD_TOP, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['B', 'A'], ['C', 'A'], ['D', 'A']]),
+      parentToChildren: new Map([['A', new Set(['B', 'C', 'D'])]]),
+    };
+    const result = adjustParentDimensions([parent, childB, childC, childD], hierarchy);
+    const p = result.find((n) => n.id === 'A')!;
+    // maxX = 200 + 80 = 280, width = 280 + PAD_RIGHT = 290
+    expect(p.style!.width).toBe(280 + GROUP_PAD_RIGHT);
+  });
+
+  it('parent shrinks when a child is removed', () => {
+    const parent = flowNodeSized('A', 0, 0, 500, 500);
+    const childB = flowNodeSized('B', GROUP_PAD_LEFT, GROUP_PAD_TOP, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['B', 'A']]),
+      parentToChildren: new Map([['A', new Set(['B'])]]),
+    };
+    const result = adjustParentDimensions([parent, childB], hierarchy);
+    const p = result.find((n) => n.id === 'A')!;
+    expect(p.style!.width).toBe(GROUP_PAD_LEFT + 80 + GROUP_PAD_RIGHT);
+    expect(p.style!.height).toBe(GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM);
+  });
+
+  it('multi-level nesting — bottom-up processing', () => {
+    const grandparent = flowNodeSized('GP', 0, 0, 1000, 1000);
+    const parent = flowNodeSized('P', GROUP_PAD_LEFT, GROUP_PAD_TOP, 500, 500);
+    const child = flowNodeSized('C', GROUP_PAD_LEFT, GROUP_PAD_TOP, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['C', 'P'], ['P', 'GP']]),
+      parentToChildren: new Map([['P', new Set(['C'])], ['GP', new Set(['P'])]]),
+    };
+    const result = adjustParentDimensions([grandparent, parent, child], hierarchy);
+    const p = result.find((n) => n.id === 'P')!;
+    const gp = result.find((n) => n.id === 'GP')!;
+    // P sized from C: width = PAD_LEFT + 80 + PAD_RIGHT = 100, height = PAD_TOP + 30 + PAD_BOTTOM = 80
+    expect(p.style!.width).toBe(GROUP_PAD_LEFT + 80 + GROUP_PAD_RIGHT);
+    expect(p.style!.height).toBe(GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM);
+    // GP sized from P (now 100x80): width = PAD_LEFT + 100 + PAD_RIGHT = 120, height = PAD_TOP + 80 + PAD_BOTTOM = 130
+    expect(gp.style!.width).toBe(GROUP_PAD_LEFT + (GROUP_PAD_LEFT + 80 + GROUP_PAD_RIGHT) + GROUP_PAD_RIGHT);
+    expect(gp.style!.height).toBe(GROUP_PAD_TOP + (GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM) + GROUP_PAD_BOTTOM);
+  });
+
+  it('children below padding boundary — shift normalizes positions', () => {
+    // Children at positions less than padding boundaries
+    const parent = flowNodeSized('A', 100, 100, 500, 500);
+    const childB = flowNodeSized('B', 5, 20, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['B', 'A']]),
+      parentToChildren: new Map([['A', new Set(['B'])]]),
+    };
+    const result = adjustParentDimensions([parent, childB], hierarchy);
+    const p = result.find((n) => n.id === 'A')!;
+    const b = result.find((n) => n.id === 'B')!;
+    // shiftX = PAD_LEFT - 5 = 5, shiftY = PAD_TOP - 20 = 20
+    // Parent position adjusts: x = 100 - 5 = 95, y = 100 - 20 = 80
+    expect(p.position).toEqual({ x: 95, y: 80 });
+    // Child shifts to padding boundary
+    expect(b.position).toEqual({ x: GROUP_PAD_LEFT, y: GROUP_PAD_TOP });
+    expect(p.style!.width).toBe(GROUP_PAD_LEFT + 80 + GROUP_PAD_RIGHT);
+    expect(p.style!.height).toBe(GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM);
+  });
+
+  it('idempotent — running twice produces same result', () => {
+    const parent = flowNodeSized('A', 50, 50, 300, 300);
+    const childB = flowNodeSized('B', 5, 20, 80, 30);
+    const childC = flowNodeSized('C', 100, 20, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['B', 'A'], ['C', 'A']]),
+      parentToChildren: new Map([['A', new Set(['B', 'C'])]]),
+    };
+    const first = adjustParentDimensions([parent, childB, childC], hierarchy);
+    const second = adjustParentDimensions(first, hierarchy);
+    for (const node of first) {
+      const match = second.find((n) => n.id === node.id)!;
+      expect(match.position).toEqual(node.position);
+      expect(match.style?.width).toBe(node.style?.width);
+      expect(match.style?.height).toBe(node.style?.height);
+    }
+  });
+
+  it('no parents — returns nodes unchanged', () => {
+    const a = flowNode('A', 10, 20);
+    const b = flowNode('B', 30, 40);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map(),
+      parentToChildren: new Map(),
+    };
+    const result = adjustParentDimensions([a, b], hierarchy);
+    expect(result[0].position).toEqual({ x: 10, y: 20 });
+    expect(result[1].position).toEqual({ x: 30, y: 40 });
+  });
+
+  it('parent encompasses preserved and new children', () => {
+    const parent = flowNodeSized('A', 0, 0, 200, 200);
+    // "preserved" child at old position
+    const childOld = flowNodeSized('B', GROUP_PAD_LEFT, GROUP_PAD_TOP, 80, 30);
+    // "new" child placed further out by layout
+    const childNew = flowNodeSized('C', 200, GROUP_PAD_TOP, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['B', 'A'], ['C', 'A']]),
+      parentToChildren: new Map([['A', new Set(['B', 'C'])]]),
+    };
+    const result = adjustParentDimensions([parent, childOld, childNew], hierarchy);
+    const p = result.find((n) => n.id === 'A')!;
+    // maxX = 200 + 80 = 280
+    expect(p.style!.width).toBe(280 + GROUP_PAD_RIGHT);
+    expect(p.style!.height).toBe(GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM);
+  });
+
+  it('parent width respects label minimum when children are narrow', () => {
+    const longLabel = 'some_very_long_directory_path_name';
+    const parent = {
+      id: 'P', position: { x: 0, y: 0 },
+      data: { label: longLabel }, style: { width: 500, height: 500 },
+    } as FlowNode;
+    // Single narrow child
+    const child = flowNodeSized('C', GROUP_PAD_LEFT, GROUP_PAD_TOP, 30, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['C', 'P']]),
+      parentToChildren: new Map([['P', new Set(['C'])]]),
+    };
+    const result = adjustParentDimensions([parent, child], hierarchy);
+    const p = result.find((n) => n.id === 'P')!;
+    const childrenWidth = GROUP_PAD_LEFT + 30 + GROUP_PAD_RIGHT;
+    const labelMinWidth = measureGroupHeaderWidth(longLabel);
+    // Label is wider than children → parent uses label width
+    expect(labelMinWidth).toBeGreaterThan(childrenWidth);
+    expect(p.style!.width).toBe(labelMinWidth);
+  });
+
+  it('uses measuredSizes when provided for child dimensions', () => {
+    const parent = flowNodeSized('A', 0, 0, 500, 500);
+    // Child has small style dimensions but measured is larger
+    const child = flowNodeSized('B', GROUP_PAD_LEFT, GROUP_PAD_TOP, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['B', 'A']]),
+      parentToChildren: new Map([['A', new Set(['B'])]]),
+    };
+    const measuredSizes = new Map([['B', { width: 200, height: 50 }]]);
+    const result = adjustParentDimensions([parent, child], hierarchy, measuredSizes);
+    const p = result.find((n) => n.id === 'A')!;
+    // Should use measured width 200 instead of style width 80
+    expect(p.style!.width).toBe(GROUP_PAD_LEFT + 200 + GROUP_PAD_RIGHT);
+    expect(p.style!.height).toBe(GROUP_PAD_TOP + 50 + GROUP_PAD_BOTTOM);
   });
 });
