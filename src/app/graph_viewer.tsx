@@ -21,7 +21,7 @@ import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, Symbol
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
-import { GROUP_PAD_BOTTOM, GROUP_PAD_LEFT, GROUP_PAD_RIGHT, GROUP_PAD_TOP, layoutGraphWithDagre, layoutGraphWithElk, resolveNodeSize } from './lib/graph_layout';
+import { adjustParentDimensions, resizeSingleParent, layoutGraphWithDagre, layoutGraphWithElk, resolveNodeSize } from './lib/graph_layout';
 import { parseOffset } from './lib/offsets';
 import { setupGraphTestApis } from './testing/graph_test_utils';
 
@@ -650,7 +650,6 @@ function resizeParentsForNode(
     const childIdSet = hierarchy.parentToChildren.get(currentId);
     if (!childIdSet || childIdSet.size === 0) break;
 
-    // Collect resolved children for this parent
     const children: FlowNode<GraphNodeData>[] = [];
     childIdSet.forEach((childId) => {
       const child = nodeMap.get(childId);
@@ -658,49 +657,7 @@ function resizeParentsForNode(
     });
     if (children.length === 0) break;
 
-    // Compute bounding box of all children relative to parent
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i];
-      const { width, height } = resolveNodeSize(child);
-      minX = Math.min(minX, child.position.x);
-      minY = Math.min(minY, child.position.y);
-      maxX = Math.max(maxX, child.position.x + width);
-      maxY = Math.max(maxY, child.position.y + height);
-    }
-
-    if (!Number.isFinite(minX)) break;
-
-    // Normalize: shift parent so nearest child sits exactly at the padding boundary.
-    // Positive shift = children were above/left of padding (parent expands outward).
-    // Negative shift = children were below/right of padding (parent shrinks inward).
-    const shiftX = GROUP_PAD_LEFT - minX;
-    const shiftY = GROUP_PAD_TOP - minY;
-
-    if (shiftX !== 0 || shiftY !== 0) {
-      parentNode.position = {
-        x: parentNode.position.x - shiftX,
-        y: parentNode.position.y - shiftY,
-      };
-      for (let i = 0; i < children.length; i++) {
-        children[i].position = {
-          x: children[i].position.x + shiftX,
-          y: children[i].position.y + shiftY,
-        };
-      }
-      maxX += shiftX;
-      maxY += shiftY;
-    }
-
-    parentNode.style = {
-      ...(parentNode.style ?? {}),
-      width: maxX + GROUP_PAD_RIGHT,
-      height: maxY + GROUP_PAD_BOTTOM,
-    };
+    if (!resizeSingleParent(parentNode, children)) break;
 
     currentId = hierarchy.childToParent.get(currentId);
   }
@@ -960,9 +917,24 @@ export function GraphViewer({
         return;
       }
 
-      const finalNodes = hierarchyPreservedPositions.size > 0
+      const alignedNodes = hierarchyPreservedPositions.size > 0
         ? alignToPreservedPositions(layoutedNodes, hierarchyPreservedPositions, hierarchy)
         : layoutedNodes;
+
+      // Build measured sizes from previously rendered nodes so adjustParentDimensions
+      // uses the same actual dimensions as resizeParentsForNode (drag handler).
+      const measuredSizes = new Map<string, { width: number; height: number }>();
+      for (const n of nodesRef.current) {
+        const w = (n as any).measured?.width ?? n.width;
+        const h = (n as any).measured?.height ?? n.height;
+        if (w != null && h != null) {
+          measuredSizes.set(n.id, { width: w, height: h });
+        }
+      }
+
+      const finalNodes = hierarchy.parentToChildren.size > 0
+        ? adjustParentDimensions(alignedNodes, hierarchy, measuredSizes)
+        : alignedNodes;
 
       const paddedNodes = shouldApplyInitialPadding
         ? applyLayoutPadding(finalNodes, INITIAL_NODE_OFFSET)
