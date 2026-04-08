@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
+  SelectionMode,
   applyEdgeChanges,
   applyNodeChanges,
   getBezierPath,
@@ -20,9 +21,8 @@ import * as ContextMenu from '@radix-ui/react-context-menu';
 import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, SymbolInstance, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, alignToPreservedPositions, buildPreservedPositionsMap, splitMultiParentNodes, isDirectoryInstance, isSelfReference } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
-import { GraphToolbar } from './graph_toolbar';
-import { adjustParentDimensions, resizeSingleParent, layoutGraphWithDagre, layoutGraphWithElk, resolveNodeSize } from './lib/graph_layout';
-import { parseOffset } from './lib/offsets';
+import { GraphToolbar, type InteractionMode } from './graph_toolbar';
+import { adjustParentDimensions, resizeSingleParent, layoutGraphWithDagre, layoutGraphWithElk } from './lib/graph_layout';
 import { setupGraphTestApis } from './testing/graph_test_utils';
 
 export interface GraphProps {
@@ -65,13 +65,6 @@ type MenuContextValue = {
 };
 
 const MenuContext = React.createContext<MenuContextValue | null>(null);
-
-type SelectionContextValue = {
-  lastSelected: { kind: 'node' | 'edge'; id: string } | null;
-  setLastSelected: (selection: { kind: 'node' | 'edge'; id: string } | null) => void;
-};
-
-const SelectionContext = React.createContext<SelectionContextValue | null>(null);
 
 const INITIAL_NODE_OFFSET = 40;
 
@@ -293,20 +286,17 @@ function hasNodeOverlap(previous: Graph | null, next: Graph) {
   return false;
 }
 
-function GraphNodeComponent({ id, data }: GraphNodeProps) {
+function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
   const setActiveMenu = menuContext?.setActiveMenu;
-  const selectionContext = useContext(SelectionContext);
-  const lastSelected = selectionContext?.lastSelected ?? null;
-  const setLastSelected = selectionContext?.setLastSelected;
   const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, hiddenRefEdges } = data;
   const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
     ? ({ '--graph-node-color': node.color } as React.CSSProperties)
     : undefined;
   const isOpen = activeMenu?.kind === 'node' && activeMenu.id === id;
-  const isSelected = lastSelected?.kind === 'node' && lastSelected.id === id;
+  const isSelected = selected ?? false;
   const instanceCount = node.symbol_instances.length;
   const isDirectoryNode = isGroupNode || node.symbol_instances.every((inst) => isDirectoryInstance(inst));
 
@@ -340,7 +330,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      setLastSelected?.({ kind: 'node', id });
+      if (event.shiftKey || event.ctrlKey || event.metaKey) return;
 
       if (isDirectoryNode) {
         const realInstances = node.symbol_instances.filter((inst) => !isDirectoryInstance(inst));
@@ -390,7 +380,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
         triggerContextMenu(event);
       }
     },
-    [instanceCount, id, isDirectoryNode, isOpen, hasHiddenRefs, node, revealDirectory, selectFile, setActiveMenu, setLastSelected],
+    [instanceCount, id, isDirectoryNode, isOpen, hasHiddenRefs, node, revealDirectory, selectFile, setActiveMenu],
   );
 
   const handleOpenChange = useCallback(
@@ -459,6 +449,7 @@ function GraphNodeComponent({ id, data }: GraphNodeProps) {
 function GraphEdgeComponent({
   id,
   data,
+  selected,
   source,
   target,
   sourceX,
@@ -473,15 +464,12 @@ function GraphEdgeComponent({
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
   const setActiveMenu = menuContext?.setActiveMenu;
-  const selectionContext = useContext(SelectionContext);
-  const lastSelected = selectionContext?.lastSelected ?? null;
-  const setLastSelected = selectionContext?.setLastSelected;
   const edges = data?.edges;
   const edgesList = useMemo(() => edges ?? [], [edges]);
   const graph = data?.graph;
   const selectFile = data?.selectFile;
   const isOpen = activeMenu?.kind === 'edge' && activeMenu.id === id;
-  const isSelected = lastSelected?.kind === 'edge' && lastSelected.id === id;
+  const isSelected = selected ?? false;
   const isSelfLoop = source === target;
 
   const closeMenu = useCallback(() => dismissContextMenu(), []);
@@ -552,7 +540,7 @@ function GraphEdgeComponent({
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
-      setLastSelected?.({ kind: 'edge', id });
+      if (event.shiftKey || event.ctrlKey || event.metaKey) return;
       if (edgesList.length === 0) {
         return;
       }
@@ -582,7 +570,7 @@ function GraphEdgeComponent({
 
       triggerContextMenu(event);
     },
-    [edgesList, graph, id, isOpen, selectFile, setActiveMenu, setLastSelected],
+    [edgesList, graph, id, isOpen, selectFile, setActiveMenu],
   );
 
   const handleOpenChange = useCallback(
@@ -633,36 +621,50 @@ function GraphEdgeComponent({
   );
 }
 
-function resizeParentsForNode(
-  draggedNodeId: string,
+function resizeParentsForNodes(
+  draggedNodeIds: string[],
   currentNodes: FlowNode<GraphNodeData>[],
   hierarchy: HierarchyInfo,
 ): FlowNode<GraphNodeData>[] {
   const nodes = currentNodes.map((n) => ({ ...n, position: { ...n.position } }));
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-  let currentId: string | undefined = hierarchy.childToParent.get(draggedNodeId);
+  const affectedParentIds = new Set<string>();
+  for (const nodeId of draggedNodeIds) {
+    let pid = hierarchy.childToParent.get(nodeId);
+    while (pid) {
+      affectedParentIds.add(pid);
+      pid = hierarchy.childToParent.get(pid);
+    }
+  }
+  if (affectedParentIds.size === 0) return nodes;
 
-  while (currentId) {
-    const parentNode = nodeMap.get(currentId);
-    if (!parentNode) break;
+  // Process deepest parents first so shallower parents see updated children
+  const sorted = Array.from(affectedParentIds).sort((a, b) =>
+    parentDepth(b, hierarchy) - parentDepth(a, hierarchy),
+  );
 
-    const childIdSet = hierarchy.parentToChildren.get(currentId);
-    if (!childIdSet || childIdSet.size === 0) break;
-
+  for (const pid of sorted) {
+    const parent = nodeMap.get(pid);
+    if (!parent) continue;
+    const childIds = hierarchy.parentToChildren.get(pid);
+    if (!childIds || childIds.size === 0) continue;
     const children: FlowNode<GraphNodeData>[] = [];
-    childIdSet.forEach((childId) => {
+    childIds.forEach((childId) => {
       const child = nodeMap.get(childId);
       if (child) children.push(child);
     });
-    if (children.length === 0) break;
-
-    if (!resizeSingleParent(parentNode, children)) break;
-
-    currentId = hierarchy.childToParent.get(currentId);
+    if (children.length > 0) resizeSingleParent(parent, children);
   }
 
   return nodes;
+}
+
+function parentDepth(nodeId: string, hierarchy: HierarchyInfo): number {
+  let depth = 0;
+  let cur = hierarchy.childToParent.get(nodeId);
+  while (cur) { depth++; cur = hierarchy.childToParent.get(cur); }
+  return depth;
 }
 
 export function GraphViewer({
@@ -684,10 +686,36 @@ export function GraphViewer({
   const [layoutGen, setLayoutGen] = useState(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
-  const [lastSelected, setLastSelected] = useState<{
-    kind: 'node' | 'edge';
-    id: string;
-  } | null>(null);
+  const [mode, setMode] = useState<InteractionMode>('hand');
+  const [ctrlHeld, setCtrlHeld] = useState(false);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Control') setCtrlHeld(true);
+      const el = e.target as HTMLElement;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
+      if (e.key === 'h' || e.key === 'H') setMode('hand');
+      if (e.key === 'v' || e.key === 'V') setMode('select');
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Control') setCtrlHeld(false);
+    };
+    const blur = () => setCtrlHeld(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+    };
+  }, []);
+
+  const effectiveMode = ctrlHeld ? 'select' : mode;
+  const panOnDrag = useMemo(() => effectiveMode === 'hand' ? [0, 1] : [1], [effectiveMode]);
+  const selectionOnDrag = effectiveMode === 'select';
+
   const splitGraph = useMemo(() => splitMultiParentNodes(graph), [graph]);
 
   const resolvedActiveMenu = useMemo(() => {
@@ -706,10 +734,6 @@ export function GraphViewer({
   const menuContextValue = useMemo(
     () => ({ activeMenu: resolvedActiveMenu, setActiveMenu }),
     [resolvedActiveMenu],
-  );
-  const selectionContextValue = useMemo(
-    () => ({ lastSelected, setLastSelected }),
-    [lastSelected],
   );
 
   const handleNodesChange = useCallback(
@@ -790,6 +814,10 @@ export function GraphViewer({
         position,
         // Preserve layout-computed style (width/height) on group nodes
         ...(isGroup && existing?.style ? { style: existing.style } : {}),
+        // Preserve ReactFlow selection state across non-graph-change rebuilds
+        // (e.g. fileContents update). All layout transforms use object spread,
+        // so selected survives even when the graph changes and layout runs.
+        ...(existing?.selected != null ? { selected: existing.selected } : {}),
         data: {
           label: displayLabels.get(node.id),
           node,
@@ -922,7 +950,7 @@ export function GraphViewer({
         : layoutedNodes;
 
       // Build measured sizes from previously rendered nodes so adjustParentDimensions
-      // uses the same actual dimensions as resizeParentsForNode (drag handler).
+      // uses the same actual dimensions as resizeParentsForNodes (drag handler).
       const measuredSizes = new Map<string, { width: number; height: number }>();
       for (const n of nodesRef.current) {
         const w = (n as any).measured?.width ?? n.width;
@@ -1003,10 +1031,24 @@ export function GraphViewer({
 
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, draggedNode: FlowNode<GraphNodeData>) => {
+      const selectedCount = nodesRef.current.filter((n) => n.selected).length;
+      if (selectedCount > 1) return;
       const hierarchy = hierarchyRef.current;
       if (!hierarchy.childToParent.has(draggedNode.id)) return;
       setNodes((currentNodes) => {
-        const resized = resizeParentsForNode(draggedNode.id, currentNodes, hierarchy);
+        const resized = resizeParentsForNodes([draggedNode.id], currentNodes, hierarchy);
+        positionsRef.current = new Map(resized.map((n) => [n.id, n.position]));
+        return resized;
+      });
+    },
+    [setNodes],
+  );
+
+  const handleSelectionDragStop = useCallback(
+    (_event: React.MouseEvent, draggedNodes: FlowNode<GraphNodeData>[]) => {
+      const hierarchy = hierarchyRef.current;
+      setNodes((currentNodes) => {
+        const resized = resizeParentsForNodes(draggedNodes.map((n) => n.id), currentNodes, hierarchy);
         positionsRef.current = new Map(resized.map((n) => [n.id, n.position]));
         return resized;
       });
@@ -1108,11 +1150,13 @@ export function GraphViewer({
         onCenterGraph={handleCenterGraph}
         onFitToView={handleFitToView}
         onResetZoom={handleResetZoom}
+        mode={mode}
+        onModeChange={setMode}
       />
       <div className="flex-1">
         <MenuContext.Provider value={menuContextValue}>
-          <SelectionContext.Provider value={selectionContextValue}>
             <ReactFlow
+              className={effectiveMode === 'select' ? 'graph-select-mode' : undefined}
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
@@ -1125,14 +1169,18 @@ export function GraphViewer({
               onPaneContextMenu={handlePaneContextMenu}
               onNodeDragStart={() => setActiveMenu(null)}
               onNodeDragStop={handleNodeDragStop}
+              onSelectionDragStart={() => setActiveMenu(null)}
+              onSelectionDragStop={handleSelectionDragStop}
               onlyRenderVisibleElements={shouldOnlyRenderVisibleElements}
               nodesDraggable
-              panOnDrag={[0, 1]}
+              panOnDrag={panOnDrag}
+              selectionOnDrag={selectionOnDrag}
+              selectionMode={SelectionMode.Partial}
+              multiSelectionKeyCode="Shift"
               nodesConnectable={false}
             >
               <Background gap={20} color="var(--graph-grid-color)" />
             </ReactFlow>
-          </SelectionContext.Provider>
         </MenuContext.Provider>
       </div>
     </div>

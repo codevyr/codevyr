@@ -248,6 +248,28 @@ body {
 .dropdown-menu-separator   { @apply h-px bg-gray-200 my-1 mx-2; }
 .dropdown-menu-empty       { @apply px-3 py-2 text-xs text-gray-400 italic; }
 
+/* Box selection rectangle */
+.react-flow__selection {
+  background: rgba(147, 197, 253, 0.15) !important;
+  border: 1.5px dashed #93c5fd !important;
+}
+
+/* Active toolbar button — hover must also stay blue */
+.toolbar-btn-active {
+  @apply bg-blue-100 border-blue-400 text-blue-700
+         hover:bg-blue-200 hover:border-blue-500;
+}
+
+/* Toolbar visual separator between button groups */
+.toolbar-separator {
+  @apply w-px h-6 bg-gray-300 mx-1;
+}
+
+/* Cursor feedback for select mode (hand mode uses ReactFlow's default grab cursor) */
+.graph-select-mode .react-flow__pane {
+  cursor: crosshair;
+}
+
 .step-badge{
   width:34px;height:34px;border-radius:9999px;
   display:inline-flex;align-items:center;justify-content:center;
