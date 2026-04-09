@@ -1,29 +1,30 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useMemo, useState } from 'react';
 import ReactFlow, {
   Background,
   SelectionMode,
-  applyEdgeChanges,
-  applyNodeChanges,
   getBezierPath,
   getNodesBounds,
   Handle,
-  MarkerType,
   Position,
-  type Edge as FlowEdge,
   type EdgeProps,
   type Node as FlowNode,
   type NodeProps,
   type ReactFlowInstance,
-  useEdgesState,
-  useNodesState,
 } from 'reactflow';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { Edge as GraphEdge, Graph, type HierarchyInfo, Node as GraphNode, SymbolInstance, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, alignToPreservedPositions, buildPreservedPositionsMap, splitMultiParentNodes, isDirectoryInstance, isSelfReference } from './graph';
+import { type Edge as GraphEdge, type Graph, type HierarchyInfo, type Node as GraphNode, isDirectoryInstance, isSelfReference } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
-import { GraphToolbar, type InteractionMode } from './graph_toolbar';
-import { adjustParentDimensions, resizeSingleParent, layoutGraphWithDagre, layoutGraphWithElk } from './lib/graph_layout';
-import { setupGraphTestApis } from './testing/graph_test_utils';
+import { GraphToolbar } from './graph_toolbar';
+import { useInteractionMode } from './lib/use_interaction_mode';
+import {
+  type GraphNodeData,
+  type GraphEdgeData,
+  getNodeAbsolutePosition,
+  getNodeSize,
+  resizeParentsForNodes,
+  useGraphLayout,
+} from './lib/use_graph_layout';
 
 export interface GraphProps {
   graph: Graph;
@@ -32,27 +33,6 @@ export interface GraphProps {
   ensureFileContent: (objectId: string) => void;
   revealDirectory: (objectId: string) => void;
 }
-
-type GraphNodeData = {
-  label?: string;
-  node: GraphNode;
-  graph: Graph;
-  fileContents: Map<string, string>;
-  ensureFileContent: (objectId: string) => void;
-  selectFile: (codeFocus: CodeFocus) => void;
-  focusNode: (nodeId: string) => void;
-  revealDirectory: (objectId: string) => void;
-  isGroupNode?: boolean;
-  hiddenRefEdges?: Array<GraphEdge>;
-};
-
-type GraphEdgeData = {
-  edges: Array<GraphEdge>;
-  graph: Graph;
-  fileContents: Map<string, string>;
-  ensureFileContent: (objectId: string) => void;
-  selectFile: (codeFocus: CodeFocus) => void;
-};
 
 type ActiveMenu = { kind: 'node' | 'edge'; id: string } | null;
 
@@ -66,57 +46,8 @@ type MenuContextValue = {
 
 const MenuContext = React.createContext<MenuContextValue | null>(null);
 
-const INITIAL_NODE_OFFSET = 40;
-
-function applyLayoutPadding(
-  nodes: FlowNode<GraphNodeData>[],
-  padding: number,
-) {
-  if (nodes.length === 0) {
-    return nodes;
-  }
-  // Only consider root-level nodes (no parent) for min computation
-  const rootNodes = nodes.filter((n) => !(n as any).parentNode);
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  rootNodes.forEach((node) => {
-    minX = Math.min(minX, node.position.x);
-    minY = Math.min(minY, node.position.y);
-  });
-  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
-    return nodes;
-  }
-  const offsetX = Math.max(0, padding - minX);
-  const offsetY = Math.max(0, padding - minY);
-  if (offsetX === 0 && offsetY === 0) {
-    return nodes;
-  }
-  // Only shift root-level nodes; child positions are relative to parent
-  return nodes.map((node) => {
-    if ((node as any).parentNode) return node;
-    return {
-      ...node,
-      position: {
-        x: node.position.x + offsetX,
-        y: node.position.y + offsetY,
-      },
-    };
-  });
-}
-
-function getNodeAbsolutePosition(node: FlowNode<GraphNodeData>): { x: number; y: number } {
-  return (node as any).positionAbsolute ?? node.position;
-}
-
-function getNodeSize(node: FlowNode<GraphNodeData>): { width: number; height: number } {
-  return {
-    width: node.width ?? (node as any).measured?.width ?? 0,
-    height: node.height ?? (node as any).measured?.height ?? 0,
-  };
-}
-
 function dismissContextMenu() {
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 }
 
 function triggerContextMenu(event: React.MouseEvent<Element>) {
@@ -203,68 +134,6 @@ function darkenColor(color: string, amount: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-// Split label into tokens for dedup, and record each token's start offset
-// in the original label so we can slice the original string for display.
-function splitSymbolWithOffsets(label: string): { tokens: string[]; offsets: number[] } {
-  const tokens: string[] = [];
-  const offsets: number[] = [];
-  const re = /[^/]+/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(label)) !== null) {
-    tokens.push(m[0]);
-    offsets.push(m.index);
-  }
-  return { tokens, offsets };
-}
-
-function buildDisplayLabelMap(graph: Graph) {
-  const entries = Array.from(graph.nodes.values()).map((node) => {
-    const { tokens, offsets } = splitSymbolWithOffsets(node.label);
-    return { id: node.id, label: node.label, tokens, offsets };
-  });
-  // Deduplicate by label so split nodes with identical names don't
-  // inflate suffix counts and prevent shortening.
-  const seen = new Set<string>();
-  const uniqueEntries = entries.filter(({ label }) => {
-    if (seen.has(label)) return false;
-    seen.add(label);
-    return true;
-  });
-
-  const suffixCounts = new Map<string, number>();
-
-  uniqueEntries.forEach(({ tokens, label }) => {
-    if (tokens.length === 0) {
-      suffixCounts.set(label, (suffixCounts.get(label) ?? 0) + 1);
-      return;
-    }
-    for (let start = tokens.length - 1; start >= 0; start -= 1) {
-      const suffix = tokens.slice(start).join('\0');
-      suffixCounts.set(suffix, (suffixCounts.get(suffix) ?? 0) + 1);
-    }
-  });
-
-  const displayMap = new Map<string, string>();
-  entries.forEach(({ id, label, tokens, offsets }) => {
-    if (tokens.length === 0) {
-      displayMap.set(id, label);
-      return;
-    }
-    let resolved = label;
-    for (let len = 1; len <= tokens.length; len += 1) {
-      const suffix = tokens.slice(tokens.length - len).join('\0');
-      if ((suffixCounts.get(suffix) ?? 0) === 1) {
-        // Slice from the original label at the start of the first matched token
-        resolved = label.substring(offsets[tokens.length - len]);
-        break;
-      }
-    }
-    displayMap.set(id, resolved);
-  });
-
-  return displayMap;
-}
-
 function resolveEdgeObjectId(edge: GraphEdge, graph: Graph): string | null {
   if (edge.from_object) {
     return edge.from_object;
@@ -272,18 +141,6 @@ function resolveEdgeObjectId(edge: GraphEdge, graph: Graph): string | null {
 
   const node = graph.nodes.get(edge.from);
   return node?.symbol_instances[0]?.object_id ?? null;
-}
-
-function hasNodeOverlap(previous: Graph | null, next: Graph) {
-  if (!previous || previous.nodes.size === 0 || next.nodes.size === 0) {
-    return false;
-  }
-  for (const nodeId of Array.from(next.nodes.keys())) {
-    if (previous.nodes.has(nodeId)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
@@ -621,52 +478,6 @@ function GraphEdgeComponent({
   );
 }
 
-function resizeParentsForNodes(
-  draggedNodeIds: string[],
-  currentNodes: FlowNode<GraphNodeData>[],
-  hierarchy: HierarchyInfo,
-): FlowNode<GraphNodeData>[] {
-  const nodes = currentNodes.map((n) => ({ ...n, position: { ...n.position } }));
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-
-  const affectedParentIds = new Set<string>();
-  for (const nodeId of draggedNodeIds) {
-    let pid = hierarchy.childToParent.get(nodeId);
-    while (pid) {
-      affectedParentIds.add(pid);
-      pid = hierarchy.childToParent.get(pid);
-    }
-  }
-  if (affectedParentIds.size === 0) return nodes;
-
-  // Process deepest parents first so shallower parents see updated children
-  const sorted = Array.from(affectedParentIds).sort((a, b) =>
-    parentDepth(b, hierarchy) - parentDepth(a, hierarchy),
-  );
-
-  for (const pid of sorted) {
-    const parent = nodeMap.get(pid);
-    if (!parent) continue;
-    const childIds = hierarchy.parentToChildren.get(pid);
-    if (!childIds || childIds.size === 0) continue;
-    const children: FlowNode<GraphNodeData>[] = [];
-    childIds.forEach((childId) => {
-      const child = nodeMap.get(childId);
-      if (child) children.push(child);
-    });
-    if (children.length > 0) resizeSingleParent(parent, children);
-  }
-
-  return nodes;
-}
-
-function parentDepth(nodeId: string, hierarchy: HierarchyInfo): number {
-  let depth = 0;
-  let cur = hierarchy.childToParent.get(nodeId);
-  while (cur) { depth++; cur = hierarchy.childToParent.get(cur); }
-  return depth;
-}
-
 export function GraphViewer({
   graph,
   selectFile,
@@ -676,47 +487,19 @@ export function GraphViewer({
 }: GraphProps) {
   const nodeTypes = useMemo(() => ({ graphNode: GraphNodeComponent }), []);
   const edgeTypes = useMemo(() => ({ graphEdge: GraphEdgeComponent }), []);
-  const [nodes, setNodes] = useNodesState<GraphNodeData>([]);
-  const [edges, setEdges] = useEdgesState<GraphEdgeData>([]);
-  const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const hierarchyRef = useRef<HierarchyInfo>({ childToParent: new Map(), parentToChildren: new Map() });
-  const nodesRef = useRef<FlowNode<GraphNodeData>[]>([]);
-  const graphRef = useRef<Graph | null>(null);
-  const layoutRunIdRef = useRef(0);
-  const [layoutGen, setLayoutGen] = useState(0);
-  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
+
+  const {
+    nodes, edges, setNodes,
+    handleNodesChange, handleEdgesChange,
+    splitGraph, layoutGen,
+    positionsRef, hierarchyRef, nodesRef,
+    reactFlowInstanceRef,
+    handleDagreLayout,
+  } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory });
+
+  const { mode, setMode, effectiveMode, panOnDrag, selectionOnDrag } = useInteractionMode();
+
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
-  const [mode, setMode] = useState<InteractionMode>('hand');
-  const [ctrlHeld, setCtrlHeld] = useState(false);
-
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'Control') setCtrlHeld(true);
-      const el = e.target as HTMLElement;
-      const tag = el?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
-      if (e.key === 'h' || e.key === 'H') setMode('hand');
-      if (e.key === 'v' || e.key === 'V') setMode('select');
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.key === 'Control') setCtrlHeld(false);
-    };
-    const blur = () => setCtrlHeld(false);
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    window.addEventListener('blur', blur);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-      window.removeEventListener('blur', blur);
-    };
-  }, []);
-
-  const effectiveMode = ctrlHeld ? 'select' : mode;
-  const panOnDrag = useMemo(() => effectiveMode === 'hand' ? [0, 1] : [1], [effectiveMode]);
-  const selectionOnDrag = effectiveMode === 'select';
-
-  const splitGraph = useMemo(() => splitMultiParentNodes(graph), [graph]);
 
   const resolvedActiveMenu = useMemo(() => {
     if (!activeMenu) {
@@ -736,286 +519,9 @@ export function GraphViewer({
     [resolvedActiveMenu],
   );
 
-  const handleNodesChange = useCallback(
-    (changes: Parameters<typeof applyNodeChanges>[0]) => {
-      setNodes((currentNodes) => {
-        const nextNodes = applyNodeChanges(changes, currentNodes);
-        changes.forEach((change) => {
-          if (change.type === 'position' && change.position) {
-            positionsRef.current.set(change.id, change.position);
-          }
-          if (change.type === 'remove') {
-            positionsRef.current.delete(change.id);
-          }
-        });
-        return nextNodes;
-      });
-    },
-    [setNodes],
-  );
-
-  const handleEdgesChange = useCallback(
-    (changes: Parameters<typeof applyEdgeChanges>[0]) => {
-      setEdges((currentEdges) => applyEdgeChanges(changes, currentEdges));
-    },
-    [setEdges],
-  );
-
-  useEffect(() => {
-    nodesRef.current = nodes;
-  }, [nodes]);
-
-  const focusNode = useCallback(
-    (nodeId: string) => {
-      const targetNode = nodesRef.current.find((node) => node.id === nodeId);
-      if (!targetNode) {
-        return;
-      }
-      const { width, height } = getNodeSize(targetNode);
-      const pos = getNodeAbsolutePosition(targetNode);
-      const centerX = pos.x + width / 2;
-      const centerY = pos.y + height / 2;
-      const currentZoom = reactFlowInstanceRef.current?.getViewport().zoom ?? 1;
-      reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: currentZoom });
-    },
-    [],
-  );
-
-  const displayLabels = useMemo(() => buildDisplayLabelMap(splitGraph), [splitGraph]);
-
-  const buildFlowElements = useCallback(() => {
-    const nextNodes: FlowNode<GraphNodeData>[] = [];
-    const nextEdges: FlowEdge<GraphEdgeData>[] = [];
-    const nextNodeIds = new Set(splitGraph.nodes.keys());
-    positionsRef.current.forEach((_pos, id) => {
-      if (!nextNodeIds.has(id)) {
-        positionsRef.current.delete(id);
-      }
-    });
-
-    const hierarchy = buildHierarchy(splitGraph.has_edges, splitGraph.nodes);
-    const { childToParent, parentToChildren } = hierarchy;
-
-    const { visible: filteredEdges, hiddenByHas } = filterRedundantEdges(splitGraph.edges, parentToChildren, splitGraph.nodes);
-
-    // Build a lookup of existing nodes to preserve layout-computed style (width/height on group nodes)
-    const existingNodeMap = new Map(
-      nodesRef.current.map((n) => [n.id, n]),
-    );
-
-    splitGraph.nodes.forEach((node) => {
-      const position = positionsRef.current.get(node.id) ?? { x: 0, y: 0 };
-      const isGroup = parentToChildren.has(node.id);
-      const parentId = childToParent.get(node.id);
-      const existing = existingNodeMap.get(node.id);
-      const flowNode: FlowNode<GraphNodeData> = {
-        id: node.id,
-        type: 'graphNode',
-        position,
-        // Preserve layout-computed style (width/height) on group nodes
-        ...(isGroup && existing?.style ? { style: existing.style } : {}),
-        // Preserve ReactFlow selection state across non-graph-change rebuilds
-        // (e.g. fileContents update). All layout transforms use object spread,
-        // so selected survives even when the graph changes and layout runs.
-        ...(existing?.selected != null ? { selected: existing.selected } : {}),
-        data: {
-          label: displayLabels.get(node.id),
-          node,
-          graph: splitGraph,
-          fileContents,
-          ensureFileContent,
-          selectFile,
-          focusNode,
-          revealDirectory,
-          isGroupNode: isGroup,
-          hiddenRefEdges: hiddenByHas.get(node.id),
-        },
-      };
-      if (parentId) {
-        (flowNode as any).parentNode = parentId;
-      }
-      nextNodes.push(flowNode);
-    });
-
-    // Sort so parents come before children (ReactFlow requirement)
-    const depthCache = new Map<string, number>();
-    function getDepth(nodeId: string): number {
-      if (depthCache.has(nodeId)) return depthCache.get(nodeId)!;
-      const parent = childToParent.get(nodeId);
-      const depth = parent ? getDepth(parent) + 1 : 0;
-      depthCache.set(nodeId, depth);
-      return depth;
-    }
-    nextNodes.sort((a, b) => getDepth(a.id) - getDepth(b.id));
-
-    // filterRedundantEdges guarantees non-empty edgeArray with valid from/to nodes
-    filteredEdges.forEach((edgeArray, edgeId) => {
-      const edge = edgeArray[0]!;
-      const isSelfLoop = edge.from === edge.to;
-      nextEdges.push({
-        id: edgeId,
-        type: 'graphEdge',
-        source: edge.from,
-        target: edge.to,
-        sourceHandle: isSelfLoop ? 'source-right' : 'source-bottom',
-        targetHandle: isSelfLoop ? 'target-top-right' : 'target-top',
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: 'var(--graph-edge-color)',
-          width: 10,
-          height: 10,
-          strokeWidth: 1,
-          markerUnits: 'strokeWidth',
-          orient: 'auto',
-        },
-        style: { stroke: 'var(--graph-edge-color)', strokeWidth: 3 },
-        data: {
-          edges: edgeArray,
-          graph: splitGraph,
-          fileContents,
-          ensureFileContent,
-          selectFile,
-        },
-      });
-    });
-
-    return { nextNodes, nextEdges, hierarchy };
-  }, [splitGraph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory]);
-
-  useEffect(() => {
-    const { nextNodes, nextEdges, hierarchy } = buildFlowElements();
-    setEdges(nextEdges);
-    setNodes(nextNodes);
-
-    if (nextNodes.length === 0) {
-      positionsRef.current = new Map();
-      hierarchyRef.current = hierarchy;
-      return;
-    }
-
-    const graphChanged = graphRef.current !== splitGraph;
-    const hasHierarchy = hierarchy.childToParent.size > 0;
-    const shouldUseDagre = !hasHierarchy && !hasNodeOverlap(graphRef.current, splitGraph);
-    graphRef.current = splitGraph;
-
-    if (!graphChanged) {
-      hierarchyRef.current = hierarchy;
-      return;
-    }
-
-    const layoutRunId = ++layoutRunIdRef.current;
-    const shouldApplyInitialPadding = positionsRef.current.size === 0;
-
-    let preserveExisting: boolean;
-    let layoutPositions: Map<string, { x: number; y: number }>;
-
-    // When hierarchy is present, we can't use elk.fixed (causes overlaps).
-    // Instead we run ELK fresh and post-process: translate the result to
-    // align with preserved positions, then override preserved nodes.
-    const hierarchyPreservedPositions =
-      hasHierarchy && !shouldUseDagre && positionsRef.current.size > 0
-        ? buildPreservedPositionsMap(
-            getPreservableNodeIds(hierarchyRef.current, hierarchy, positionsRef.current),
-            positionsRef.current,
-          )
-        : new Map<string, { x: number; y: number }>();
-
-    if (shouldUseDagre || positionsRef.current.size === 0 || hasHierarchy) {
-      preserveExisting = false;
-      layoutPositions = new Map();
-    } else {
-      preserveExisting = true;
-      layoutPositions = positionsRef.current;
-    }
-
-    hierarchyRef.current = hierarchy;
-
-    const shouldFitView = shouldUseDagre || (!preserveExisting && hierarchyPreservedPositions.size === 0);
-    const layoutPromise = shouldUseDagre
-      ? layoutGraphWithDagre(nextNodes, nextEdges)
-      : layoutGraphWithElk(nextNodes, nextEdges, {
-          preserveExisting,
-          positions: layoutPositions,
-          incremental: preserveExisting,
-          hierarchy: hasHierarchy ? hierarchy : undefined,
-        });
-
-    layoutPromise.then((layoutedNodes) => {
-      if (layoutRunId !== layoutRunIdRef.current) {
-        return;
-      }
-
-      const alignedNodes = hierarchyPreservedPositions.size > 0
-        ? alignToPreservedPositions(layoutedNodes, hierarchyPreservedPositions, hierarchy)
-        : layoutedNodes;
-
-      // Build measured sizes from previously rendered nodes so adjustParentDimensions
-      // uses the same actual dimensions as resizeParentsForNodes (drag handler).
-      const measuredSizes = new Map<string, { width: number; height: number }>();
-      for (const n of nodesRef.current) {
-        const w = (n as any).measured?.width ?? n.width;
-        const h = (n as any).measured?.height ?? n.height;
-        if (w != null && h != null) {
-          measuredSizes.set(n.id, { width: w, height: h });
-        }
-      }
-
-      const finalNodes = hierarchy.parentToChildren.size > 0
-        ? adjustParentDimensions(alignedNodes, hierarchy, measuredSizes)
-        : alignedNodes;
-
-      const paddedNodes = shouldApplyInitialPadding
-        ? applyLayoutPadding(finalNodes, INITIAL_NODE_OFFSET)
-        : finalNodes;
-      setNodes(paddedNodes);
-      positionsRef.current = new Map(
-        paddedNodes.map((node) => [node.id, node.position]),
-      );
-      setLayoutGen((g) => g + 1);
-      if (shouldFitView) {
-        requestAnimationFrame(() => {
-          reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
-        });
-      }
-    });
-  }, [buildFlowElements, splitGraph, setEdges, setNodes]);
-
-  useEffect(() => {
-    const cleanup = setupGraphTestApis();
-    return () => {
-      cleanup?.();
-    };
-  }, []);
-
   const handleInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstanceRef.current = instance;
   }, []);
-
-  const handleDagreLayout = useCallback(() => {
-    if (nodes.length === 0) {
-      return;
-    }
-
-    const layoutRunId = ++layoutRunIdRef.current;
-    const hasHierarchy = splitGraph.has_edges.length > 0;
-    const layoutPromise = hasHierarchy
-      ? layoutGraphWithElk(nodes, edges, {
-          hierarchy: buildHierarchy(splitGraph.has_edges, splitGraph.nodes),
-        })
-      : layoutGraphWithDagre(nodes, edges);
-    layoutPromise.then((layoutedNodes) => {
-      if (layoutRunId !== layoutRunIdRef.current) {
-        return;
-      }
-      setNodes(layoutedNodes);
-      positionsRef.current = new Map(
-        layoutedNodes.map((node) => [node.id, node.position]),
-      );
-      requestAnimationFrame(() => {
-        reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
-      });
-    });
-  }, [edges, splitGraph, nodes, setNodes]);
 
   const handleCenterGraph = useCallback(() => {
     if (nodes.length === 0) {

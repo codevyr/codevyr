@@ -48,8 +48,8 @@ const graphResponse = {
     { id: 'C-D', from: 'C', to: 'D', from_object: 'obj_A', from_offset_start: 0, from_offset_end: 1 },
   ],
   has_edges: [
-    { id: 'has-A-B', parent: 'A', child: 'B' },
-    { id: 'has-B-C', parent: 'B', child: 'C' },
+    { id: 'has-A-B', parent: 'A', child: 'B', parent_instance: 'si_A', child_instance: 'si_B' },
+    { id: 'has-B-C', parent: 'B', child: 'C', parent_instance: 'si_B', child_instance: 'si_C' },
   ],
   objects: [
     { object_id: 'obj_A', path: 'mock/a.go' },
@@ -123,10 +123,10 @@ const multiBranchResponse = {
     { id: 'B2-E', from: 'B2', to: 'E', from_object: 'obj_A', from_offset_start: 50, from_offset_end: 51 },
   ],
   has_edges: [
-    { id: 'has-A-B1', parent: 'A', child: 'B1' },
-    { id: 'has-A-B2', parent: 'A', child: 'B2' },
-    { id: 'has-B1-C1', parent: 'B1', child: 'C1' },
-    { id: 'has-B2-C2', parent: 'B2', child: 'C2' },
+    { id: 'has-A-B1', parent: 'A', child: 'B1', parent_instance: 'si_A', child_instance: 'si_B1' },
+    { id: 'has-A-B2', parent: 'A', child: 'B2', parent_instance: 'si_A', child_instance: 'si_B2' },
+    { id: 'has-B1-C1', parent: 'B1', child: 'C1', parent_instance: 'si_B1', child_instance: 'si_C1' },
+    { id: 'has-B2-C2', parent: 'B2', child: 'C2', parent_instance: 'si_B2', child_instance: 'si_C2' },
   ],
   objects: [
     { object_id: 'obj_A', path: 'mock/a.go' },
