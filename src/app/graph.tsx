@@ -402,6 +402,7 @@ export function splitMultiParentNodes(graph: Graph): Graph {
 
         // Both from and to are split
         if (fromSplits && toSplits) {
+            let createdEdge = false;
             for (const fromSplitId of fromSplits) {
                 const fromPid = splitParent.get(fromSplitId);
                 let matchedToSplit: string | undefined;
@@ -426,6 +427,17 @@ export function splitMultiParentNodes(graph: Graph): Graph {
                     ...e,
                     from: fromSplitId,
                     to: matchedToSplit!,
+                })));
+                createdEdge = true;
+            }
+            // Fallback: if from_object didn't match any split, route from first split
+            if (!createdEdge) {
+                const matchedToSplit = toSplits[0];
+                const newEdgeId = `${edgeId}\0${fromSplits[0]}\0${matchedToSplit}`;
+                newEdges.set(newEdgeId, edgeArray.map(e => ({
+                    ...e,
+                    from: fromSplits[0],
+                    to: matchedToSplit,
                 })));
             }
             return;
@@ -521,16 +533,13 @@ export function filterRedundantEdges(
 
     function hasEdgeFromDescendant(fromNode: string, target: string): boolean {
         const descendants = getDescendants(fromNode);
-        let found = false;
-        descendants.forEach((desc) => {
-            if (!found) {
-                const targets = edgeTargetsBySource.get(desc);
-                if (targets && targets.has(target)) {
-                    found = true;
-                }
+        for (const desc of Array.from(descendants)) {
+            const targets = edgeTargetsBySource.get(desc);
+            if (targets && targets.has(target)) {
+                return true;
             }
-        });
-        return found;
+        }
+        return false;
     }
 
     const result = new Map<string, Array<Edge>>();
