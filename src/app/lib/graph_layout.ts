@@ -144,6 +144,7 @@ export function adjustParentDimensions(
     style: n.style ? { ...n.style } : undefined,
   }));
   const nodeMap = new Map(cloned.map((n) => [n.id, n]));
+  const sizes = measuredSizes ? new Map(measuredSizes) : undefined;
 
   // Collect all parent IDs and compute their depth (distance to root).
   const parentIds = Array.from(hierarchy.parentToChildren.keys());
@@ -175,7 +176,8 @@ export function adjustParentDimensions(
     });
     if (children.length === 0) continue;
 
-    resizeSingleParent(parentNode, children, measuredSizes);
+    resizeSingleParent(parentNode, children, sizes);
+    sizes?.delete(parentId);
   }
 
   return cloned;

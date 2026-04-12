@@ -38,6 +38,42 @@ const nestedResponse = {
   warnings: [],
 };
 
+// Three-level nesting: outer → middle → inner (two has_edges).
+const multiLevelResponse = {
+  nodes: [
+    {
+      id: 'outer',
+      label: 'outer_dir',
+      symbol_instances: [
+        { id: 'si_outer', symbol: 'outer', object_id: 'obj1', symbol_type: 'Directory', instance_type: 'containment', start_offset: 0, end_offset: 200 },
+      ],
+    },
+    {
+      id: 'middle',
+      label: 'middle_dir',
+      symbol_instances: [
+        { id: 'si_middle', symbol: 'middle', object_id: 'obj1', symbol_type: 'Directory', instance_type: 'containment', start_offset: 0, end_offset: 150 },
+      ],
+    },
+    {
+      id: 'inner',
+      label: 'init',
+      symbol_instances: [
+        { id: 'si_inner', symbol: 'inner', object_id: 'obj1', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 50 },
+      ],
+    },
+  ],
+  edges: [],
+  has_edges: [
+    { id: 'has-outer-middle', parent: 'outer', child: 'middle' },
+    { id: 'has-middle-inner', parent: 'middle', child: 'inner' },
+  ],
+  objects: [
+    { object_id: 'obj1', path: 'mock/test.go' },
+  ],
+  warnings: [],
+};
+
 type NodeRect = { x: number; y: number; width: number; height: number };
 
 async function getNodeRect(page: Page, nodeId: string): Promise<NodeRect> {
@@ -67,12 +103,12 @@ async function waitForLayoutGen(page: Page, minGen: number) {
   }, minGen);
 }
 
-async function setupMock(page: Page) {
+async function setupMock(page: Page, response = nestedResponse) {
   await page.route('**/query**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(nestedResponse),
+      body: JSON.stringify(response),
     });
   });
 
@@ -173,6 +209,37 @@ test.describe('parent resize consistency', () => {
     // scrollWidth > clientWidth means the text content extends beyond the visible area.
     const overflow = await checkHeaderOverflow(page);
     expect(overflow.ok, `header text overflows after drag: ${JSON.stringify(overflow)}`).toBe(true);
+  });
+
+  test('multi-level nesting — outermost container sizes correctly on initial render', async ({ page }) => {
+    await setupMock(page, multiLevelResponse);
+
+    await setEditorQuery(page, '"test" {};');
+    await submitQuery(page);
+    await waitForGraphNodeCount(page, 3);
+    await ensureGraphApis(page);
+    await waitForLayoutGen(page, 1);
+    await page.waitForTimeout(300);
+
+    const outerRect = await getNodeRect(page, 'outer');
+    const middleRect = await getNodeRect(page, 'middle');
+    const innerRect = await getNodeRect(page, 'inner');
+
+    // Outer must contain middle
+    expect(outerRect.width).toBeGreaterThan(middleRect.width);
+    expect(outerRect.height).toBeGreaterThan(middleRect.height);
+
+    // Middle must contain inner
+    expect(middleRect.width).toBeGreaterThan(innerRect.width);
+    expect(middleRect.height).toBeGreaterThan(innerRect.height);
+
+    // Drag inner and verify outer dimensions don't change (already correct)
+    await dragNode(page, 'inner', 20, 10);
+    await page.waitForTimeout(200);
+
+    const outerAfter = await getNodeRect(page, 'outer');
+    expect(outerAfter.width).toBeCloseTo(outerRect.width, 0);
+    expect(outerAfter.height).toBeCloseTo(outerRect.height, 0);
   });
 
   test('parent label stays within boundaries on initial render', async ({ page }) => {
