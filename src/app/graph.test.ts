@@ -1108,6 +1108,30 @@ describe('adjustParentDimensions', () => {
     expect(p.style!.width).toBe(labelMinWidth);
   });
 
+  it('multi-level nesting with measuredSizes uses computed size for intermediate parents', () => {
+    const gp = flowNodeSized('GP', 0, 0, 1000, 1000);
+    const p = flowNodeSized('P', GROUP_PAD_LEFT, GROUP_PAD_TOP, 500, 500);
+    const c = flowNodeSized('C', GROUP_PAD_LEFT, GROUP_PAD_TOP, 80, 30);
+    const hierarchy: HierarchyInfo = {
+      childToParent: new Map([['C', 'P'], ['P', 'GP']]),
+      parentToChildren: new Map([['P', new Set(['C'])], ['GP', new Set(['P'])]]),
+    };
+    // measuredSizes has stale entry for P (180x40) and correct entry for C (80x30)
+    const measuredSizes = new Map([
+      ['P', { width: 180, height: 40 }],
+      ['C', { width: 80, height: 30 }],
+    ]);
+    const result = adjustParentDimensions([gp, p, c], hierarchy, measuredSizes);
+    const gpResult = result.find((n) => n.id === 'GP')!;
+    const pResult = result.find((n) => n.id === 'P')!;
+    // P is resized first from C: width = PAD_LEFT + 80 + PAD_RIGHT = 100
+    expect(pResult.style!.width).toBe(GROUP_PAD_LEFT + 80 + GROUP_PAD_RIGHT);
+    expect(pResult.style!.height).toBe(GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM);
+    // GP must use P's *computed* size (100x80), NOT the stale measuredSizes entry (180x40)
+    expect(gpResult.style!.width).toBe(GROUP_PAD_LEFT + (GROUP_PAD_LEFT + 80 + GROUP_PAD_RIGHT) + GROUP_PAD_RIGHT);
+    expect(gpResult.style!.height).toBe(GROUP_PAD_TOP + (GROUP_PAD_TOP + 30 + GROUP_PAD_BOTTOM) + GROUP_PAD_BOTTOM);
+  });
+
   it('uses measuredSizes when provided for child dimensions', () => {
     const parent = flowNodeSized('A', 0, 0, 500, 500);
     // Child has small style dimensions but measured is larger
