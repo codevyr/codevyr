@@ -9,7 +9,7 @@ import { CodeViewer, CodeFocus } from './code_viewer';
 import { GraphViewer } from './graph_viewer';
 import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
-import { formatOffsetLocation } from './lib/offsets';
+import { formatOffsetLocation, getLineColumnFromOffset } from './lib/offsets';
 import { QueryToolbar, ShareStatus } from './query_toolbar';
 import { readLastQuery } from './lib/use_saved_queries';
 import { buildShareUrl, getQueryFromHash } from './lib/query_share';
@@ -313,6 +313,20 @@ export default function Home() {
     });
   }, [fileTreeCache, queryGraph]);
 
+  const handleRevealQueryRange = useCallback((start: number, end: number) => {
+    const queryText = editorHandleRef.current?.getQuery() ?? '';
+    const startPos = getLineColumnFromOffset(queryText, start);
+    const endPos = getLineColumnFromOffset(queryText, end);
+    if (startPos && endPos) {
+      editorHandleRef.current?.revealRange({
+        startLineNumber: startPos.lineNumber,
+        startColumn: startPos.column,
+        endLineNumber: endPos.lineNumber,
+        endColumn: endPos.column,
+      });
+    }
+  }, []);
+
   const handleOpenFileFromExplorer = useCallback((fileId: string, filePath: string, projectId: string, fileType?: string | null) => {
     void revealFile(
       { fileId, path: filePath, projectId, fileType: fileType ?? null, startOffset: 0, endOffset: null },
@@ -387,6 +401,7 @@ export default function Home() {
             fileContents={fileContents}
             ensureFileContent={ensureFileContent}
             revealDirectory={handleRevealDirectory}
+            revealQueryRange={handleRevealQueryRange}
           />
         );
       case PROBLEMS_TAB_ID:

@@ -32,6 +32,7 @@ export interface GraphProps {
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
   revealDirectory: (objectId: string) => void;
+  revealQueryRange?: (start: number, end: number) => void;
 }
 
 type ActiveMenu = { kind: 'node' | 'edge'; id: string } | null;
@@ -147,7 +148,7 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
   const setActiveMenu = menuContext?.setActiveMenu;
-  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, hiddenRefEdges } = data;
+  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, revealQueryRange, hiddenRefEdges } = data;
   const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
     ? ({ '--graph-node-color': node.color } as React.CSSProperties)
@@ -295,6 +296,7 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
             isGroupNode={isDirectoryNode}
             revealDirectory={wrappedRevealDirectory}
             hiddenRefEdges={hiddenRefEdges}
+            revealQueryRange={revealQueryRange}
             onAction={closeMenu}
           />
         </ContextMenu.Content>
@@ -484,6 +486,7 @@ export function GraphViewer({
   fileContents,
   ensureFileContent,
   revealDirectory,
+  revealQueryRange,
 }: GraphProps) {
   const nodeTypes = useMemo(() => ({ graphNode: GraphNodeComponent }), []);
   const edgeTypes = useMemo(() => ({ graphEdge: GraphEdgeComponent }), []);
@@ -495,7 +498,7 @@ export function GraphViewer({
     positionsRef, hierarchyRef, nodesRef,
     reactFlowInstanceRef,
     handleDagreLayout,
-  } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory });
+  } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory, revealQueryRange });
 
   const { mode, setMode, effectiveMode, panOnDrag, selectionOnDrag } = useInteractionMode();
 

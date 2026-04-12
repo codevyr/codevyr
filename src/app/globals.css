@@ -110,6 +110,28 @@ body {
   color: #0f172a;
 }
 
+.section-header-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.section-header-toggle th {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.section-header-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: #64748b;
+}
+
+.section-header-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
 .declaration-hover {
   cursor: pointer;
   transition: background-color 0.3s ease;
