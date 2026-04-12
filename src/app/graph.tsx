@@ -20,10 +20,17 @@ export function isSelfReference(inst: SymbolInstance): boolean {
     return parseOffset(inst.start_offset) === 1 && parseOffset(inst.end_offset) === 0;
 }
 
+export interface QueryStatement {
+    start: number;
+    end: number;
+    text: string;
+}
+
 export interface Node {
     id: string;
     label: string;
     symbol_instances: Array<SymbolInstance>;
+    query_statements?: Array<QueryStatement>;
     color?: string;
 }
 
@@ -279,6 +286,7 @@ export function splitMultiParentNodes(graph: Graph): Graph {
                 id: splitId,
                 label: node.label,
                 symbol_instances: instances,
+                query_statements: node.query_statements,
                 color: node.color,
             });
             splitObjectIds.set(splitId, collectObjectIds(instances));

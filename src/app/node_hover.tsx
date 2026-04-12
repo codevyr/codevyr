@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
-import { LuArrowUpRight, LuCopy, LuFocus, LuFolderOpen } from 'react-icons/lu';
+import { useEffect, useState } from 'react';
+import { LuArrowUpRight, LuChevronDown, LuChevronRight, LuCopy, LuFocus, LuFolderOpen } from 'react-icons/lu';
 import { CodeFocus } from './code_viewer';
-import { Edge, SymbolInstance, Node, Graph, isDirectoryInstance, isSelfReference } from './graph';
+import { Edge, SymbolInstance, QueryStatement, Node, Graph, isDirectoryInstance, isSelfReference } from './graph';
 import { copyToClipboard } from './lib/clipboard';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
 
@@ -109,6 +109,21 @@ function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents, onAc
   );
 }
 
+function SectionHeader({ name, expanded, onToggle }: { name: string; expanded: boolean; onToggle: () => void }) {
+  return (
+    <thead>
+      <tr className="section-header-toggle" onClick={onToggle}>
+        <th colSpan={3}>
+          <span className="section-header-chevron">
+            {expanded ? <LuChevronDown /> : <LuChevronRight />}
+          </span>
+          {name}
+        </th>
+      </tr>
+    </thead>
+  );
+}
+
 interface NodeHoverSectionProps {
   sectionName: string;
   instances: SymbolInstance[];
@@ -130,6 +145,8 @@ function NodeHoverSection({
   fileContents,
   onAction,
 }: NodeHoverSectionProps) {
+  const [expanded, setExpanded] = useState(true);
+
   if (instances.length === 0) {
     return null;
   }
@@ -140,24 +157,86 @@ function NodeHoverSection({
 
   return (
     <>
-      <thead>
-        <tr>
-          <th colSpan={3}>{sectionName}</th>
-        </tr>
-      </thead>
+      <SectionHeader name={sectionName} expanded={expanded} onToggle={() => setExpanded(!expanded)} />
+      {expanded && (
+        <tbody>
+          {sortedInstances.map((instance) => (
+            <SymbolInstanceHover
+              key={instance.id}
+              instance={instance}
+              graph={graph}
+              setCodeFocus={setCodeFocus}
+              fileContents={fileContents}
+              onAction={onAction}
+            />
+          ))}
+        </tbody>
+      )}
+    </>
+  );
+}
 
-      <tbody>
-        {sortedInstances.map((instance) => (
-          <SymbolInstanceHover
-            key={instance.id}
-            instance={instance}
-            graph={graph}
-            setCodeFocus={setCodeFocus}
-            fileContents={fileContents}
-            onAction={onAction}
-          />
-        ))}
-      </tbody>
+const QUERY_STATEMENT_MAX_LENGTH = 30;
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '\u2026';
+}
+
+interface QueryStatementSectionProps {
+  statements: QueryStatement[];
+  revealQueryRange?: (start: number, end: number) => void;
+  onAction?: () => void;
+}
+
+function QueryStatementSection({ statements, revealQueryRange, onAction }: QueryStatementSectionProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (statements.length === 0) return null;
+  return (
+    <>
+      <SectionHeader name="Query statements" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
+      {expanded && (
+        <tbody>
+          {statements.map((stmt) => (
+            <tr
+              key={`${stmt.start}-${stmt.end}`}
+              className="declaration-hover"
+              onClick={() => { revealQueryRange?.(stmt.start, stmt.end); onAction?.(); }}
+            >
+              <td colSpan={2} title={stmt.text}>
+                <code>{truncateText(stmt.text, QUERY_STATEMENT_MAX_LENGTH)}</code>
+              </td>
+              <td className="node-hover-actions-cell">
+                <button
+                  type="button"
+                  className="node-hover-icon"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    revealQueryRange?.(stmt.start, stmt.end);
+                    onAction?.();
+                  }}
+                  title="Open in editor"
+                >
+                  <LuArrowUpRight />
+                </button>
+                <button
+                  type="button"
+                  className="node-hover-icon"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void copyToClipboard(stmt.text);
+                    onAction?.();
+                  }}
+                  title="Copy"
+                >
+                  <LuCopy />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      )}
     </>
   );
 }
@@ -185,6 +264,7 @@ export interface NodeHoverProps {
   isGroupNode?: boolean;
   revealDirectory?: (objectId: string) => void;
   hiddenRefEdges?: Array<Edge>;
+  revealQueryRange?: (start: number, end: number) => void;
   onAction?: () => void;
 }
 
@@ -198,6 +278,7 @@ export function NodeHover({
   isGroupNode,
   revealDirectory,
   hiddenRefEdges,
+  revealQueryRange,
   onAction,
 }: NodeHoverProps) {
   // For group nodes, separate directory instances from real code references
@@ -268,6 +349,13 @@ export function NodeHover({
         <div className="node-hover-dir-path">{dirPath}</div>
       )}
       <table>
+        {node.query_statements && node.query_statements.length > 0 && (
+          <QueryStatementSection
+            statements={node.query_statements}
+            revealQueryRange={revealQueryRange}
+            onAction={onAction}
+          />
+        )}
         {Array.from(instancesByType.entries())
           .sort(([a], [b]) => (INSTANCE_TYPE_ORDER[a] ?? 99) - (INSTANCE_TYPE_ORDER[b] ?? 99))
           .map(([typeName, instances]) => (
@@ -283,29 +371,52 @@ export function NodeHover({
         ))}
       </table>
       {hiddenRefEdges && hiddenRefEdges.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th colSpan={3}>References</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...hiddenRefEdges]
-              .sort((a, b) => compareEdges(a, b, graph, fileContents))
-              .map((edge) => (
-                <EdgeHover
-                  key={`${edge.id}-${edge.from_offset_start}`}
-                  edge={edge}
-                  graph={graph}
-                  setCodeFocus={setCodeFocus}
-                  fileContents={fileContents}
-                  onAction={onAction}
-                />
-              ))}
-          </tbody>
-        </table>
+        <HiddenReferencesSection
+          edges={hiddenRefEdges}
+          graph={graph}
+          setCodeFocus={setCodeFocus}
+          fileContents={fileContents}
+          onAction={onAction}
+        />
       )}
     </div>
+  );
+}
+
+function HiddenReferencesSection({
+  edges,
+  graph,
+  setCodeFocus,
+  fileContents,
+  onAction,
+}: {
+  edges: Array<Edge>;
+  graph: Graph;
+  setCodeFocus: (type: CodeFocus) => void;
+  fileContents: Map<string, string>;
+  onAction?: () => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  return (
+    <table>
+      <SectionHeader name="References" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
+      {expanded && (
+        <tbody>
+          {[...edges]
+            .sort((a, b) => compareEdges(a, b, graph, fileContents))
+            .map((edge) => (
+              <EdgeHover
+                key={`${edge.id}-${edge.from_offset_start}`}
+                edge={edge}
+                graph={graph}
+                setCodeFocus={setCodeFocus}
+                fileContents={fileContents}
+                onAction={onAction}
+              />
+            ))}
+        </tbody>
+      )}
+    </table>
   );
 }
 

@@ -41,6 +41,7 @@ export type GraphNodeData = {
   selectFile: (codeFocus: CodeFocus) => void;
   focusNode: (nodeId: string) => void;
   revealDirectory: (objectId: string) => void;
+  revealQueryRange?: (start: number, end: number) => void;
   isGroupNode?: boolean;
   hiddenRefEdges?: Array<GraphEdge>;
 };
@@ -291,6 +292,7 @@ interface UseGraphLayoutOptions {
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
   revealDirectory: (objectId: string) => void;
+  revealQueryRange?: (start: number, end: number) => void;
 }
 
 export function useGraphLayout({
@@ -299,6 +301,7 @@ export function useGraphLayout({
   fileContents,
   ensureFileContent,
   revealDirectory,
+  revealQueryRange,
 }: UseGraphLayoutOptions) {
   const [nodes, setNodes] = useNodesState<GraphNodeData>([]);
   const [edges, setEdges] = useEdgesState<GraphEdgeData>([]);
@@ -389,6 +392,7 @@ export function useGraphLayout({
           selectFile,
           focusNode,
           revealDirectory,
+          revealQueryRange,
           isGroupNode: isGroup,
           hiddenRefEdges: hiddenByHas.get(node.id),
         },
@@ -440,7 +444,7 @@ export function useGraphLayout({
     });
 
     return { nextNodes, nextEdges, hierarchy };
-  }, [splitGraph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory]);
+  }, [splitGraph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory, revealQueryRange]);
 
   // ── Main layout effect ─────────────────────────────────────────────
 
