@@ -20,6 +20,7 @@ import {
   alignToPreservedPositions,
   buildPreservedPositionsMap,
   splitMultiParentNodes,
+  mergeSameNameNodes,
 } from '../graph';
 import type { CodeFocus } from '../code_viewer';
 import {
@@ -293,6 +294,7 @@ interface UseGraphLayoutOptions {
   ensureFileContent: (objectId: string) => void;
   revealDirectory: (objectId: string) => void;
   revealQueryRange?: (start: number, end: number) => void;
+  autoMerge?: boolean;
 }
 
 export function useGraphLayout({
@@ -302,6 +304,7 @@ export function useGraphLayout({
   ensureFileContent,
   revealDirectory,
   revealQueryRange,
+  autoMerge = true,
 }: UseGraphLayoutOptions) {
   const [nodes, setNodes] = useNodesState<GraphNodeData>([]);
   const [edges, setEdges] = useEdgesState<GraphEdgeData>([]);
@@ -314,7 +317,11 @@ export function useGraphLayout({
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
 
   const splitGraph = useMemo(() => splitMultiParentNodes(graph), [graph]);
-  const displayLabels = useMemo(() => buildDisplayLabelMap(splitGraph), [splitGraph]);
+  const mergedGraph = useMemo(
+    () => autoMerge ? mergeSameNameNodes(splitGraph) : splitGraph,
+    [splitGraph, autoMerge],
+  );
+  const displayLabels = useMemo(() => buildDisplayLabelMap(mergedGraph), [mergedGraph]);
 
   const handleNodesChange = useCallback(
     (changes: Parameters<typeof applyNodeChanges>[0]) => {
@@ -363,16 +370,16 @@ export function useGraphLayout({
     const nextNodes: FlowNode<GraphNodeData>[] = [];
     const nextEdges: FlowEdge<GraphEdgeData>[] = [];
 
-    const hierarchy = buildHierarchy(splitGraph.has_edges, splitGraph.nodes);
+    const hierarchy = buildHierarchy(mergedGraph.has_edges, mergedGraph.nodes);
     const { childToParent, parentToChildren } = hierarchy;
 
-    const { visible: filteredEdges, hiddenByHas } = filterRedundantEdges(splitGraph.edges, parentToChildren, splitGraph.nodes);
+    const { visible: filteredEdges, hiddenByHas } = filterRedundantEdges(mergedGraph.edges, parentToChildren, mergedGraph.nodes);
 
     const existingNodeMap = new Map(
       nodesRef.current.map((n) => [n.id, n]),
     );
 
-    splitGraph.nodes.forEach((node) => {
+    mergedGraph.nodes.forEach((node) => {
       const position = positionsRef.current.get(node.id) ?? { x: 0, y: 0 };
       const isGroup = parentToChildren.has(node.id);
       const parentId = childToParent.get(node.id);
@@ -386,7 +393,7 @@ export function useGraphLayout({
         data: {
           label: displayLabels.get(node.id),
           node,
-          graph: splitGraph,
+          graph: mergedGraph,
           fileContents,
           ensureFileContent,
           selectFile,
@@ -435,7 +442,7 @@ export function useGraphLayout({
         style: { stroke: 'var(--graph-edge-color)', strokeWidth: 3 },
         data: {
           edges: edgeArray,
-          graph: splitGraph,
+          graph: mergedGraph,
           fileContents,
           ensureFileContent,
           selectFile,
@@ -444,16 +451,16 @@ export function useGraphLayout({
     });
 
     return { nextNodes, nextEdges, hierarchy };
-  }, [splitGraph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory, revealQueryRange]);
+  }, [mergedGraph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory, revealQueryRange]);
 
   // ── Main layout effect ─────────────────────────────────────────────
 
   useEffect(() => {
-    if (graphRef.current !== splitGraph) {
+    if (graphRef.current !== mergedGraph) {
       migratePositionsForGraphChange(
         positionsRef.current,
         hierarchyRef.current,
-        splitGraph,
+        mergedGraph,
       );
     }
 
@@ -467,10 +474,10 @@ export function useGraphLayout({
       return;
     }
 
-    const graphChanged = graphRef.current !== splitGraph;
+    const graphChanged = graphRef.current !== mergedGraph;
     const hasHierarchy = hierarchy.childToParent.size > 0;
-    const shouldUseDagre = !hasHierarchy && !hasNodeOverlap(graphRef.current, splitGraph);
-    graphRef.current = splitGraph;
+    const shouldUseDagre = !hasHierarchy && !hasNodeOverlap(graphRef.current, mergedGraph);
+    graphRef.current = mergedGraph;
 
     if (!graphChanged) {
       hierarchyRef.current = hierarchy;
@@ -579,7 +586,7 @@ export function useGraphLayout({
       );
       setLayoutGen((g) => g + 1);
     });
-  }, [buildFlowElements, splitGraph, setEdges, setNodes]);
+  }, [buildFlowElements, mergedGraph, setEdges, setNodes]);
 
   // ── Test API setup ─────────────────────────────────────────────────
 
@@ -594,10 +601,10 @@ export function useGraphLayout({
     if (nodes.length === 0) return;
 
     const layoutRunId = ++layoutRunIdRef.current;
-    const hasHierarchy = splitGraph.has_edges.length > 0;
+    const hasHierarchy = mergedGraph.has_edges.length > 0;
     const layoutPromise = hasHierarchy
       ? layoutGraphWithElk(nodes, edges, {
-          hierarchy: buildHierarchy(splitGraph.has_edges, splitGraph.nodes),
+          hierarchy: buildHierarchy(mergedGraph.has_edges, mergedGraph.nodes),
         })
       : layoutGraphWithDagre(nodes, edges);
     layoutPromise.then((layoutedNodes) => {
@@ -612,7 +619,7 @@ export function useGraphLayout({
     }).catch((err) => {
       console.error('Graph layout failed:', err);
     });
-  }, [edges, splitGraph, nodes, setNodes]);
+  }, [edges, mergedGraph, nodes, setNodes]);
 
   return {
     nodes,
@@ -620,7 +627,7 @@ export function useGraphLayout({
     setNodes,
     handleNodesChange,
     handleEdgesChange,
-    splitGraph,
+    mergedGraph,
     layoutGen,
     positionsRef,
     hierarchyRef,

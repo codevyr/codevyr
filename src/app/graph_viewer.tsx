@@ -491,14 +491,16 @@ export function GraphViewer({
   const nodeTypes = useMemo(() => ({ graphNode: GraphNodeComponent }), []);
   const edgeTypes = useMemo(() => ({ graphEdge: GraphEdgeComponent }), []);
 
+  const [autoMerge, setAutoMerge] = useState(true);
+
   const {
     nodes, edges, setNodes,
     handleNodesChange, handleEdgesChange,
-    splitGraph, layoutGen,
+    mergedGraph, layoutGen,
     positionsRef, hierarchyRef, nodesRef,
     reactFlowInstanceRef,
     handleDagreLayout,
-  } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory, revealQueryRange });
+  } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory, revealQueryRange, autoMerge });
 
   const { mode, setMode, effectiveMode, panOnDrag, selectionOnDrag } = useInteractionMode();
 
@@ -508,14 +510,14 @@ export function GraphViewer({
     if (!activeMenu) {
       return null;
     }
-    if (activeMenu.kind === 'node' && !splitGraph.nodes.has(activeMenu.id)) {
+    if (activeMenu.kind === 'node' && !mergedGraph.nodes.has(activeMenu.id)) {
       return null;
     }
-    if (activeMenu.kind === 'edge' && !splitGraph.edges.has(activeMenu.id)) {
+    if (activeMenu.kind === 'edge' && !mergedGraph.edges.has(activeMenu.id)) {
       return null;
     }
     return activeMenu;
-  }, [activeMenu, splitGraph]);
+  }, [activeMenu, mergedGraph]);
 
   const menuContextValue = useMemo(
     () => ({ activeMenu: resolvedActiveMenu, setActiveMenu }),
@@ -649,7 +651,7 @@ export function GraphViewer({
         <div
           aria-hidden="true"
           data-testid="graph-metadata"
-          data-node-count={splitGraph.nodes.size}
+          data-node-count={mergedGraph.nodes.size}
           data-layout-gen={layoutGen}
           style={{ display: 'none' }}
         />
@@ -661,6 +663,8 @@ export function GraphViewer({
         onResetZoom={handleResetZoom}
         mode={mode}
         onModeChange={setMode}
+        autoMerge={autoMerge}
+        onAutoMergeChange={setAutoMerge}
       />
       <div className="flex-1">
         <MenuContext.Provider value={menuContextValue}>

@@ -460,6 +460,127 @@ export function splitMultiParentNodes(graph: Graph): Graph {
     };
 }
 
+/**
+ * Merge nodes with the same label at the same effective nesting depth.
+ * Two nodes merge when they share the same label AND the same effective parent
+ * (the has_edge parent if it exists in the node set, otherwise null/root).
+ */
+export function mergeSameNameNodes(graph: Graph): Graph {
+    const { childToParent } = buildHierarchy(graph.has_edges, graph.nodes);
+
+    // Compute effective parent: parent from hierarchy if that parent is in graph.nodes, else null
+    function effectiveParent(nodeId: string): string | null {
+        const parent = childToParent.get(nodeId);
+        return parent && graph.nodes.has(parent) ? parent : null;
+    }
+
+    // Group nodes by (label, effectiveParent)
+    const groups = new Map<string, string[]>();
+    graph.nodes.forEach((node, nodeId) => {
+        const ep = effectiveParent(nodeId);
+        const key = `${node.label}\0${ep ?? ''}`;
+        let arr = groups.get(key);
+        if (!arr) { arr = []; groups.set(key, arr); }
+        arr.push(nodeId);
+    });
+
+    // Fast path: no group has >1 node
+    let needsMerge = false;
+    for (const ids of Array.from(groups.values())) {
+        if (ids.length > 1) { needsMerge = true; break; }
+    }
+    if (!needsMerge) return graph;
+
+    // Build idRemap and merged nodes
+    const idRemap = new Map<string, string>();
+    const newNodes = new Map<string, Node>();
+
+    groups.forEach((ids) => {
+        if (ids.length === 1) {
+            newNodes.set(ids[0], graph.nodes.get(ids[0])!);
+            return;
+        }
+        // Canonical = first ID lexicographically
+        ids.sort();
+        const canonicalId = ids[0];
+        const mergedInstances: SymbolInstance[] = [];
+        const mergedQueryStatements: QueryStatement[] = [];
+        const qsKeys = new Set<string>();
+        let color: string | undefined;
+
+        for (const id of ids) {
+            if (id !== canonicalId) idRemap.set(id, canonicalId);
+            const node = graph.nodes.get(id)!;
+            mergedInstances.push(...node.symbol_instances);
+            if (node.query_statements) {
+                for (const qs of node.query_statements) {
+                    const key = `${qs.start}:${qs.end}`;
+                    if (!qsKeys.has(key)) {
+                        qsKeys.add(key);
+                        mergedQueryStatements.push(qs);
+                    }
+                }
+            }
+            if (!color && node.color) color = node.color;
+        }
+
+        newNodes.set(canonicalId, {
+            id: canonicalId,
+            label: graph.nodes.get(canonicalId)!.label,
+            symbol_instances: mergedInstances,
+            ...(mergedQueryStatements.length > 0 ? { query_statements: mergedQueryStatements } : {}),
+            ...(color ? { color } : {}),
+        });
+    });
+
+    // Remap ref edges
+    const newEdges = new Map<string, Array<Edge>>();
+    graph.edges.forEach((edgeArray, edgeId) => {
+        const edge = edgeArray[0];
+        if (!edge) return;
+        const newFrom = idRemap.get(edge.from) ?? edge.from;
+        const newTo = idRemap.get(edge.to) ?? edge.to;
+        const newEdgeId = (newFrom !== edge.from || newTo !== edge.to)
+            ? `${newFrom}-${newTo}`
+            : edgeId;
+        const remappedArray = edgeArray.map(e => ({
+            ...e,
+            from: idRemap.get(e.from) ?? e.from,
+            to: idRemap.get(e.to) ?? e.to,
+        }));
+        const existing = newEdges.get(newEdgeId);
+        if (existing) {
+            existing.push(...remappedArray);
+        } else {
+            newEdges.set(newEdgeId, remappedArray);
+        }
+    });
+
+    // Remap has_edges
+    const hasEdgePairsSeen = new Set<string>();
+    const newHasEdges: HasEdge[] = [];
+    for (const he of graph.has_edges) {
+        const newParent = idRemap.get(he.parent) ?? he.parent;
+        const newChild = idRemap.get(he.child) ?? he.child;
+        if (newParent === newChild) continue; // filter self-referential
+        const pairKey = `${newParent}\0${newChild}`;
+        if (hasEdgePairsSeen.has(pairKey)) continue;
+        hasEdgePairsSeen.add(pairKey);
+        newHasEdges.push({
+            ...he,
+            parent: newParent,
+            child: newChild,
+        });
+    }
+
+    return {
+        nodes: newNodes,
+        edges: newEdges,
+        has_edges: newHasEdges,
+        objects: graph.objects,
+    };
+}
+
 export function buildHierarchy(hasEdges: Array<HasEdge>, nodes: Map<string, Node>): HierarchyInfo {
     const childToParent = new Map<string, string>();
     const parentToChildren = new Map<string, Set<string>>();
