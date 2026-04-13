@@ -1,6 +1,7 @@
 type LanguageMap = Record<string, string>;
 
 const mimeToLanguage: LanguageMap = {
+  'text/x-c++src': 'cpp',
   'text/x-makefile': 'makefile',
   'text/x-shellscript': 'shell',
   'text/css': 'css',
@@ -18,9 +19,14 @@ const mimeToLanguage: LanguageMap = {
 const extensionToLanguage: LanguageMap = {
   '.bash': 'shell',
   '.c': 'c',
+  '.cc': 'cpp',
+  '.cpp': 'cpp',
   '.css': 'css',
+  '.cxx': 'cpp',
   '.go': 'go',
   '.h': 'c',
+  '.hpp': 'cpp',
+  '.hxx': 'cpp',
   '.html': 'html',
   '.js': 'javascript',
   '.json': 'json',
