@@ -373,7 +373,7 @@ export default function Home() {
               onLoadQuery={(q) => editorHandleRef.current?.setQuery(q)}
               status={shareStatus}
             />
-            <div className="flex-1">
+            <div className="flex-1 min-h-0">
               <EditorComponent
                 ref={editorHandleRef}
                 query={query}
