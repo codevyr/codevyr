@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, splitMultiParentNodes, Edge, FilteredEdgesResult, Graph, HasEdge, HierarchyInfo, Node, SymbolInstance } from './graph';
+import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, mergeSameNameNodes, splitMultiParentNodes, Edge, FilteredEdgesResult, Graph, HasEdge, HierarchyInfo, Node, QueryStatement, SymbolInstance } from './graph';
 import { adjustParentDimensions, measureGroupHeaderWidth, GROUP_PAD_BOTTOM, GROUP_PAD_LEFT, GROUP_PAD_RIGHT, GROUP_PAD_TOP } from './lib/graph_layout';
 import type { Node as FlowNode } from 'reactflow';
 
@@ -1146,5 +1146,185 @@ describe('adjustParentDimensions', () => {
     // Should use measured width 200 instead of style width 80
     expect(p.style!.width).toBe(GROUP_PAD_LEFT + 200 + GROUP_PAD_RIGHT);
     expect(p.style!.height).toBe(GROUP_PAD_TOP + 50 + GROUP_PAD_BOTTOM);
+  });
+});
+
+describe('mergeSameNameNodes', () => {
+  function labeled(id: string, label: string, instances?: SymbolInstance[]): Node {
+    return { id, label, symbol_instances: instances ?? [] };
+  }
+
+  function mergeGraph(opts: { nodes: Map<string, Node>; edges?: Map<string, Array<Edge>>; has_edges?: HasEdge[] }): Graph {
+    return {
+      nodes: opts.nodes,
+      edges: opts.edges ?? new Map(),
+      has_edges: opts.has_edges ?? [],
+      objects: new Map(),
+    };
+  }
+  it('returns same reference when no merge needed (unique labels)', () => {
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['A', labeled('A', 'alpha')],
+        ['B', labeled('B', 'beta')],
+      ]),
+    });
+    const result = mergeSameNameNodes(graph);
+    expect(result).toBe(graph);
+  });
+
+  it('merges two root-level nodes with same label — instances combined', () => {
+    const instA = makeInstance('inst-a', 'obj1');
+    const instB = makeInstance('inst-b', 'obj2');
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['A', labeled('A', 'main', [instA])],
+        ['B', labeled('B', 'main', [instB])],
+      ]),
+    });
+    const result = mergeSameNameNodes(graph);
+    expect(result.nodes.size).toBe(1);
+    // Canonical is first lexicographically
+    const canonical = result.nodes.get('A')!;
+    expect(canonical).toBeDefined();
+    expect(canonical.label).toBe('main');
+    expect(canonical.symbol_instances).toHaveLength(2);
+    expect(canonical.symbol_instances).toContain(instA);
+    expect(canonical.symbol_instances).toContain(instB);
+  });
+
+  it('does not merge same label under different parents (both in node set)', () => {
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['P1', labeled('P1', 'parent1')],
+        ['P2', labeled('P2', 'parent2')],
+        ['A', labeled('A', 'main')],
+        ['B', labeled('B', 'main')],
+      ]),
+      has_edges: [
+        makeHasEdge('P1', 'A'),
+        makeHasEdge('P2', 'B'),
+      ],
+    });
+    const result = mergeSameNameNodes(graph);
+    // Both A and B should still exist because they have different parents
+    expect(result.nodes.has('A')).toBe(true);
+    expect(result.nodes.has('B')).toBe(true);
+    expect(result.nodes.size).toBe(4);
+  });
+
+  it('remaps ref edges after merge', () => {
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['A', labeled('A', 'main')],
+        ['B', labeled('B', 'main')],
+        ['C', labeled('C', 'other')],
+      ]),
+      edges: makeEdges(['C', 'B']),
+    });
+    const result = mergeSameNameNodes(graph);
+    // B is remapped to A (canonical), so edge C→B becomes C→A
+    expect(result.nodes.size).toBe(2);
+    expect(result.nodes.has('A')).toBe(true);
+    expect(result.nodes.has('C')).toBe(true);
+    // The edge should now target A
+    const allEdges = Array.from(result.edges.values()).flat();
+    expect(allEdges.length).toBe(1);
+    expect(allEdges[0].from).toBe('C');
+    expect(allEdges[0].to).toBe('A');
+  });
+
+  it('remaps has_edges and deduplicates', () => {
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['P', labeled('P', 'parent')],
+        ['A', labeled('A', 'child')],
+        ['B', labeled('B', 'child')],
+      ]),
+      has_edges: [
+        makeHasEdge('P', 'A'),
+        makeHasEdge('P', 'B'),
+      ],
+    });
+    const result = mergeSameNameNodes(graph);
+    // A and B merge (same label, same parent P)
+    expect(result.nodes.size).toBe(2);
+    expect(result.has_edges).toHaveLength(1);
+    expect(result.has_edges[0].parent).toBe('P');
+    expect(result.has_edges[0].child).toBe('A');
+  });
+
+  it('does not merge nodes with parent-child has_edge between them', () => {
+    // A→B has_edge makes B's effective parent A, not root — so they differ
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['A', labeled('A', 'main')],
+        ['B', labeled('B', 'main')],
+      ]),
+      has_edges: [
+        makeHasEdge('A', 'B'),
+      ],
+    });
+    const result = mergeSameNameNodes(graph);
+    // Different effective parents (A=root, B=A) → no merge
+    expect(result.nodes.size).toBe(2);
+    expect(result.has_edges).toHaveLength(1);
+  });
+
+  it('merges multiple groups simultaneously', () => {
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['A1', labeled('A1', 'alpha')],
+        ['A2', labeled('A2', 'alpha')],
+        ['B1', labeled('B1', 'beta')],
+        ['B2', labeled('B2', 'beta')],
+        ['C', labeled('C', 'gamma')],
+      ]),
+    });
+    const result = mergeSameNameNodes(graph);
+    expect(result.nodes.size).toBe(3);
+    expect(result.nodes.has('A1')).toBe(true);
+    expect(result.nodes.has('B1')).toBe(true);
+    expect(result.nodes.has('C')).toBe(true);
+  });
+
+  it('merges color and query_statements', () => {
+    const qs1: QueryStatement = { start: 0, end: 10, text: 'query1' };
+    const qs2: QueryStatement = { start: 20, end: 30, text: 'query2' };
+    const qsDup: QueryStatement = { start: 0, end: 10, text: 'query1-dup' };
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['A', { id: 'A', label: 'main', symbol_instances: [], color: '#ff0000', query_statements: [qs1] }],
+        ['B', { id: 'B', label: 'main', symbol_instances: [], query_statements: [qs2, qsDup] }],
+      ]),
+    });
+    const result = mergeSameNameNodes(graph);
+    const node = result.nodes.get('A')!;
+    expect(node.color).toBe('#ff0000');
+    // qs1 and qs2 kept, qsDup deduplicated (same start+end as qs1)
+    expect(node.query_statements).toHaveLength(2);
+    expect(node.query_statements![0].start).toBe(0);
+    expect(node.query_statements![1].start).toBe(20);
+  });
+
+  it('merges edges from multiple sources into same key', () => {
+    const graph = mergeGraph({
+      nodes: new Map([
+        ['A', labeled('A', 'main')],
+        ['B', labeled('B', 'main')],
+        ['C', labeled('C', 'other')],
+      ]),
+      edges: new Map([
+        ['C-A', [makeEdge('C', 'A')]],
+        ['C-B', [makeEdge('C', 'B')]],
+      ]),
+    });
+    const result = mergeSameNameNodes(graph);
+    // Both edges become C→A, should be merged into one key
+    const edgeKey = 'C-A';
+    const edgeArr = result.edges.get(edgeKey);
+    expect(edgeArr).toBeDefined();
+    expect(edgeArr!.length).toBe(2);
+    expect(edgeArr!.every(e => e.from === 'C' && e.to === 'A')).toBe(true);
   });
 });

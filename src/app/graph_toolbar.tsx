@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   LuFocus,
+  LuGitMerge,
   LuHand,
   LuLayoutGrid,
   LuMaximize2,
@@ -36,6 +37,8 @@ export interface GraphToolbarProps {
   onResetZoom: () => void;
   mode: InteractionMode;
   onModeChange: (mode: InteractionMode) => void;
+  autoMerge: boolean;
+  onAutoMergeChange: (enabled: boolean) => void;
 }
 
 export function GraphToolbar({
@@ -45,6 +48,8 @@ export function GraphToolbar({
   onResetZoom,
   mode,
   onModeChange,
+  autoMerge,
+  onAutoMergeChange,
 }: GraphToolbarProps) {
   return (
     <div className="toolbar-container">
@@ -64,6 +69,19 @@ export function GraphToolbar({
         >
           <LuMousePointer2 className={iconClassName} />
           Select
+        </button>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      <div className="toolbar-button-group">
+        <button
+          onClick={() => onAutoMergeChange(!autoMerge)}
+          className={`toolbar-btn${autoMerge ? ' toolbar-btn-active' : ''}`}
+          title="Auto-merge same-name symbols"
+        >
+          <LuGitMerge className={iconClassName} />
+          Merge
         </button>
       </div>
 
