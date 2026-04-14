@@ -7,6 +7,7 @@ import {
   LuMaximize2,
   LuMousePointer2,
   LuRotateCcw,
+  LuSearch,
 } from 'react-icons/lu';
 
 // Reusable toolbar button component
@@ -39,6 +40,7 @@ export interface GraphToolbarProps {
   onModeChange: (mode: InteractionMode) => void;
   autoMerge: boolean;
   onAutoMergeChange: (enabled: boolean) => void;
+  onSearch: () => void;
 }
 
 export function GraphToolbar({
@@ -50,6 +52,7 @@ export function GraphToolbar({
   onModeChange,
   autoMerge,
   onAutoMergeChange,
+  onSearch,
 }: GraphToolbarProps) {
   return (
     <div className="toolbar-container">
@@ -118,6 +121,18 @@ export function GraphToolbar({
           icon={<LuRotateCcw className={iconClassName} />}
         >
           Reset Zoom
+        </ToolbarButton>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      <div className="toolbar-button-group">
+        <ToolbarButton
+          onClick={onSearch}
+          title="Search nodes (Ctrl+F)"
+          icon={<LuSearch className={iconClassName} />}
+        >
+          Search
         </ToolbarButton>
       </div>
 

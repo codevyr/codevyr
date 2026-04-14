@@ -292,6 +292,71 @@ body {
   cursor: crosshair;
 }
 
+/* Graph search bar — floating overlay */
+.graph-search-bar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: white;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  padding: 4px 8px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+}
+
+.graph-search-input {
+  border: none;
+  outline: none;
+  font-size: 0.875rem;
+  width: 180px;
+  background: transparent;
+}
+
+.graph-search-count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.graph-search-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.graph-search-nav-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.graph-search-nav-btn:disabled {
+  color: #d1d5db;
+  cursor: default;
+}
+
+/* Node search highlights — applied to .react-flow__node wrapper */
+.react-flow__node.graph-node-search-match .graph-node,
+.react-flow__node.graph-node-search-match .graph-group-node-header {
+  outline: 2px solid #f59e0b;
+  outline-offset: 1px;
+}
+
+.react-flow__node.graph-node-search-active .graph-node,
+.react-flow__node.graph-node-search-active .graph-group-node-header {
+  outline: 3px solid #f59e0b;
+  outline-offset: 1px;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+}
+
 .step-badge{
   width:34px;height:34px;border-radius:9999px;
   display:inline-flex;align-items:center;justify-content:center;

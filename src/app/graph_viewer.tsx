@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   SelectionMode,
@@ -16,7 +16,9 @@ import { type Edge as GraphEdge, type Graph, type HierarchyInfo, type Node as Gr
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
 import { GraphToolbar } from './graph_toolbar';
+import { GraphSearchBar } from './graph_search';
 import { useInteractionMode } from './lib/use_interaction_mode';
+import { useGraphSearch } from './lib/use_graph_search';
 import {
   type GraphNodeData,
   type GraphEdgeData,
@@ -499,10 +501,57 @@ export function GraphViewer({
     mergedGraph, layoutGen,
     positionsRef, hierarchyRef, nodesRef,
     reactFlowInstanceRef,
+    focusNode,
     handleDagreLayout,
   } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory, revealQueryRange, autoMerge });
 
   const { mode, setMode, effectiveMode, panOnDrag, selectionOnDrag } = useInteractionMode();
+
+  const search = useGraphSearch({ mergedGraph, nodesRef, focusNode });
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const openSearch = useCallback(() => {
+    search.open();
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+  }, [search.open]);
+
+  // Ctrl+F opens graph search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+        const el = e.target as HTMLElement;
+        const tag = el?.tagName;
+        // Allow Ctrl+F when no input is focused, or when the search input itself is focused
+        if ((tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) &&
+            el !== searchInputRef.current) {
+          return;
+        }
+        e.preventDefault();
+        openSearch();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [openSearch]);
+
+  // Apply search highlight classes to nodes
+  useEffect(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        let className: string | undefined;
+        if (search.matchSet.size > 0 && search.matchSet.has(node.id)) {
+          className = node.id === search.currentMatchId
+            ? 'graph-node-search-match graph-node-search-active'
+            : 'graph-node-search-match';
+        }
+        if (node.className === className) return node;
+        return { ...node, className };
+      }),
+    );
+  }, [search.matchSet, search.currentMatchId, setNodes]);
 
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
 
@@ -665,8 +714,21 @@ export function GraphViewer({
         onModeChange={setMode}
         autoMerge={autoMerge}
         onAutoMergeChange={setAutoMerge}
+        onSearch={openSearch}
       />
-      <div className="flex-1">
+      <div className="flex-1 relative">
+        {search.isOpen && (
+          <GraphSearchBar
+            query={search.query}
+            setQuery={search.setQuery}
+            matches={search.matches}
+            currentIndex={search.currentIndex}
+            goToNext={search.goToNext}
+            goToPrevious={search.goToPrevious}
+            close={search.close}
+            inputRef={searchInputRef}
+          />
+        )}
         <MenuContext.Provider value={menuContextValue}>
             <ReactFlow
               className={effectiveMode === 'select' ? 'graph-select-mode' : undefined}
