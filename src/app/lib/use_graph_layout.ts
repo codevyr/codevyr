@@ -88,6 +88,23 @@ export function getNodeAbsolutePosition(node: FlowNode<GraphNodeData>): { x: num
   return (node as any).positionAbsolute ?? node.position;
 }
 
+export function computeAbsolutePosition(
+  node: FlowNode<GraphNodeData>,
+  nodeMap: Map<string, FlowNode<GraphNodeData>>,
+): { x: number; y: number } {
+  let x = node.position.x;
+  let y = node.position.y;
+  let parentId = (node as any).parentNode as string | undefined;
+  while (parentId) {
+    const parent = nodeMap.get(parentId);
+    if (!parent) break;
+    x += parent.position.x;
+    y += parent.position.y;
+    parentId = (parent as any).parentNode as string | undefined;
+  }
+  return { x, y };
+}
+
 export function getNodeSize(node: FlowNode<GraphNodeData>): { width: number; height: number } {
   return {
     width: node.width ?? (node as any).measured?.width ?? 0,
@@ -354,10 +371,12 @@ export function useGraphLayout({
 
   const focusNode = useCallback(
     (nodeId: string) => {
-      const targetNode = nodesRef.current.find((node) => node.id === nodeId);
+      const currentNodes = nodesRef.current;
+      const targetNode = currentNodes.find((node) => node.id === nodeId);
       if (!targetNode) return;
       const { width, height } = getNodeSize(targetNode);
-      const pos = getNodeAbsolutePosition(targetNode);
+      const nodeMap = new Map(currentNodes.map((n) => [n.id, n]));
+      const pos = computeAbsolutePosition(targetNode, nodeMap);
       const centerX = pos.x + width / 2;
       const centerY = pos.y + height / 2;
       const currentZoom = reactFlowInstanceRef.current?.getViewport().zoom ?? 1;
