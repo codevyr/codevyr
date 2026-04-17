@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { InteractionMode } from '../graph_toolbar';
+import { useEffect, useMemo, useState } from 'react';
 
-export function useInteractionMode() {
-  const [mode, setMode] = useState<InteractionMode>('hand');
+export type InteractionMode = 'hand' | 'select';
+
+export function useInteractionMode(
+  mode: InteractionMode,
+  setMode: (m: InteractionMode) => void,
+) {
   const [ctrlHeld, setCtrlHeld] = useState(false);
 
   useEffect(() => {
@@ -26,11 +29,11 @@ export function useInteractionMode() {
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', blur);
     };
-  }, []);
+  }, [setMode]);
 
   const effectiveMode: InteractionMode = ctrlHeld ? 'select' : mode;
   const panOnDrag = useMemo(() => effectiveMode === 'hand' ? [0, 1] : [1], [effectiveMode]);
   const selectionOnDrag = effectiveMode === 'select';
 
-  return { mode, setMode, effectiveMode, panOnDrag, selectionOnDrag };
+  return { effectiveMode, panOnDrag, selectionOnDrag };
 }

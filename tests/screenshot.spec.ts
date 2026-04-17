@@ -1,27 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { statSync } from 'fs';
-import { SUBMIT_QUERY } from './mock-responses';
-import {
-  ensureGraphApis,
-  interceptGraphEndpoints,
-  loadApp,
-  setEditorQuery,
-  submitQuery,
-  waitForGraphNodeCount,
-  waitForLayoutGen,
-} from './test-utils';
-
-async function setupGraph(page: Page) {
-  await interceptGraphEndpoints(page);
-  await loadApp(page);
-  await page.locator('.monaco-editor').click();
-  await setEditorQuery(page, SUBMIT_QUERY);
-  await submitQuery(page);
-  await waitForGraphNodeCount(page, 3);
-  await ensureGraphApis(page);
-  await waitForLayoutGen(page, 1);
-  await page.waitForTimeout(300);
-}
+import { setupGraph } from './test-utils';
 
 async function openScreenshotMenu(page: Page) {
   await page.getByRole('button', { name: 'Screenshot' }).click();

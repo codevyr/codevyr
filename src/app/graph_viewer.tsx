@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   SelectionMode,
@@ -15,11 +15,10 @@ import * as ContextMenu from '@radix-ui/react-context-menu';
 import { type Edge as GraphEdge, type Graph, type HierarchyInfo, type Node as GraphNode, isDirectoryInstance, isSelfReference } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
 import { CodeFocus } from './code_viewer';
-import { GraphToolbar } from './graph_toolbar';
 import { GraphSearchBar } from './graph_search';
-import { useInteractionMode } from './lib/use_interaction_mode';
 import { useGraphSearch } from './lib/use_graph_search';
-import { useScreenshot } from './lib/use_screenshot';
+import { useScreenshot, type ScreenshotMode } from './lib/use_screenshot';
+import type { InteractionMode } from './lib/use_interaction_mode';
 import {
   type GraphNodeData,
   type GraphEdgeData,
@@ -29,6 +28,15 @@ import {
   useGraphLayout,
 } from './lib/use_graph_layout';
 
+export interface GraphViewerHandle {
+  centerGraph: () => void;
+  fitToView: () => void;
+  resetZoom: () => void;
+  redrawLayout: () => void;
+  openSearch: () => void;
+  takeScreenshot: (mode: ScreenshotMode) => void;
+}
+
 export interface GraphProps {
   graph: Graph;
   selectFile: (codeFocus: CodeFocus) => void;
@@ -36,6 +44,10 @@ export interface GraphProps {
   ensureFileContent: (objectId: string) => void;
   revealDirectory: (objectId: string) => void;
   revealQueryRange?: (start: number, end: number) => void;
+  autoMerge: boolean;
+  effectiveMode: InteractionMode;
+  panOnDrag: number[];
+  selectionOnDrag: boolean;
 }
 
 type ActiveMenu = { kind: 'node' | 'edge'; id: string } | null;
@@ -483,18 +495,20 @@ function GraphEdgeComponent({
   );
 }
 
-export function GraphViewer({
+export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function GraphViewer({
   graph,
   selectFile,
   fileContents,
   ensureFileContent,
   revealDirectory,
   revealQueryRange,
-}: GraphProps) {
+  autoMerge,
+  effectiveMode,
+  panOnDrag,
+  selectionOnDrag,
+}, ref) {
   const nodeTypes = useMemo(() => ({ graphNode: GraphNodeComponent }), []);
   const edgeTypes = useMemo(() => ({ graphEdge: GraphEdgeComponent }), []);
-
-  const [autoMerge, setAutoMerge] = useState(true);
 
   const {
     nodes, edges, setNodes,
@@ -508,8 +522,6 @@ export function GraphViewer({
 
   const [renderAllForCapture, setRenderAllForCapture] = useState(false);
   const handleScreenshot = useScreenshot({ nodesRef, renderAllForCapture, setRenderAll: setRenderAllForCapture, reactFlowInstanceRef });
-
-  const { mode, setMode, effectiveMode, panOnDrag, selectionOnDrag } = useInteractionMode();
 
   const search = useGraphSearch({ mergedGraph, nodesRef, focusNode });
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -634,6 +646,15 @@ export function GraphViewer({
     reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: 1 });
   }, [nodes]);
 
+  useImperativeHandle(ref, () => ({
+    centerGraph: handleCenterGraph,
+    fitToView: handleFitToView,
+    resetZoom: handleResetZoom,
+    redrawLayout: handleDagreLayout,
+    openSearch,
+    takeScreenshot: handleScreenshot,
+  }), [handleCenterGraph, handleFitToView, handleResetZoom, handleDagreLayout, openSearch, handleScreenshot]);
+
   // Group node bodies have pointer-events: none so edges underneath stay clickable.
   // When a pane click/contextmenu falls inside a group, forward it to the group's
   // header element.  Reads only from refs — stable with empty deps.
@@ -709,18 +730,6 @@ export function GraphViewer({
           style={{ display: 'none' }}
         />
       )}
-      <GraphToolbar
-        onDagreLayout={handleDagreLayout}
-        onCenterGraph={handleCenterGraph}
-        onFitToView={handleFitToView}
-        onResetZoom={handleResetZoom}
-        mode={mode}
-        onModeChange={setMode}
-        autoMerge={autoMerge}
-        onAutoMergeChange={setAutoMerge}
-        onSearch={openSearch}
-        onScreenshot={handleScreenshot}
-      />
       <div className="flex-1 relative">
         {search.isOpen && (
           <GraphSearchBar
@@ -765,4 +774,4 @@ export function GraphViewer({
       </div>
     </div>
   );
-}
+});
