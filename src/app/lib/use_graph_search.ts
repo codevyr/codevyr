@@ -1,60 +1,74 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Node as FlowNode } from 'reactflow';
+import { type Node as FlowNode } from 'reactflow';
 import type { Graph } from '../graph';
 import type { GraphNodeData } from './use_graph_layout';
 import { computeAbsolutePosition } from './use_graph_layout';
 
+const EMPTY_MATCHES: string[] = [];
+
 interface UseGraphSearchOptions {
   mergedGraph: Graph;
-  nodesRef: React.RefObject<FlowNode<GraphNodeData>[]>;
+  nodes: FlowNode<GraphNodeData>[];
   focusNode: (nodeId: string) => void;
 }
 
-export function useGraphSearch({ mergedGraph, nodesRef, focusNode }: UseGraphSearchOptions) {
+export function useGraphSearch({ mergedGraph, nodes, focusNode }: UseGraphSearchOptions) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const prevMatchIdsRef = useRef<string>('');
 
-  const matches = useMemo(() => {
+  // Find matching node IDs by label (depends on graph data and query only)
+  const matchingIds = useMemo(() => {
     if (!query) return [];
     const lowerQuery = query.toLowerCase();
-    const matchingIds: string[] = [];
+    const ids: string[] = [];
     mergedGraph.nodes.forEach((node) => {
       if (node.label.toLowerCase().includes(lowerQuery)) {
-        matchingIds.push(node.id);
+        ids.push(node.id);
       }
     });
-    // Sort spatially by position (Y then X) for reading-order navigation
-    const currentNodes = nodesRef.current ?? [];
+    return ids;
+  }, [mergedGraph, query]);
+
+  // Sort spatially by position (Y then X) for reading-order navigation.
+  // Use a stable empty array to prevent downstream useMemo/useEffect cascades
+  // when nodes change but there are no matches (avoids infinite re-render loop).
+  const matches = useMemo(() => {
+    if (matchingIds.length === 0) return EMPTY_MATCHES;
     const matchingIdSet = new Set(matchingIds);
-    const nodeMap = new Map(currentNodes.map((n) => [n.id, n]));
+    const nodeMap = new Map<string, FlowNode<GraphNodeData>>(nodes.map((n) => [n.id, n]));
     const posMap = new Map<string, { x: number; y: number }>();
-    for (const n of currentNodes) {
+    for (const n of nodes) {
       if (matchingIdSet.has(n.id)) {
         posMap.set(n.id, computeAbsolutePosition(n, nodeMap));
       }
     }
-    matchingIds.sort((a, b) => {
+    return [...matchingIds].sort((a, b) => {
       const posA = posMap.get(a);
       const posB = posMap.get(b);
       if (!posA || !posB) return 0;
       if (posA.y !== posB.y) return posA.y - posB.y;
       return posA.x - posB.x;
     });
-    return matchingIds;
-  }, [mergedGraph, query, nodesRef]);
+  }, [matchingIds, nodes]);
 
-  // When matches change, clamp currentIndex and auto-focus first match
+  // Reset currentIndex when matches change (adjusting state during render)
+  const matchIds = matches.join(',');
+  const [prevMatchIds, setPrevMatchIds] = useState('');
+  if (matchIds !== prevMatchIds) {
+    setPrevMatchIds(matchIds);
+    setCurrentIndex(0);
+  }
+
+  // Auto-focus first match when matches change (side effect)
   useEffect(() => {
-    const matchIds = matches.join(',');
     if (matchIds === prevMatchIdsRef.current) return;
     prevMatchIdsRef.current = matchIds;
-    setCurrentIndex(0);
     if (matches.length > 0) {
       focusNode(matches[0]);
     }
-  }, [matches, focusNode]);
+  }, [matchIds, matches, focusNode]);
 
   const currentMatchId = matches.length > 0 ? matches[currentIndex] ?? null : null;
 

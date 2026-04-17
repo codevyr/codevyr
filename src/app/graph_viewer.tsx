@@ -190,7 +190,7 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
       data.focusNode(nodeId);
       closeMenu();
     },
-    [data.focusNode, closeMenu],
+    [data, closeMenu],
   );
 
   const wrappedRevealDirectory = useCallback(
@@ -253,7 +253,7 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
         triggerContextMenu(event);
       }
     },
-    [instanceCount, id, isDirectoryNode, isOpen, hasHiddenRefs, node, revealDirectory, selectFile, setActiveMenu],
+    [instanceCount, isDirectoryNode, isOpen, hasHiddenRefs, node, revealDirectory, selectFile, setActiveMenu],
   );
 
   const handleOpenChange = useCallback(
@@ -444,7 +444,7 @@ function GraphEdgeComponent({
 
       triggerContextMenu(event);
     },
-    [edgesList, graph, id, isOpen, selectFile, setActiveMenu],
+    [edgesList, graph, isOpen, selectFile, setActiveMenu],
   );
 
   const handleOpenChange = useCallback(
@@ -523,16 +523,17 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
   const [renderAllForCapture, setRenderAllForCapture] = useState(false);
   const handleScreenshot = useScreenshot({ nodesRef, renderAllForCapture, setRenderAll: setRenderAllForCapture, reactFlowInstanceRef });
 
-  const search = useGraphSearch({ mergedGraph, nodesRef, focusNode });
+  const search = useGraphSearch({ mergedGraph, nodes, focusNode });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const searchOpen = search.open;
   const openSearch = useCallback(() => {
-    search.open();
+    searchOpen();
     requestAnimationFrame(() => {
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
     });
-  }, [search.open]);
+  }, [searchOpen]);
 
   // Ctrl+F opens graph search
   useEffect(() => {
@@ -553,10 +554,13 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [openSearch]);
 
-  // Apply search highlight classes to nodes
+  // Apply search highlight classes to nodes.
+  // Returns the same array reference when nothing changed to avoid triggering
+  // a nodes → matches → matchSet → setNodes infinite re-render loop.
   useEffect(() => {
-    setNodes((currentNodes) =>
-      currentNodes.map((node) => {
+    setNodes((currentNodes) => {
+      let changed = false;
+      const result = currentNodes.map((node) => {
         let className: string | undefined;
         if (search.matchSet.size > 0 && search.matchSet.has(node.id)) {
           className = node.id === search.currentMatchId
@@ -564,9 +568,11 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
             : 'graph-node-search-match';
         }
         if (node.className === className) return node;
+        changed = true;
         return { ...node, className };
-      }),
-    );
+      });
+      return changed ? result : currentNodes;
+    });
   }, [search.matchSet, search.currentMatchId, setNodes]);
 
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
@@ -591,7 +597,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
 
   const handleInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstanceRef.current = instance;
-  }, []);
+  }, [reactFlowInstanceRef]);
 
   const handleCenterGraph = useCallback(() => {
     if (nodes.length === 0) {
@@ -603,7 +609,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
     const currentZoom =
       reactFlowInstanceRef.current?.getViewport().zoom ?? 1;
     reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: currentZoom });
-  }, [nodes]);
+  }, [nodes, reactFlowInstanceRef]);
 
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, draggedNode: FlowNode<GraphNodeData>) => {
@@ -617,7 +623,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
         return resized;
       });
     },
-    [setNodes],
+    [setNodes, nodesRef, hierarchyRef, positionsRef],
   );
 
   const handleSelectionDragStop = useCallback(
@@ -629,12 +635,12 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
         return resized;
       });
     },
-    [setNodes],
+    [setNodes, hierarchyRef, positionsRef],
   );
 
   const handleFitToView = useCallback(() => {
     reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
-  }, []);
+  }, [reactFlowInstanceRef]);
 
   const handleResetZoom = useCallback(() => {
     if (nodes.length === 0) {
@@ -644,7 +650,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
     const centerX = bounds.x + bounds.width / 2;
     const centerY = bounds.y + bounds.height / 2;
     reactFlowInstanceRef.current?.setCenter(centerX, centerY, { zoom: 1 });
-  }, [nodes]);
+  }, [nodes, reactFlowInstanceRef]);
 
   useImperativeHandle(ref, () => ({
     centerGraph: handleCenterGraph,
@@ -691,7 +697,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
       ) as HTMLElement | null;
       if (header) action(header);
     },
-    [setActiveMenu],
+    [setActiveMenu, reactFlowInstanceRef, nodesRef, hierarchyRef],
   );
 
   const handlePaneClick = useCallback(
