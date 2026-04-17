@@ -1,7 +1,5 @@
 # -------- Base builder image
-FROM node:24-alpine AS deps
-# Optional: needed for some native modules like sharp
-RUN apk add --no-cache libc6-compat
+FROM node:24-slim AS deps
 WORKDIR /app
 
 # Install only dependencies (better layer caching)
@@ -9,7 +7,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 # -------- Build stage
-FROM node:24-alpine AS builder
+FROM node:24-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -17,11 +15,14 @@ COPY . .
 RUN npm run build
 
 # -------- Production runtime
-FROM node:24-alpine AS runner
+FROM node:24-slim AS runner
 WORKDIR /app
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+RUN groupadd -g 1001 nodejs && useradd -m -u 1001 -g nodejs nextjs
+
+# Install wget for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV PORT=3000
