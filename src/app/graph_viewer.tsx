@@ -19,6 +19,7 @@ import { GraphToolbar } from './graph_toolbar';
 import { GraphSearchBar } from './graph_search';
 import { useInteractionMode } from './lib/use_interaction_mode';
 import { useGraphSearch } from './lib/use_graph_search';
+import { useScreenshot } from './lib/use_screenshot';
 import {
   type GraphNodeData,
   type GraphEdgeData,
@@ -505,6 +506,9 @@ export function GraphViewer({
     handleDagreLayout,
   } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory, revealQueryRange, autoMerge });
 
+  const [renderAllForCapture, setRenderAllForCapture] = useState(false);
+  const handleScreenshot = useScreenshot({ nodesRef, renderAllForCapture, setRenderAll: setRenderAllForCapture, reactFlowInstanceRef });
+
   const { mode, setMode, effectiveMode, panOnDrag, selectionOnDrag } = useInteractionMode();
 
   const search = useGraphSearch({ mergedGraph, nodesRef, focusNode });
@@ -715,6 +719,7 @@ export function GraphViewer({
         autoMerge={autoMerge}
         onAutoMergeChange={setAutoMerge}
         onSearch={openSearch}
+        onScreenshot={handleScreenshot}
       />
       <div className="flex-1 relative">
         {search.isOpen && (
@@ -746,7 +751,7 @@ export function GraphViewer({
               onNodeDragStop={handleNodeDragStop}
               onSelectionDragStart={() => setActiveMenu(null)}
               onSelectionDragStop={handleSelectionDragStop}
-              onlyRenderVisibleElements={shouldOnlyRenderVisibleElements}
+              onlyRenderVisibleElements={shouldOnlyRenderVisibleElements && !renderAllForCapture}
               nodesDraggable
               panOnDrag={panOnDrag}
               selectionOnDrag={selectionOnDrag}

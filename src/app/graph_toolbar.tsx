@@ -1,5 +1,7 @@
 import React from 'react';
 import {
+  LuCamera,
+  LuChevronDown,
   LuFocus,
   LuGitMerge,
   LuHand,
@@ -9,6 +11,8 @@ import {
   LuRotateCcw,
   LuSearch,
 } from 'react-icons/lu';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import type { ScreenshotMode } from './lib/use_screenshot';
 
 // Reusable toolbar button component
 interface ToolbarButtonProps {
@@ -41,6 +45,7 @@ export interface GraphToolbarProps {
   autoMerge: boolean;
   onAutoMergeChange: (enabled: boolean) => void;
   onSearch: () => void;
+  onScreenshot: (mode: ScreenshotMode) => void;
 }
 
 export function GraphToolbar({
@@ -53,6 +58,7 @@ export function GraphToolbar({
   autoMerge,
   onAutoMergeChange,
   onSearch,
+  onScreenshot,
 }: GraphToolbarProps) {
   return (
     <div className="toolbar-container">
@@ -134,6 +140,40 @@ export function GraphToolbar({
         >
           Search
         </ToolbarButton>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      <div className="toolbar-button-group">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button className="toolbar-btn" title="Take screenshot">
+              <LuCamera className={iconClassName} />
+              Screenshot
+              <LuChevronDown className={iconClassName} />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              className="context-menu-content"
+              sideOffset={4}
+              align="start"
+            >
+              <DropdownMenu.Item
+                className="dropdown-menu-item"
+                onSelect={() => onScreenshot('all-nodes')}
+              >
+                All Nodes
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="dropdown-menu-item"
+                onSelect={() => onScreenshot('visible-area')}
+              >
+                Visible Area
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
 
       <div className="flex-1"></div>

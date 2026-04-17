@@ -108,6 +108,14 @@ export async function waitForGraphNodeCount(page: Page, expectedCount: number) {
   }, expectedCount);
 }
 
+export async function waitForLayoutGen(page: Page, minGen: number) {
+  await page.waitForFunction((gen) => {
+    const el = document.querySelector('[data-testid="graph-metadata"]');
+    const current = el?.getAttribute('data-layout-gen');
+    return current !== null && Number(current) >= gen;
+  }, minGen);
+}
+
 export async function ensureGraphApis(page: Page) {
   await page.waitForFunction(() => {
     const win = window as any;
