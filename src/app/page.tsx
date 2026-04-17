@@ -443,7 +443,7 @@ export default function Home() {
       default:
         return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleSelectFile, panOnDrag, problems, query, queryGraph, selectionOnDrag]);
+  }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRevealQueryRange, handleSelectFile, panOnDrag, problems, query, queryGraph, selectionOnDrag]);
 
   return (
     <main className="flex h-screen flex-col">
@@ -453,7 +453,10 @@ export default function Home() {
         onOpenFromFile={handleOpenFromFile}
         onShare={handleShare}
         shareStatus={shareStatus}
-        graphViewerRef={graphViewerRef}
+        onGraphAction={(action) => {
+          const instance = graphViewerRef.current;
+          if (instance) action(instance);
+        }}
         mode={mode}
         onModeChange={setMode}
         autoMerge={autoMerge}

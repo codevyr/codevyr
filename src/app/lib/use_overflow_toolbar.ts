@@ -86,10 +86,13 @@ export function useOverflowToolbar(groups: ToolbarGroupConfig[]): OverflowState 
     });
     observer.observe(container);
 
-    // Initial computation
-    compute();
+    // Initial computation — schedule to avoid synchronous setState in effect
+    const rafId = requestAnimationFrame(compute);
 
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, [compute]);
 
   return { mode, overflowIds, measureRef, containerRef };

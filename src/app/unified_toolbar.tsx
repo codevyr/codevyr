@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   LuCamera,
   LuChevronDown,
@@ -38,7 +38,7 @@ export interface UnifiedToolbarProps {
   onOpenFromFile: () => void;
   onShare: () => void;
   shareStatus: ShareStatus;
-  graphViewerRef: React.RefObject<GraphViewerHandle | null>;
+  onGraphAction: (action: (handle: GraphViewerHandle) => void) => void;
   mode: InteractionMode;
   onModeChange: (m: InteractionMode) => void;
   autoMerge: boolean;
@@ -160,7 +160,7 @@ export function UnifiedToolbar({
   onOpenFromFile,
   onShare,
   shareStatus,
-  graphViewerRef,
+  onGraphAction,
   mode,
   onModeChange,
   autoMerge,
@@ -176,7 +176,7 @@ export function UnifiedToolbar({
   const shareLinkLabel =
     shareStatus === 'copied' ? 'Copied' : shareStatus === 'error' ? 'Copy failed' : 'Share Link';
 
-  const groups: GroupDef[] = useMemo(() => [
+  const groups: GroupDef[] = [
     {
       id: 'query',
       items: [
@@ -246,7 +246,7 @@ export function UnifiedToolbar({
           label: 'Redraw',
           title: 'Redraw layout',
           icon: <LuLayoutGrid className={iconClassName} />,
-          onClick: () => graphViewerRef.current?.redrawLayout(),
+          onClick: () => onGraphAction(h => h.redrawLayout()),
         },
         {
           type: 'button',
@@ -254,7 +254,7 @@ export function UnifiedToolbar({
           label: 'Center',
           title: 'Center Graph',
           icon: <LuFocus className={iconClassName} />,
-          onClick: () => graphViewerRef.current?.centerGraph(),
+          onClick: () => onGraphAction(h => h.centerGraph()),
         },
         {
           type: 'button',
@@ -262,7 +262,7 @@ export function UnifiedToolbar({
           label: 'Fit View',
           title: 'Fit to View',
           icon: <LuMaximize2 className={iconClassName} />,
-          onClick: () => graphViewerRef.current?.fitToView(),
+          onClick: () => onGraphAction(h => h.fitToView()),
         },
         {
           type: 'button',
@@ -270,7 +270,7 @@ export function UnifiedToolbar({
           label: 'Reset Zoom',
           title: 'Reset Zoom',
           icon: <LuRotateCcw className={iconClassName} />,
-          onClick: () => graphViewerRef.current?.resetZoom(),
+          onClick: () => onGraphAction(h => h.resetZoom()),
         },
       ],
     },
@@ -284,7 +284,7 @@ export function UnifiedToolbar({
           label: 'Search',
           title: 'Search nodes (Ctrl+F)',
           icon: <LuSearch className={iconClassName} />,
-          onClick: () => graphViewerRef.current?.openSearch(),
+          onClick: () => onGraphAction(h => h.openSearch()),
         },
         {
           type: 'dropdown',
@@ -293,30 +293,27 @@ export function UnifiedToolbar({
           title: 'Take screenshot',
           icon: <LuCamera className={iconClassName} />,
           items: [
-            { label: 'All Nodes', onSelect: () => graphViewerRef.current?.takeScreenshot('all-nodes') },
-            { label: 'Visible Area', onSelect: () => graphViewerRef.current?.takeScreenshot('visible-area') },
+            { label: 'All Nodes', onSelect: () => onGraphAction(h => h.takeScreenshot('all-nodes')) },
+            { label: 'Visible Area', onSelect: () => onGraphAction(h => h.takeScreenshot('visible-area')) },
           ],
         },
       ],
     },
-  ], [onRunQuery, onSaveToFile, onOpenFromFile, onShare, shareLinkLabel, modKey, graphViewerRef, mode, onModeChange, autoMerge, onAutoMergeChange]);
+  ];
 
   const { mode: displayMode, overflowIds, measureRef, containerRef } = useOverflowToolbar(TOOLBAR_GROUPS);
 
   const compact = displayMode === 'compact';
 
   // Collect items that overflow into the "..." menu
-  const overflowItems = useMemo(() => {
-    const items: { group: GroupDef; item: ToolbarItem }[] = [];
-    for (const g of groups) {
-      if (overflowIds.has(g.id)) {
-        for (const item of g.items) {
-          items.push({ group: g, item });
-        }
+  const overflowItems: { group: GroupDef; item: ToolbarItem }[] = [];
+  for (const g of groups) {
+    if (overflowIds.has(g.id)) {
+      for (const item of g.items) {
+        overflowItems.push({ group: g, item });
       }
     }
-    return items;
-  }, [groups, overflowIds]);
+  }
 
   return (
     <div className="toolbar-container" ref={containerRef}>

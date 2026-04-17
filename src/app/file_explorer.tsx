@@ -118,14 +118,17 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollKeyRef = useRef<string | null>(null);
 
-  // Track when the active file last changed (in Date.now() scale) so we can
-  // compare against revealRequest.nonce to determine which happened more recently.
-  const fileOpenTimestampRef = useRef(0);
-  useEffect(() => {
+  // Track which revealRequest.nonce was current when the active file last changed.
+  // If revealRequest.nonce differs from this snapshot, the reveal is newer than the
+  // last file open.  Uses the "adjusting state during render" pattern (no refs/effects).
+  const [revealNonceAtLastFileOpen, setRevealNonceAtLastFileOpen] = useState(0);
+  const [prevActiveFileNonce, setPrevActiveFileNonce] = useState(0);
+  if (activeFileNonce !== prevActiveFileNonce) {
+    setPrevActiveFileNonce(activeFileNonce);
     if (activeFileNonce > 0) {
-      fileOpenTimestampRef.current = Date.now();
+      setRevealNonceAtLastFileOpen(revealRequest?.nonce ?? 0);
     }
-  }, [activeFileNonce]);
+  }
 
   // Combined nonce that changes on both file opens and directory reveals,
   // so that manual collapse overrides are invalidated by either action.
@@ -176,7 +179,7 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
     // If a reveal request arrived after the last file open, prefer it.
     // This allows directory reveals to override the active file location.
     const revealIsNewer = revealRequest != null &&
-      revealRequest.nonce > fileOpenTimestampRef.current;
+      revealRequest.nonce !== revealNonceAtLastFileOpen;
     if (revealIsNewer) {
       return {
         projectId: revealRequest.projectId,
@@ -193,7 +196,7 @@ export function FileExplorer({ cache, activeFileId, activeFileNonce, revealReque
       projectId: revealRequest.projectId,
       path: normalizePath(revealRequest.path),
     };
-  }, [activeLocation, revealRequest]);
+  }, [activeLocation, revealRequest, revealNonceAtLastFileOpen]);
 
   const autoExpandedKeys = useMemo(() => {
     if (!revealTarget) {
