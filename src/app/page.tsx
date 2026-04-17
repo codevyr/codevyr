@@ -6,18 +6,20 @@ import 'flexlayout-react/style/light.css';
 import { EditorComponent, EditorHandle } from './editor';
 import { Graph, GraphObject, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus } from './code_viewer';
-import { GraphViewer } from './graph_viewer';
+import { GraphViewer, type GraphViewerHandle } from './graph_viewer';
 import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
 import { formatOffsetLocation, getLineColumnFromOffset } from './lib/offsets';
-import { QueryToolbar, ShareStatus } from './query_toolbar';
-import { readLastQuery } from './lib/use_saved_queries';
+import { UnifiedToolbar, type ShareStatus } from './unified_toolbar';
+import { readLastQuery } from './lib/last_query';
 import { buildShareUrl, getQueryFromHash } from './lib/query_share';
 import { FileExplorer } from './file_explorer';
 import { useFileTreeCache } from './lib/file_tree_cache';
 import { revealFile } from './lib/navigation';
 import { useCodeTabs } from './lib/use_code_tabs';
 import { copyToClipboard } from './lib/clipboard';
+import { saveQueryToFile, openQueryFromFile } from './lib/file_io';
+import { useInteractionMode, type InteractionMode } from './lib/use_interaction_mode';
 
 
 const CODE_TABSET_ID = "code-tabset";
@@ -177,7 +179,11 @@ export default function Home() {
   });
   const [problems, setProblems] = useState<Problem[]>([]);
   const editorHandleRef = useRef<EditorHandle | null>(null);
+  const graphViewerRef = useRef<GraphViewerHandle>(null);
   const [shareStatus, setShareStatus] = useState<ShareStatus>('idle');
+  const [mode, setMode] = useState<InteractionMode>('hand');
+  const [autoMerge, setAutoMerge] = useState(true);
+  const { effectiveMode, panOnDrag, selectionOnDrag } = useInteractionMode(mode, setMode);
   const shareResetTimeoutRef = useRef<number | null>(null);
   const [explorerReveal, setExplorerReveal] = useState<{
     fileId: string;
@@ -274,6 +280,40 @@ export default function Home() {
     editorHandleRef.current?.runQuery();
   }, []);
 
+  const handleSaveToFile = useCallback(async () => {
+    const currentQuery = editorHandleRef.current?.getQuery() ?? '';
+    if (currentQuery.trim()) {
+      await saveQueryToFile(currentQuery);
+    }
+  }, []);
+
+  const handleOpenFromFile = useCallback(async () => {
+    const content = await openQueryFromFile();
+    if (content !== null) {
+      editorHandleRef.current?.setQuery(content);
+    }
+  }, []);
+
+  // Ctrl+S → save to file, Ctrl+O → open from file
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      // Skip if focus is in Monaco editor (it handles its own shortcuts)
+      const el = e.target as HTMLElement;
+      if (el?.closest('.monaco-editor')) return;
+
+      if (e.key === 's') {
+        e.preventDefault();
+        handleSaveToFile();
+      } else if (e.key === 'o') {
+        e.preventDefault();
+        handleOpenFromFile();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSaveToFile, handleOpenFromFile]);
+
   const handleSelectFile = useCallback((focus: CodeFocus) => {
     const { object_id: objectId, start_offset: startOffset, end_offset: endOffset } = focus;
     const objectInfo = queryGraph.objects.get(objectId);
@@ -365,23 +405,12 @@ export default function Home() {
     switch (node.getId()) {
       case "query-editor":
         return (
-          <div className="flex flex-col h-full">
-            <QueryToolbar
-              onRunQuery={handleRunQuery}
-              onShare={handleShare}
-              onGetQuery={() => editorHandleRef.current?.getQuery() ?? ''}
-              onLoadQuery={(q) => editorHandleRef.current?.setQuery(q)}
-              status={shareStatus}
-            />
-            <div className="flex-1 min-h-0">
-              <EditorComponent
-                ref={editorHandleRef}
-                query={query}
-                onGraphChange={setQueryGraph}
-                onProblemsChange={handleProblemsChange}
-              />
-            </div>
-          </div>
+          <EditorComponent
+            ref={editorHandleRef}
+            query={query}
+            onGraphChange={setQueryGraph}
+            onProblemsChange={handleProblemsChange}
+          />
         );
       case "file-explorer":
         return (
@@ -396,12 +425,17 @@ export default function Home() {
       case "graph-viewer":
         return (
           <GraphViewer
+            ref={graphViewerRef}
             graph={queryGraph}
             selectFile={handleSelectFile}
             fileContents={fileContents}
             ensureFileContent={ensureFileContent}
             revealDirectory={handleRevealDirectory}
             revealQueryRange={handleRevealQueryRange}
+            autoMerge={autoMerge}
+            effectiveMode={effectiveMode}
+            panOnDrag={panOnDrag}
+            selectionOnDrag={selectionOnDrag}
           />
         );
       case PROBLEMS_TAB_ID:
@@ -409,11 +443,26 @@ export default function Home() {
       default:
         return <GraphCode graph={queryGraph} fileContents={fileContents} />;
     }
-  }, [activeFileId, activeFileNonce, codeTabs, codeTabsRef, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRunQuery, handleSelectFile, handleShare, problems, query, queryGraph, shareStatus]);
+  }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleSelectFile, panOnDrag, problems, query, queryGraph, selectionOnDrag]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <Layout model={model} factory={factory} onModelChange={handleModelChange} />
+    <main className="flex h-screen flex-col">
+      <UnifiedToolbar
+        onRunQuery={handleRunQuery}
+        onSaveToFile={handleSaveToFile}
+        onOpenFromFile={handleOpenFromFile}
+        onShare={handleShare}
+        shareStatus={shareStatus}
+        graphViewerRef={graphViewerRef}
+        mode={mode}
+        onModeChange={setMode}
+        autoMerge={autoMerge}
+        onAutoMergeChange={setAutoMerge}
+        hasGraph={queryGraph.nodes.size > 0}
+      />
+      <div className="flex-1 min-h-0 relative">
+        <Layout model={model} factory={factory} onModelChange={handleModelChange} />
+      </div>
     </main>
   );
 }

@@ -1,38 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-  interceptGraphEndpoints,
-  ensureEditorApis,
-  ensureGraphApis,
-  loadApp,
-  setEditorQuery,
-  submitQuery,
-  waitForGraphNodeCount,
+  setupGraph,
+  toolbarButton,
 } from './test-utils';
-import { SUBMIT_QUERY } from './mock-responses';
-
-async function waitForLayoutGen(page: Page, minGen: number) {
-  await page.waitForFunction((gen) => {
-    const el = document.querySelector('[data-testid="graph-metadata"]');
-    const current = el?.getAttribute('data-layout-gen');
-    return current !== null && Number(current) >= gen;
-  }, minGen);
-}
-
-async function setupGraph(page: Page) {
-  await interceptGraphEndpoints(page);
-  await loadApp(page);
-  await page.locator('.monaco-editor').click();
-  await setEditorQuery(page, SUBMIT_QUERY);
-  await submitQuery(page);
-  await waitForGraphNodeCount(page, 3);
-  await ensureGraphApis(page);
-  await waitForLayoutGen(page, 1);
-  await page.waitForTimeout(300);
-}
-
-function toolbarButton(page: Page, label: string) {
-  return page.locator('.toolbar-btn', { hasText: label });
-}
 
 async function isNodeSelected(page: Page, nodeId: string): Promise<boolean> {
   return page.evaluate((id) => {

@@ -10,7 +10,7 @@ import { fetchQuery } from './askld';
 import { registerAskl } from './monaco-askl-language';
 import { Problem } from './problems';
 import { getLineColumnFromOffset } from './lib/offsets';
-import { writeLastQuery } from './lib/use_saved_queries';
+import { writeLastQuery } from './lib/last_query';
 
 export interface EditorHandle {
     revealRange: (range: IRange) => void;

@@ -1,7 +1,7 @@
-import { expect, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { getMockResponseForQuery } from './mock-responses';
+import { getMockResponseForQuery, SUBMIT_QUERY } from './mock-responses';
 
 const mockDir = resolve(__dirname, 'mock');
 const queryUrlPattern = /\/query(?:\?.*)?$/;
@@ -253,4 +253,20 @@ export async function expectLineRoughlyCentered(
       message: options?.message ?? `line ${normalizedLineNumber} not centered for ${filePathFragment}`,
     })
     .toBe('ok');
+}
+
+export async function setupGraph(page: Page) {
+  await interceptGraphEndpoints(page);
+  await loadApp(page);
+  await page.locator('.monaco-editor').click();
+  await setEditorQuery(page, SUBMIT_QUERY);
+  await submitQuery(page);
+  await waitForGraphNodeCount(page, 3);
+  await ensureGraphApis(page);
+  await waitForLayoutGen(page, 1);
+  await page.waitForTimeout(300);
+}
+
+export function toolbarButton(page: Page, label: string): Locator {
+  return page.locator('.toolbar-btn', { hasText: label });
 }
