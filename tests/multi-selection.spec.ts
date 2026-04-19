@@ -85,7 +85,11 @@ test.describe('node selection', () => {
     await nodeWrapper(page, '4').click();
     await expect.poll(() => isNodeSelected(page, '4')).toBe(true);
 
-    await page.locator('.react-flow__pane').click();
+    // After viewport centering, the pane center may coincide with a node.
+    // Click an empty spot by finding the pane's top-left in absolute coords.
+    const rf = page.locator('.react-flow');
+    const rfBox = await rf.boundingBox();
+    await page.mouse.click(rfBox!.x + 2, rfBox!.y + 2);
     await expect.poll(() => isNodeSelected(page, '4')).toBe(false);
   });
 

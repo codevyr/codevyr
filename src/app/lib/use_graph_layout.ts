@@ -16,17 +16,13 @@ import {
   type Node as GraphNode,
   buildHierarchy,
   filterRedundantEdges,
-  getPreservableNodeIds,
-  alignToPreservedPositions,
-  buildPreservedPositionsMap,
   splitMultiParentNodes,
   mergeSameNameNodes,
 } from '../graph';
 import type { CodeFocus } from '../code_viewer';
 import {
-  adjustParentDimensions,
-  layoutGraphWithDagre,
-  layoutGraphWithElk,
+  layoutGraph,
+  resolveNodeSize,
   resizeSingleParent,
 } from './graph_layout';
 import { setupGraphTestApis } from '../testing/graph_test_utils';
@@ -193,14 +189,6 @@ function migratePositionsForGraphChange(
   });
 }
 
-function hasNodeOverlap(previous: Graph | null, next: Graph) {
-  if (!previous || previous.nodes.size === 0 || next.nodes.size === 0) return false;
-  for (const nodeId of Array.from(next.nodes.keys())) {
-    if (previous.nodes.has(nodeId)) return true;
-  }
-  return false;
-}
-
 function splitSymbolWithOffsets(label: string): { tokens: string[]; offsets: number[] } {
   const tokens: string[] = [];
   const offsets: number[] = [];
@@ -329,7 +317,6 @@ export function useGraphLayout({
   const hierarchyRef = useRef<HierarchyInfo>({ childToParent: new Map(), parentToChildren: new Map() });
   const nodesRef = useRef<FlowNode<GraphNodeData>[]>([]);
   const graphRef = useRef<Graph | null>(null);
-  const layoutRunIdRef = useRef(0);
   const [layoutGen, setLayoutGen] = useState(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
 
@@ -352,6 +339,26 @@ export function useGraphLayout({
             positionsRef.current.delete(change.id);
           }
         });
+        // When leaf nodes get measured for the first time, resize their
+        // parent groups so dimensions match what resizeSingleParent
+        // computes during interactive drag.
+        const measuredLeafIds: string[] = [];
+        changes.forEach((change) => {
+          if (change.type === 'dimensions' && !hierarchyRef.current.parentToChildren.has(change.id)) {
+            measuredLeafIds.push(change.id);
+          }
+        });
+        if (measuredLeafIds.length > 0 && hierarchyRef.current.parentToChildren.size > 0) {
+          const resized = resizeParentsForNodes(measuredLeafIds, nextNodes, hierarchyRef.current);
+          // Sync positionsRef so the next layout uses the corrected parent positions
+          for (const n of resized) {
+            const prev = positionsRef.current.get(n.id);
+            if (prev && (prev.x !== n.position.x || prev.y !== n.position.y)) {
+              positionsRef.current.set(n.id, n.position);
+            }
+          }
+          return resized;
+        }
         return nextNodes;
       });
     },
@@ -495,7 +502,6 @@ export function useGraphLayout({
 
     const graphChanged = graphRef.current !== mergedGraph;
     const hasHierarchy = hierarchy.childToParent.size > 0;
-    const shouldUseDagre = !hasHierarchy && !hasNodeOverlap(graphRef.current, mergedGraph);
     graphRef.current = mergedGraph;
 
     if (!graphChanged) {
@@ -503,108 +509,66 @@ export function useGraphLayout({
       return;
     }
 
-    const layoutRunId = ++layoutRunIdRef.current;
     const shouldApplyInitialPadding = positionsRef.current.size === 0;
-    const positionsSnapshot = new Map(positionsRef.current);
-
-    let preserveExisting: boolean;
-    let layoutPositions: Map<string, { x: number; y: number }>;
-
-    const hierarchyPreservedPositions =
-      hasHierarchy && !shouldUseDagre && positionsRef.current.size > 0
-        ? buildPreservedPositionsMap(
-            getPreservableNodeIds(hierarchyRef.current, hierarchy, positionsRef.current),
-            positionsRef.current,
-          )
-        : new Map<string, { x: number; y: number }>();
-
-    if (hasHierarchy && !shouldUseDagre && positionsRef.current.size > 0) {
-      const oldH = hierarchyRef.current;
-      positionsRef.current.forEach((pos, nodeId) => {
-        if (oldH.childToParent.has(nodeId) && !hierarchy.childToParent.has(nodeId)) {
-          hierarchyPreservedPositions.set(nodeId, pos);
-        }
-      });
-    }
-
-    if (hierarchyPreservedPositions.size > 0) {
-      const ensureAncestorsPreserved = (nodeId: string) => {
-        const parentId = hierarchy.childToParent.get(nodeId);
-        if (!parentId || hierarchyPreservedPositions.has(parentId)) return;
-        const pos = positionsRef.current.get(parentId);
-        if (pos) {
-          hierarchyPreservedPositions.set(parentId, pos);
-          ensureAncestorsPreserved(parentId);
-        }
-      };
-      Array.from(hierarchyPreservedPositions.keys()).forEach(ensureAncestorsPreserved);
-    }
-
-    if (shouldUseDagre || positionsRef.current.size === 0 || hasHierarchy) {
-      preserveExisting = false;
-      layoutPositions = new Map();
-    } else {
-      preserveExisting = true;
-      layoutPositions = new Map(positionsRef.current);
-    }
-
+    // Fit view when no node in the new graph has a carried-over position
+    // (including positions synthesized by migration for split↔unsplit transitions).
+    const hasCarriedPositions = nextNodes.some(n => positionsRef.current.has(n.id));
+    const shouldFitView = !hasCarriedPositions;
     hierarchyRef.current = hierarchy;
 
-    const shouldFitView = shouldUseDagre || (!preserveExisting && hierarchyPreservedPositions.size === 0);
-    const layoutPromise = shouldUseDagre
-      ? layoutGraphWithDagre(nextNodes, nextEdges)
-      : layoutGraphWithElk(nextNodes, nextEdges, {
-          preserveExisting,
-          positions: layoutPositions,
-          incremental: preserveExisting,
-          hierarchy: hasHierarchy ? hierarchy : undefined,
-        });
+    // Collect measured sizes from previous render for accurate centering
+    const measuredSizes = new Map<string, { width: number; height: number }>();
+    for (const n of nodesRef.current) {
+      const w = (n as any).measured?.width ?? n.width;
+      const h = (n as any).measured?.height ?? n.height;
+      if (w != null && h != null) measuredSizes.set(n.id, { width: w, height: h });
+    }
 
-    layoutPromise.then((layoutedNodes) => {
-      if (layoutRunId !== layoutRunIdRef.current) return;
+    const layoutedNodes = layoutGraph(
+      nextNodes,
+      nextEdges,
+      positionsRef.current,
+      hasHierarchy ? hierarchy : undefined,
+      measuredSizes.size > 0 ? measuredSizes : undefined,
+    );
 
-      const alignedNodes = hierarchyPreservedPositions.size > 0
-        ? alignToPreservedPositions(layoutedNodes, hierarchyPreservedPositions, hierarchy)
-        : layoutedNodes;
-
-      const measuredSizes = new Map<string, { width: number; height: number }>();
-      for (const n of nodesRef.current) {
-        const w = (n as any).measured?.width ?? n.width;
-        const h = (n as any).measured?.height ?? n.height;
-        if (w != null && h != null) {
-          measuredSizes.set(n.id, { width: w, height: h });
+    const paddedNodes = shouldApplyInitialPadding
+      ? applyLayoutPadding(layoutedNodes, INITIAL_NODE_OFFSET)
+      : layoutedNodes;
+    setNodes(paddedNodes);
+    positionsRef.current = new Map(
+      paddedNodes.map((node) => [node.id, node.position]),
+    );
+    setLayoutGen((g) => g + 1);
+    if (shouldFitView) {
+      const rfEl = typeof document !== 'undefined' ? document.querySelector('.react-flow') : null;
+      if (rfEl) {
+        const { width: vpW, height: vpH } = rfEl.getBoundingClientRect();
+        let gMinX = Infinity, gMaxX = -Infinity, gMinY = Infinity, gMaxY = -Infinity;
+        for (const n of paddedNodes) {
+          if ((n as any).parentNode) continue;
+          const s = resolveNodeSize(n);
+          gMinX = Math.min(gMinX, n.position.x);
+          gMaxX = Math.max(gMaxX, n.position.x + s.width);
+          gMinY = Math.min(gMinY, n.position.y);
+          gMaxY = Math.max(gMaxY, n.position.y + s.height);
+        }
+        if (Number.isFinite(gMinX) && vpW > 0 && vpH > 0) {
+          const gW = gMaxX - gMinX;
+          const gH = gMaxY - gMinY;
+          const zoom = Math.min(1, vpW / (gW * 1.4), vpH / (gH * 1.4));
+          const cx = (gMinX + gMaxX) / 2;
+          const cy = (gMinY + gMaxY) / 2;
+          requestAnimationFrame(() => {
+            reactFlowInstanceRef.current?.setViewport({
+              x: vpW / 2 - cx * zoom,
+              y: vpH / 2 - cy * zoom,
+              zoom,
+            });
+          });
         }
       }
-
-      const finalNodes = hierarchy.parentToChildren.size > 0
-        ? adjustParentDimensions(alignedNodes, hierarchy, measuredSizes)
-        : alignedNodes;
-
-      const paddedNodes = shouldApplyInitialPadding
-        ? applyLayoutPadding(finalNodes, INITIAL_NODE_OFFSET)
-        : finalNodes;
-      setNodes(paddedNodes);
-      positionsRef.current = new Map(
-        paddedNodes.map((node) => [node.id, node.position]),
-      );
-      setLayoutGen((g) => g + 1);
-      if (shouldFitView) {
-        requestAnimationFrame(() => {
-          reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
-        });
-      }
-    }).catch((err) => {
-      console.error('Graph layout failed:', err);
-      if (layoutRunId !== layoutRunIdRef.current) return;
-      positionsRef.current = positionsSnapshot;
-      setNodes((current) =>
-        current.map((n) => {
-          const pos = positionsSnapshot.get(n.id);
-          return pos ? { ...n, position: pos } : n;
-        }),
-      );
-      setLayoutGen((g) => g + 1);
-    });
+    }
   }, [buildFlowElements, mergedGraph, setEdges, setNodes]);
 
   // ── Test API setup ─────────────────────────────────────────────────
@@ -616,27 +580,32 @@ export function useGraphLayout({
 
   // ── Manual re-layout ───────────────────────────────────────────────
 
-  const handleDagreLayout = useCallback(() => {
+  const handleRelayout = useCallback(() => {
     if (nodes.length === 0) return;
 
-    const layoutRunId = ++layoutRunIdRef.current;
-    const hasHierarchy = mergedGraph.has_edges.length > 0;
-    const layoutPromise = hasHierarchy
-      ? layoutGraphWithElk(nodes, edges, {
-          hierarchy: buildHierarchy(mergedGraph.has_edges, mergedGraph.nodes),
-        })
-      : layoutGraphWithDagre(nodes, edges);
-    layoutPromise.then((layoutedNodes) => {
-      if (layoutRunId !== layoutRunIdRef.current) return;
-      setNodes(layoutedNodes);
-      positionsRef.current = new Map(
-        layoutedNodes.map((node) => [node.id, node.position]),
-      );
-      requestAnimationFrame(() => {
-        reactFlowInstanceRef.current?.fitView({ padding: 0.2 });
-      });
-    }).catch((err) => {
-      console.error('Graph layout failed:', err);
+    // Collect measured sizes for accurate centering during relayout
+    const measured = new Map<string, { width: number; height: number }>();
+    for (const n of nodes) {
+      const w = (n as any).measured?.width ?? n.width;
+      const h = (n as any).measured?.height ?? n.height;
+      if (w != null && h != null) measured.set(n.id, { width: w, height: h });
+    }
+
+    const hierarchy = buildHierarchy(mergedGraph.has_edges, mergedGraph.nodes);
+    const hasHierarchy = hierarchy.childToParent.size > 0;
+    const layoutedNodes = layoutGraph(
+      nodes,
+      edges,
+      new Map(), // no previous positions = full relayout
+      hasHierarchy ? hierarchy : undefined,
+      measured.size > 0 ? measured : undefined,
+    );
+    setNodes(layoutedNodes);
+    positionsRef.current = new Map(
+      layoutedNodes.map((node) => [node.id, node.position]),
+    );
+    requestAnimationFrame(() => {
+      reactFlowInstanceRef.current?.fitView({ padding: 0.2, maxZoom: 1 });
     });
   }, [edges, mergedGraph, nodes, setNodes]);
 
@@ -652,8 +621,7 @@ export function useGraphLayout({
     hierarchyRef,
     nodesRef,
     reactFlowInstanceRef,
-    layoutRunIdRef,
     focusNode,
-    handleDagreLayout,
+    handleRelayout,
   };
 }

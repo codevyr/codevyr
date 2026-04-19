@@ -517,7 +517,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
     positionsRef, hierarchyRef, nodesRef,
     reactFlowInstanceRef,
     focusNode,
-    handleDagreLayout,
+    handleRelayout,
   } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory, revealQueryRange, autoMerge });
 
   const [renderAllForCapture, setRenderAllForCapture] = useState(false);
@@ -656,10 +656,10 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
     centerGraph: handleCenterGraph,
     fitToView: handleFitToView,
     resetZoom: handleResetZoom,
-    redrawLayout: handleDagreLayout,
+    redrawLayout: handleRelayout,
     openSearch,
     takeScreenshot: handleScreenshot,
-  }), [handleCenterGraph, handleFitToView, handleResetZoom, handleDagreLayout, openSearch, handleScreenshot]);
+  }), [handleCenterGraph, handleFitToView, handleResetZoom, handleRelayout, openSearch, handleScreenshot]);
 
   // Group node bodies have pointer-events: none so edges underneath stay clickable.
   // When a pane click/contextmenu falls inside a group, forward it to the group's
