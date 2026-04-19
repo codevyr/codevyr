@@ -19,6 +19,12 @@
   }
 } */
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(to bottom,

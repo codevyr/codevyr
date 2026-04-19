@@ -19,7 +19,7 @@ function ensureNodeSpan(): HTMLSpanElement | null {
   if (!_nodeSpan) {
     _nodeSpan = document.createElement('span');
     _nodeSpan.className = 'graph-node';
-    _nodeSpan.style.cssText += ';visibility:hidden;position:absolute;white-space:nowrap;pointer-events:none';
+    _nodeSpan.style.cssText += ';visibility:hidden;position:absolute;top:-9999px;left:-9999px;white-space:nowrap;pointer-events:none';
     document.body.appendChild(_nodeSpan);
     _nodeSpan.textContent = 'X';
     _nodeHeight = _nodeSpan.offsetHeight;
@@ -46,7 +46,7 @@ function ensureHeaderMetrics(): { charWidth: number; padding: number } {
   if (typeof document === 'undefined') return { charWidth: 7, padding: 20 };
   const el = document.createElement('span');
   el.className = 'graph-group-node-header';
-  el.style.cssText += ';visibility:hidden;position:absolute;white-space:nowrap;pointer-events:none';
+  el.style.cssText += ';visibility:hidden;position:absolute;top:-9999px;left:-9999px;white-space:nowrap;pointer-events:none';
   document.body.appendChild(el);
   const cs = getComputedStyle(el);
   _headerPadding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);

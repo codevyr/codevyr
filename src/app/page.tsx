@@ -446,7 +446,7 @@ export default function Home() {
   }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRevealQueryRange, handleSelectFile, panOnDrag, problems, query, queryGraph, selectionOnDrag]);
 
   return (
-    <main className="flex h-screen flex-col">
+    <main className="flex h-full flex-col">
       <UnifiedToolbar
         onRunQuery={handleRunQuery}
         onSaveToFile={handleSaveToFile}
