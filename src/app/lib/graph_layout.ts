@@ -1,61 +1,63 @@
-import ELK from 'elkjs/lib/elk.bundled.js';
-import dagre from 'dagre';
 import type { Edge as FlowEdge, Node as FlowNode } from 'reactflow';
 import type { HierarchyInfo } from '../graph';
-
-const elk = new ELK();
-
-const DEFAULT_NODE_WIDTH = 180;
-const DEFAULT_NODE_HEIGHT = 40;
-const MAX_NODE_WIDTH = 320;
-const CHAR_WIDTH = 7;
+import { layoutGraph as layoutEngine } from './layout';
 
 export const GROUP_PAD_TOP = 40;
 export const GROUP_PAD_LEFT = 10;
 export const GROUP_PAD_BOTTOM = 10;
 export const GROUP_PAD_RIGHT = 10;
 
-function estimateNodeSize(label: string) {
-  const width = Math.min(
-    MAX_NODE_WIDTH,
-    Math.max(DEFAULT_NODE_WIDTH, label.length * CHAR_WIDTH + 32),
-  );
-  return {
-    width,
-    height: DEFAULT_NODE_HEIGHT,
-  };
+// ── DOM-based measurement (persistent hidden elements) ──────────
+
+// Persistent hidden span for measuring exact node label widths.
+// Uses the same CSS class as real graph nodes so the result is pixel-perfect.
+let _nodeSpan: HTMLSpanElement | null = null;
+let _nodeHeight: number | null = null;
+
+function ensureNodeSpan(): HTMLSpanElement | null {
+  if (typeof document === 'undefined') return null;
+  if (!_nodeSpan) {
+    _nodeSpan = document.createElement('span');
+    _nodeSpan.className = 'graph-node';
+    _nodeSpan.style.cssText += ';visibility:hidden;position:absolute;white-space:nowrap;pointer-events:none';
+    document.body.appendChild(_nodeSpan);
+    _nodeSpan.textContent = 'X';
+    _nodeHeight = _nodeSpan.offsetHeight;
+  }
+  return _nodeSpan;
 }
 
-/**
- * Measures the per-character width and horizontal padding of a
- * .graph-group-node-header element.  Uses the actual CSS class so the result
- * stays correct regardless of font, DPI, or root font-size.
- *
- * Both values are measured with a single hidden DOM element and cached for
- * the lifetime of the page.
- */
-let _cachedHeaderMetrics: { charWidth: number; padding: number } | null = null;
+function estimateNodeSize(label: string) {
+  const span = ensureNodeSpan();
+  if (!span) return { width: label.length * 7 + 26, height: 34 }; // SSR fallback
+  span.textContent = label;
+  return { width: span.offsetWidth, height: _nodeHeight ?? 34 };
+}
 
-function measureHeaderMetrics(): { charWidth: number; padding: number } {
-  if (_cachedHeaderMetrics !== null) return _cachedHeaderMetrics;
-  if (typeof document === 'undefined') return { charWidth: 7, padding: 20 }; // SSR fallback
-  const span = document.createElement('span');
-  span.className = 'graph-group-node-header';
-  span.style.cssText += ';visibility:hidden;position:absolute;white-space:nowrap;pointer-events:none';
-  document.body.appendChild(span);
-  const cs = getComputedStyle(span);
-  const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-  // Measure average char width with representative text, subtracting padding.
-  const sampleText = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.';
-  span.textContent = sampleText;
-  const charWidth = (span.offsetWidth - padding) / sampleText.length;
-  document.body.removeChild(span);
-  _cachedHeaderMetrics = { charWidth, padding };
-  return _cachedHeaderMetrics;
+// Header measurement uses average char width (only needs minimum-width constraint).
+let _headerCharWidth: number | null = null;
+let _headerPadding: number | null = null;
+const HEADER_SAMPLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.';
+
+function ensureHeaderMetrics(): { charWidth: number; padding: number } {
+  if (_headerCharWidth !== null && _headerPadding !== null) {
+    return { charWidth: _headerCharWidth, padding: _headerPadding };
+  }
+  if (typeof document === 'undefined') return { charWidth: 7, padding: 20 };
+  const el = document.createElement('span');
+  el.className = 'graph-group-node-header';
+  el.style.cssText += ';visibility:hidden;position:absolute;white-space:nowrap;pointer-events:none';
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+  _headerPadding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  el.textContent = HEADER_SAMPLE;
+  _headerCharWidth = (el.offsetWidth - _headerPadding) / HEADER_SAMPLE.length;
+  document.body.removeChild(el);
+  return { charWidth: _headerCharWidth, padding: _headerPadding };
 }
 
 export function measureGroupHeaderWidth(label: string): number {
-  const { charWidth, padding } = measureHeaderMetrics();
+  const { charWidth, padding } = ensureHeaderMetrics();
   return Math.ceil(label.length * charWidth + padding);
 }
 
@@ -183,287 +185,72 @@ export function adjustParentDimensions(
   return cloned;
 }
 
-function pruneEdgesForLayout(edges: FlowEdge[]) {
-  const adjacency = new Map<string, Set<string>>();
-  const pruned: FlowEdge[] = [];
-
-  const createsCycle = (source: string, target: string) => {
-    if (source === target) {
-      return true;
-    }
-
-    const visited = new Set<string>();
-    const stack: string[] = [target];
-    while (stack.length > 0) {
-      const current = stack.pop()!;
-      if (current === source) {
-        return true;
-      }
-      if (visited.has(current)) {
-        continue;
-      }
-      visited.add(current);
-
-      const neighbors = adjacency.get(current);
-      if (!neighbors) {
-        continue;
-      }
-      neighbors.forEach((neighbor) => {
-        if (!visited.has(neighbor)) {
-          stack.push(neighbor);
-        }
-      });
-    }
-
-    return false;
-  };
-
-  const addAdjacency = (source: string, target: string) => {
-    let neighbors = adjacency.get(source);
-    if (!neighbors) {
-      neighbors = new Set<string>();
-      adjacency.set(source, neighbors);
-    }
-    neighbors.add(target);
-  };
-
-  edges.forEach((edge) => {
-    if (createsCycle(edge.source, edge.target)) {
-      return;
-    }
-    addAdjacency(edge.source, edge.target);
-    pruned.push(edge);
-  });
-
-  return pruned;
-}
-
 export type { HierarchyInfo };
 
-export type LayoutOptions = {
-  direction?: 'DOWN' | 'RIGHT';
-  layerSpacing?: number;
-  nodeSpacing?: number;
-  preserveExisting?: boolean;
-  positions?: Map<string, { x: number; y: number }>;
-  incremental?: boolean;
-  hierarchy?: HierarchyInfo;
-};
+// ── Custom layout adapter ─────────────────────────────────────────
 
-export type DagreLayoutOptions = Pick<LayoutOptions, 'direction' | 'layerSpacing' | 'nodeSpacing'>;
-
-function buildElkNode(
-  node: FlowNode,
-  preserveExisting: boolean,
-  positions: Map<string, { x: number; y: number }>,
-) {
-  const { width, height } = resolveNodeSize(node);
-  const existingPosition = positions.get(node.id);
-  const shouldPreserve = preserveExisting && existingPosition;
-  return {
-    id: node.id,
-    width,
-    height,
-    ...(shouldPreserve
-      ? { x: existingPosition.x, y: existingPosition.y }
-      : {}),
-    layoutOptions: shouldPreserve ? { 'elk.fixed': 'true' } : undefined,
-  };
-}
-
-function buildNestedElkChildren(
-  nodeIds: string[],
-  nodeMap: Map<string, FlowNode>,
-  hierarchy: HierarchyInfo,
-  preserveExisting: boolean,
-  positions: Map<string, { x: number; y: number }>,
-): any[] {
-  const result: any[] = [];
-  for (const id of nodeIds) {
-    const node = nodeMap.get(id);
-    if (!node) continue;
-    const children = hierarchy.parentToChildren.get(id);
-    if (children && children.size > 0) {
-      // Parent node — don't set width/height, let ELK compute from children
-      const existingPosition = positions.get(id);
-      const shouldPreserve = preserveExisting && existingPosition;
-      result.push({
-        id,
-        ...(shouldPreserve
-          ? { x: existingPosition.x, y: existingPosition.y }
-          : {}),
-        layoutOptions: {
-          ...(shouldPreserve ? { 'elk.fixed': 'true' } : {}),
-          'elk.padding': `[top=${GROUP_PAD_TOP},left=${GROUP_PAD_LEFT},bottom=${GROUP_PAD_BOTTOM},right=${GROUP_PAD_RIGHT}]`,
-          'elk.algorithm': 'layered',
-        },
-        children: buildNestedElkChildren(
-          Array.from(children),
-          nodeMap,
-          hierarchy,
-          preserveExisting,
-          positions,
-        ),
-      });
+export function layoutGraph(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  previousPositions: Map<string, { x: number; y: number }>,
+  hierarchy?: HierarchyInfo,
+  measuredSizes?: Map<string, { width: number; height: number }>,
+): FlowNode[] {
+  const nodeSizes = new Map<string, { width: number; height: number }>();
+  for (const n of nodes) {
+    // Prefer measured sizes from a previous render (accurate), fall back to estimates
+    const measured = measuredSizes?.get(n.id);
+    if (measured) {
+      nodeSizes.set(n.id, measured);
     } else {
-      result.push(buildElkNode(node, preserveExisting, positions));
+      const { width, height } = resolveNodeSize(n);
+      nodeSizes.set(n.id, { width, height });
     }
   }
-  return result;
-}
 
-function collectLayoutNodes(
-  elkChildren: any[],
-  layoutNodes: Map<string, any>,
-) {
-  for (const child of elkChildren) {
-    layoutNodes.set(child.id, child);
-    if (child.children) {
-      collectLayoutNodes(child.children, layoutNodes);
-    }
-  }
-}
+  const engineEdges = edges
+    .filter(e => e.source !== e.target) // self-loops handled separately by ReactFlow
+    .map(e => ({ id: e.id, source: e.source, target: e.target }));
 
-export async function layoutGraphWithElk(
-  nodes: FlowNode[],
-  edges: FlowEdge[],
-  {
-    direction = 'DOWN',
-    layerSpacing = 8,
-    nodeSpacing = 10,
-    preserveExisting = false,
-    positions = new Map<string, { x: number; y: number }>(),
-    incremental = true,
-    hierarchy,
-  }: LayoutOptions,
-) {
-  const layoutEdges = pruneEdgesForLayout(edges);
-  const resolvedLayerSpacing = layerSpacing;
-  const resolvedNodeSpacing = nodeSpacing;
-  const resolvedEdgeSpacing = 1;
-  const edgeTrackFactor = 0.5;
-
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const hasHierarchy = hierarchy && hierarchy.childToParent.size > 0;
-
-  let elkChildren: any[];
-  if (hasHierarchy) {
-    // Build root-level node IDs (those without a parent)
-    const rootNodeIds = nodes
-      .map((n) => n.id)
-      .filter((id) => !hierarchy.childToParent.has(id));
-    elkChildren = buildNestedElkChildren(
-      rootNodeIds,
-      nodeMap,
-      hierarchy,
-      preserveExisting,
-      positions,
-    );
-  } else {
-    elkChildren = nodes.map((node) =>
-      buildElkNode(node, preserveExisting, positions),
-    );
-  }
-
-  const elkGraph = {
-    id: 'root',
-    layoutOptions: {
-      'elk.algorithm': 'layered',
-      'elk.direction': direction,
-      'elk.spacing.nodeNode': String(resolvedNodeSpacing),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(resolvedLayerSpacing),
-      'elk.layered.spacing.edgeNodeBetweenLayers': String(resolvedEdgeSpacing),
-      'elk.layered.spacing.edgeEdgeBetweenLayers': String(resolvedEdgeSpacing),
-      'elk.layered.edgeRouting.splines.mode': 'SLOPPY',
-      'elk.layered.edgeRouting.splines.sloppy.layerSpacingFactor': String(edgeTrackFactor),
-      'elk.edgeRouting': 'POLYLINE',
-      'elk.incremental': String(incremental),
-      ...(hasHierarchy
-        ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' }
-        : {}),
-    },
-    children: elkChildren,
-    // All edges at root level — ELK handles cross-hierarchy routing
-    edges: layoutEdges.map((edge) => ({
-      id: edge.id,
-      sources: [edge.source],
-      targets: [edge.target],
-    })),
-  };
-
-  const layout = await elk.layout(elkGraph);
-  const layoutNodes = new Map<string, any>();
-  collectLayoutNodes(layout.children ?? [], layoutNodes);
-
-  return nodes.map((node) => {
-    const layoutNode = layoutNodes.get(node.id);
-    if (!layoutNode) {
-      return node;
-    }
-    if (preserveExisting && positions.has(node.id)) {
-      return { ...node, position: positions.get(node.id)! };
-    }
-    const isParent =
-      hasHierarchy && hierarchy.parentToChildren.has(node.id);
-    const result: FlowNode = {
-      ...node,
-      position: {
-        x: layoutNode.x ?? node.position.x,
-        y: layoutNode.y ?? node.position.y,
+  const result = layoutEngine({
+    nodes: nodeSizes,
+    edges: engineEdges,
+    hierarchy: hierarchy ?? { childToParent: new Map(), parentToChildren: new Map() },
+    previousPositions,
+    options: {
+      direction: 'DOWN',
+      layerSpacing: 50,
+      nodeSpacing: 30,
+      componentGap: 80,
+      groupPadding: {
+        top: GROUP_PAD_TOP,
+        left: GROUP_PAD_LEFT,
+        right: GROUP_PAD_RIGHT,
+        bottom: GROUP_PAD_BOTTOM,
       },
-    };
-    if (isParent) {
-      result.style = {
-        ...(result.style ?? {}),
-        width: layoutNode.width,
-        height: layoutNode.height,
-      };
-    }
-    return result;
-  });
-}
-
-export async function layoutGraphWithDagre(
-  nodes: FlowNode[],
-  edges: FlowEdge[],
-  {
-    direction = 'DOWN',
-    layerSpacing = 60,
-    nodeSpacing = 30,
-  }: DagreLayoutOptions = {},
-) {
-  const layoutEdges = pruneEdgesForLayout(edges);
-  const graph = new dagre.graphlib.Graph();
-  graph.setGraph({
-    rankdir: direction === 'RIGHT' ? 'LR' : 'TB',
-    nodesep: nodeSpacing,
-    ranksep: layerSpacing,
-  });
-  graph.setDefaultEdgeLabel(() => ({}));
-
-  nodes.forEach((node) => {
-    const { width, height } = resolveNodeSize(node);
-    graph.setNode(node.id, { width, height });
+    },
   });
 
-  layoutEdges.forEach((edge) => {
-    graph.setEdge(edge.source, edge.target);
-  });
+  return nodes.map(node => {
+    const pos = result.positions.get(node.id);
+    if (!pos) return node;
 
-  dagre.layout(graph);
+    const isGroup = hierarchy?.parentToChildren.has(node.id);
+    const dim = isGroup ? result.groupDimensions.get(node.id) : undefined;
+    const labelMinWidth = isGroup ? measureGroupHeaderWidth(resolveNodeLabel(node)) : 0;
 
-  return nodes.map((node) => {
-    const layoutNode = graph.node(node.id);
-    if (!layoutNode) {
-      return node;
-    }
-    const { width, height } = resolveNodeSize(node);
     return {
       ...node,
-      position: {
-        x: layoutNode.x - width / 2,
-        y: layoutNode.y - height / 2,
-      },
+      position: pos,
+      ...(dim
+        ? {
+            style: {
+              ...(node.style ?? {}),
+              width: Math.max(dim.width, labelMinWidth),
+              height: dim.height,
+            },
+          }
+        : {}),
     };
   });
 }
