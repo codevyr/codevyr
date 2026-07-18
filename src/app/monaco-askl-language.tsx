@@ -96,7 +96,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 [/#[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
 
                 // Known verb names (without @)
-                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive|unnest|any|loc|ephemeral_symbol|ephemeral_instance|ephemeral_ref)\b/, {
+                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive|unnest|any|loc|search|ephemeral_symbol|ephemeral_instance|ephemeral_ref)\b/, {
                     token: 'keyword', next: '@maybeCall',
                 }],
 
@@ -309,6 +309,14 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     insertText: 'loc("${1:file}", "${2:line}")',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                     detail: 'selector: synthetic anchor for a source location',
+                    range: range,
+                },
+                {
+                    label: 'search',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'search("${1:query}")',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'selector: full-text search over indexed source content (literal, no regex)',
                     range: range,
                 },
             ];
