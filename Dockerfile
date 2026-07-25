@@ -1,5 +1,5 @@
 # -------- Base builder image
-FROM node:24-slim AS deps
+FROM node:26-slim AS deps
 WORKDIR /app
 
 # Install only dependencies (better layer caching)
@@ -7,7 +7,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 # -------- Build stage
-FROM node:24-slim AS builder
+FROM node:26-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # -------- Production runtime
-FROM node:24-slim AS runner
+FROM node:26-slim AS runner
 WORKDIR /app
 
 # Create non-root user
@@ -23,6 +23,11 @@ RUN groupadd -g 1001 nodejs && useradd -m -u 1001 -g nodejs nextjs
 
 # Install wget for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+
+# The runtime only runs `node server.js` (deps are baked into .next/standalone);
+# the bundled npm CLI is never invoked here and its vendored deps
+# (tar/undici/brace-expansion) are the only fixable CVEs in the image. Drop it.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 ENV NODE_ENV=production
 ENV PORT=3000
