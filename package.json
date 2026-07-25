@@ -36,8 +36,8 @@
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
-    "eslint": "^10.8.0",
-    "eslint-config-next": "^0.2.4",
+    "eslint": "^9.0.1",
+    "eslint-config-next": "^16.0.0",
     "miragejs": "^0.1.48",
     "raw-loader": "^4.0.2",
     "vitest": "^4.1.1"
