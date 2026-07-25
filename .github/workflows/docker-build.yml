@@ -135,6 +135,7 @@ jobs:
             org.opencontainers.image.vendor=Codevyr
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -144,6 +145,19 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # CycloneDX SBOM attestation + SLSA provenance on the image; the
+          # compliance packet pulls & verifies these.
+          sbom: true
+          provenance: mode=max
+
+      # Plain SPDX SBOM as a downloadable workflow artifact.
+      - name: Generate SPDX SBOM artifact
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          artifact-name: codevyr.spdx.json
 
       - name: Run Trivy vulnerability scanner on image
         uses: aquasecurity/trivy-action@master
