@@ -83,6 +83,13 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 // Forced verb: !"..."
                 [/!\"/, { token: 'keyword', next: '@forcedString' }],
 
+                // Typed string prefixes glued to the opening quote: g"..." is
+                // a glob pattern; re"..." is reserved; anything else is
+                // rejected by the parser. Must precede the verb-name rule so
+                // e.g. file"..." highlights as an invalid prefix, not a verb.
+                [/g(?=\")/, 'type'],
+                [/[a-zA-Z]+(?=\")/, 'invalid'],
+
                 // Plain filter / quoted_string: "..."
                 [/\"/, { token: 'string.quote', bracket: '@open', next: '@string' }],
 
@@ -124,6 +131,9 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 { include: '@whitespace' },
                 // Named argument: ident = "..."
                 [/@ident(?=\s*=)/, 'variable', '@namedArg'],
+                // Typed string prefixes: g"..." glob, others invalid
+                [/g(?=\")/, 'type'],
+                [/[a-zA-Z]+(?=\")/, 'invalid'],
                 // Positional argument: quoted string
                 [/\"/, { token: 'string.quote', next: '@string' }],
                 [/[,]/, 'delimiter'],
@@ -134,6 +144,9 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 { include: '@whitespace' },
                 [/=/, 'delimiter'],
                 { include: '@whitespace' },
+                // Typed string prefixes: g"..." glob, others invalid
+                [/g(?=\")/, 'type'],
+                [/[a-zA-Z]+(?=\")/, 'invalid'],
                 [/\"/, { token: 'string.quote', next: '@string', nextEmbedded: '' }],
                 // After string, return to inCall
                 ['', '', '@pop'],
@@ -261,6 +274,14 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     insertText: '!"${1:verb}"',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                     detail: 'special_verb (forced_verb)',
+                    range: range,
+                },
+                {
+                    label: 'g"pattern" — glob string',
+                    kind: monaco.languages.CompletionItemKind.Keyword,
+                    insertText: 'g"${1:pattern*}"',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'glob pattern: * matches any run of characters; smart case',
                     range: range,
                 },
                 {
