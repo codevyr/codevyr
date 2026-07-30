@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout, Model, TabNode, type IJsonModel, Actions } from 'flexlayout-react';
 import 'flexlayout-react/style/light.css';
 import { EditorComponent, EditorHandle } from './editor';
@@ -9,7 +9,8 @@ import { CodeViewer, CodeFocus } from './code_viewer';
 import { GraphViewer, type GraphViewerHandle } from './graph_viewer';
 import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
-import { formatOffsetLocation, getLineColumnFromOffset } from './lib/offsets';
+import { MarkdownReport } from './markdown_report';
+import { getLineColumnFromOffset } from './lib/offsets';
 import { UnifiedToolbar, type ShareStatus } from './unified_toolbar';
 import { readLastQuery } from './lib/last_query';
 import { buildShareUrl, getQueryFromHash } from './lib/query_share';
@@ -87,8 +88,8 @@ const initialLayout: IJsonModel = {
               },
               {
                 type: "tab",
-                id: "Two",
-                name: "Nodes",
+                id: "markdown-report",
+                name: "Report",
                 component: "button",
               }
             ]
@@ -114,60 +115,6 @@ const initialLayout: IJsonModel = {
   }
 };
 
-export interface GraphCodeProps {
-  graph: Graph;
-  fileContents: Map<string, string>;
-}
-
-function GraphCode({ graph, fileContents }: GraphCodeProps) {
-  function get_id(data: any) {
-    if ('id' in data) {
-      return data.id;
-    } else {
-      return data.from + '-' + data.to;
-    }
-  }
-
-  function get_str(data: any) {
-    if ('label' in data) {
-      return data.label;
-    } else {
-      return data.from + ' -> ' + data.to;
-    }
-  }
-
-  function resolveEdgeObjectId(edge: Edge): string | null {
-    if (edge.from_object) {
-      return edge.from_object;
-    }
-
-    const node = graph.nodes.get(edge.from);
-    return node?.symbol_instances[0]?.object_id ?? null;
-  }
-
-  function get_loc(edge: Edge): string {
-    const objectId = resolveEdgeObjectId(edge);
-    const filePath = objectId ? graph.objects.get(objectId)?.path ?? objectId : 'Unknown';
-    const location = formatOffsetLocation(objectId ? fileContents.get(objectId) : undefined, edge.from_offset_start);
-    return `${filePath}:${location}`;
-  }
-
-  return (<>
-    <ul>
-      {Array.from(graph.nodes.entries()).map(([id, node]: [string, Node]) => <li key={id}>{get_str(node)}</li>)}
-    </ul>
-    <ul>
-      {
-        Array.from(graph.edges.values()).map((edgeArray: Array<Edge>) =>
-          <li key={get_id(edgeArray[0])}>{get_str(edgeArray[0])}
-            <ul>
-              {edgeArray.map((edge: Edge) => <li key={get_loc(edge)}> {get_loc(edge)} </li>)}
-            </ul>
-          </li>)}
-    </ul>
-  </>);
-}
-
 export default function Home() {
   const [model] = useState(() => Model.fromJson(initialLayout));
   const [query, setQuery] = useState(() => readLastQuery() ?? DEFAULT_QUERY);
@@ -178,6 +125,7 @@ export default function Home() {
     objects: new Map<string, GraphObject>(),
   });
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [lastRunQuery, setLastRunQuery] = useState('');
   const editorHandleRef = useRef<EditorHandle | null>(null);
   const graphViewerRef = useRef<GraphViewerHandle>(null);
   const [shareStatus, setShareStatus] = useState<ShareStatus>('idle');
@@ -410,6 +358,7 @@ export default function Home() {
             query={query}
             onGraphChange={setQueryGraph}
             onProblemsChange={handleProblemsChange}
+            onQueryRun={setLastRunQuery}
           />
         );
       case "file-explorer":
@@ -440,10 +389,12 @@ export default function Home() {
         );
       case PROBLEMS_TAB_ID:
         return <Problems problems={problems} onSelectProblem={handleProblemSelect} />;
+      case "markdown-report":
+        return <MarkdownReport query={lastRunQuery} />;
       default:
-        return <GraphCode graph={queryGraph} fileContents={fileContents} />;
+        return null;
     }
-  }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRevealQueryRange, handleSelectFile, panOnDrag, problems, query, queryGraph, selectionOnDrag]);
+  }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRevealQueryRange, handleSelectFile, lastRunQuery, panOnDrag, problems, query, queryGraph, selectionOnDrag]);
 
   return (
     <main className="flex h-full flex-col">
