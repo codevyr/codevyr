@@ -56,6 +56,36 @@ export function fetchQuery(query: string): Promise<Response> {
   });
 }
 
+/** How much source rides along in the markdown report. */
+export type Projection = 'names' | 'signature' | 'body';
+
+/** Build the query string for a markdown query request. Pure, for testing. */
+export function markdownQueryParams(projection: Projection): string {
+  return new URLSearchParams({ format: 'markdown', projection }).toString();
+}
+
+let markdownAbortController: AbortController | null = null;
+
+/**
+ * Fetch the same markdown report the MCP renderer produces (backend-rendered,
+ * one source of truth). Uses a separate abort controller so it never cancels
+ * the main JSON query used by the graph view.
+ */
+export function fetchQueryMarkdown(query: string, projection: Projection): Promise<Response> {
+  if (markdownAbortController) {
+    markdownAbortController.abort();
+  }
+  markdownAbortController = new AbortController();
+  return fetch(`${askldUrl}/query?${markdownQueryParams(projection)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain'
+    },
+    body: query,
+    signal: markdownAbortController.signal,
+  });
+}
+
 export function fetchProjects(): Promise<Response> {
   return fetch(`${askldUrl}/v1/index/projects`, {
     method: 'GET',

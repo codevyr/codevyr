@@ -23,6 +23,8 @@ interface EditorProps {
     query: string;
     onGraphChange: (graph: Graph) => void;
     onProblemsChange?: (problems: Problem[]) => void;
+    /** Fires with the query text each time a query is successfully run. */
+    onQueryRun?: (queryText: string) => void;
 }
 
 type RustGraphObjectEntry = { object_id: string; path: string; project_id?: string | null };
@@ -252,7 +254,7 @@ async function handleQueryFailure(response: Response, monacoInstance: Monaco | n
     }
 }
 
-export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(function EditorComponent({ query, onGraphChange, onProblemsChange }: EditorProps, ref) {
+export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(function EditorComponent({ query, onGraphChange, onProblemsChange, onQueryRun }: EditorProps, ref) {
     const testCleanupRef = useRef<(() => void) | null>(null);
     const monacoRef = useRef<Monaco | null>(null);
     const editorInstanceRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
@@ -303,6 +305,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
             onGraphChange(
                 { nodes: nodes, edges: edgeMap, has_edges: data.has_edges ?? [], objects: objects }
             );
+            onQueryRun?.(queryText);
             clearEditorErrorMarker(monacoRef.current, ed);
             const warningProblems = buildProblemsFromWarnings(data.warnings, queryText);
             onProblemsChange?.(warningProblems);
@@ -311,7 +314,7 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
             applyEditorErrorMarker(monacoRef.current, ed, 'Unable to submit query. Please try again.');
             onProblemsChange?.([buildProblem('Unable to submit query. Please try again.', 'error', defaultMarkerRange)]);
         }
-    }, [onGraphChange, onProblemsChange]);
+    }, [onGraphChange, onProblemsChange, onQueryRun]);
 
     const runQuery = useCallback((editorInstance?: MonacoEditor.ICodeEditor) => {
         const activeEditor = editorInstance ?? editorInstanceRef.current;
