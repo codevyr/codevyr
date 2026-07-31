@@ -11,6 +11,7 @@ import { registerAskl } from './monaco-askl-language';
 import { Problem } from './problems';
 import { getLineColumnFromOffset } from './lib/offsets';
 import { writeLastQuery } from './lib/last_query';
+import { warningMessage } from './lib/warnings';
 
 export interface EditorHandle {
     revealRange: (range: IRange) => void;
@@ -43,6 +44,12 @@ interface QueryDiagnostic {
     line_col?: LineColLocation;
     path?: string | null;
     line?: string;
+    /** Typed name for a no-match diagnostic (e.g. `vfs_rea`). */
+    token?: string | null;
+    /** Nearest existing symbol names for a no-match typo. */
+    suggestions?: string[];
+    /** True when the name exists but was excluded by a filter/scope. */
+    name_exists?: boolean;
 }
 
 type PositionTuple = [number, number];
@@ -228,7 +235,7 @@ function buildProblemsFromWarnings(warnings: QueryDiagnostic[] | undefined, sour
 
     return warnings.map(warning => {
         const range = getRangeFromLocation(sourceText, warning.location, warning.line_col);
-        return buildProblem(warning.message ?? 'Warning', 'warning', range, {
+        return buildProblem(warningMessage(warning), 'warning', range, {
             source: warning.path ?? 'warning',
             lineText: warning.line ?? null,
         });
