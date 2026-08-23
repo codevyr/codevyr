@@ -133,8 +133,14 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
             // Inside ( ... ) for verb_arguments (positional, named, or both)
             inCall: [
                 { include: '@whitespace' },
-                // Named argument: ident = "..."
+                // Named argument: ident = <value>
                 [/@ident(?=\s*=)/, 'variable', '@namedArg'],
+                // Booleans before the generic ident rule, and guarded by \b
+                // like the grammar's !XID_CONTINUE, so `trueish` is not a
+                // keyword followed by junk.
+                [/(?:true|false)\b/, 'keyword'],
+                // 64-bit integer literal, optional sign
+                [/-?\d+/, 'number'],
                 // Typed string prefixes: g"..." glob, others invalid
                 [/g(?=\")/, 'type'],
                 [/[a-zA-Z]+(?=\")/, 'invalid'],
@@ -148,6 +154,9 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 { include: '@whitespace' },
                 [/=/, 'delimiter'],
                 { include: '@whitespace' },
+                // Primitive literals (see inCall)
+                [/(?:true|false)\b/, { token: 'keyword', next: '@pop' }],
+                [/-?\d+/, { token: 'number', next: '@pop' }],
                 // Typed string prefixes: g"..." glob, others invalid
                 [/g(?=\")/, 'type'],
                 [/[a-zA-Z]+(?=\")/, 'invalid'],
@@ -290,7 +299,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     kind: monaco.languages.CompletionItemKind.Keyword,
                     insertText: '@@${1:name}',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    detail: 'shortcut for label("name", inherit="true")',
+                    detail: 'shortcut for label("name", inherit=true)',
                     range: range,
                 },
                 {
@@ -360,7 +369,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 {
                     label: 'loc',
                     kind: monaco.languages.CompletionItemKind.Function,
-                    insertText: 'loc("${1:file}", "${2:line}")',
+                    insertText: 'loc("${1:file}", ${2:1})',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                     detail: 'selector: synthetic anchor for a source location',
                     range: range,
@@ -388,7 +397,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 return {
                     contents: [
                         { value: '**inherit label shortcut**' },
-                        { value: '`@@name` is shorthand for `label("name", inherit="true")`' },
+                        { value: '`@@name` is shorthand for `label("name", inherit=true)`' },
                     ],
                 };
             }
