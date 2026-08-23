@@ -102,8 +102,12 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 // Use shortcut: #ident
                 [/#[a-zA-Z_]\w*/, { token: 'keyword', next: '@maybeCall' }],
 
+                // Boolean operators over predicate verbs (guarded by \b like
+                // the grammar's !XID_CONTINUE, so `order` stays an ident)
+                [/(?:or|and|not)\b/, 'keyword.operator'],
+
                 // Known verb names (without @)
-                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|project|forced|scope|label|use|preamble|has|refs|derive|unnest|any|loc|search|ephemeral_symbol|ephemeral_instance|ephemeral_ref)\b/, {
+                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|package|project|forced|label|use|preamble|has|refs|derive|unnest|any|loc|search|layer|ephemeral_symbol|ephemeral_instance|ephemeral_ref)\b/, {
                     token: 'keyword', next: '@maybeCall',
                 }],
 
@@ -209,7 +213,36 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     kind: monaco.languages.CompletionItemKind.Function,
                     insertText: 'ignore("${1:pattern}")',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    detail: 'verb',
+                    detail: 'verb (alias: `not "pattern"`)',
+                    range: range,
+                },
+                {
+                    label: 'package',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'package("${1:path}")',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'filter: symbols under a package path',
+                    range: range,
+                },
+                {
+                    label: 'or',
+                    kind: monaco.languages.CompletionItemKind.Operator,
+                    insertText: 'or ',
+                    detail: 'operator: disjoin filters of one dimension, or anchors into one branch',
+                    range: range,
+                },
+                {
+                    label: 'and',
+                    kind: monaco.languages.CompletionItemKind.Operator,
+                    insertText: 'and ',
+                    detail: 'operator: conjoin within an expression (binds tighter than `or`)',
+                    range: range,
+                },
+                {
+                    label: 'not',
+                    kind: monaco.languages.CompletionItemKind.Operator,
+                    insertText: 'not ',
+                    detail: 'operator: exclude (accumulates and inherits, like ignore)',
                     range: range,
                 },
                 {
@@ -313,7 +346,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     kind: monaco.languages.CompletionItemKind.Function,
                     insertText: 'any',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    detail: 'modifier: remove inherited type filtering',
+                    detail: 'type verb constraining no type: replaces an inherited type filter',
                     range: range,
                 },
                 {
