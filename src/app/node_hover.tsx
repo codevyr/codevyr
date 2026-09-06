@@ -4,6 +4,20 @@ import { CodeFocus } from './code_viewer';
 import { Edge, SymbolInstance, QueryStatement, Node, Graph, isDirectoryInstance, isSelfReference } from './graph';
 import { copyToClipboard } from './lib/clipboard';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
+import {
+  fetchSymbolInstances,
+  fetchSymbolReferences,
+  type SymbolInstancePageRowJson,
+  type SymbolInstancesResponse,
+  type SymbolReferenceRow,
+  type SymbolReferencesResponse,
+} from './askld';
+import {
+  formatMoreInstancesLabel,
+  formatMoreReferencesLabel,
+  instanceRowToSymbolInstance,
+  overlayObjects,
+} from './lib/references';
 
 type SymbolInstanceSortInfo = {
   path: string;
@@ -78,7 +92,11 @@ function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents, onAc
   }
 
   return (
-    <tr className="declaration-hover" onClick={openInEditor}>
+    <tr
+      className="declaration-hover"
+      data-testid={`instance-row-${instance.id}`}
+      onClick={openInEditor}
+    >
       <td>{filePath}</td>
       <td>{location}</td>
       <td className="node-hover-actions-cell">
@@ -264,6 +282,10 @@ export interface NodeHoverProps {
   isGroupNode?: boolean;
   revealDirectory?: (objectId: string) => void;
   hiddenRefEdges?: Array<Edge>;
+  /** Raw symbol ids whose out-edges the server truncated (fetch-more). */
+  truncatedRefSymbols?: Array<string>;
+  /** (symbol, exact total) pairs whose instance list the server truncated. */
+  truncatedInstances?: Array<{ symbol: string; total: number }>;
   revealQueryRange?: (start: number, end: number) => void;
   onAction?: () => void;
 }
@@ -278,13 +300,93 @@ export function NodeHover({
   isGroupNode,
   revealDirectory,
   hiddenRefEdges,
+  truncatedRefSymbols,
+  truncatedInstances,
   revealQueryRange,
   onAction,
 }: NodeHoverProps) {
+  // Fetched instance pages, keyed by truncated symbol. ONE load control
+  // serves the whole hover: instances render grouped by type, so a per-type
+  // or per-symbol button would be meaningless — fetched rows merge into the
+  // typed sections below and every truncated symbol pages together.
+  const [fetchedPages, setFetchedPages] = useState<
+    Map<string, { rows: SymbolInstancePageRowJson[]; next: string | number | null; loaded: boolean }>
+  >(new Map());
+  const [instancesLoading, setInstancesLoading] = useState(false);
+  const [instancesError, setInstancesError] = useState<string | null>(null);
+  const truncated = truncatedInstances ?? [];
+
+  async function loadMoreInstances() {
+    setInstancesLoading(true);
+    setInstancesError(null);
+    try {
+      const nextPages = new Map(fetchedPages);
+      for (const { symbol } of truncated) {
+        const page = nextPages.get(symbol);
+        if (page && page.loaded && page.next === null) {
+          continue; // this symbol's listing is exhausted
+        }
+        const after = page?.loaded ? page.next : null;
+        const response = await fetchSymbolInstances(symbol, after);
+        if (!response.ok) {
+          throw new Error(`instances request failed (${response.status})`);
+        }
+        const data: SymbolInstancesResponse = await response.json();
+        nextPages.set(symbol, {
+          rows: [...(page?.rows ?? []), ...data.rows],
+          next: data.next,
+          loaded: true,
+        });
+      }
+      setFetchedPages(nextPages);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return; // superseded by a newer fetch — not an error state
+      }
+      setInstancesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInstancesLoading(false);
+    }
+  }
+
+  // Merge fetched rows into the node's instances, deduped by id (the
+  // shipped instances are priority-ordered, pages are id-ordered — overlap
+  // is expected, not a bug).
+  const allFetchedRows: SymbolInstancePageRowJson[] = [];
+  fetchedPages.forEach((page) => allFetchedRows.push(...page.rows));
+  const knownIds = new Set(node.symbol_instances.map((inst) => inst.id));
+  const fetchedInstances: SymbolInstance[] = [];
+  fetchedPages.forEach((page, symbol) => {
+    for (const row of page.rows) {
+      if (!knownIds.has(row.id)) {
+        knownIds.add(row.id);
+        fetchedInstances.push(instanceRowToSymbolInstance(row, symbol));
+      }
+    }
+  });
+  const allInstances = [...node.symbol_instances, ...fetchedInstances];
+  // Fetched rows may reference files the graph never shipped; overlay their
+  // paths so rendering and sorting resolve.
+  const hoverGraph =
+    allFetchedRows.length > 0
+      ? { ...graph, objects: overlayObjects(graph.objects, allFetchedRows) }
+      : graph;
+
+  // "N of M shown": M sums the truncated symbols' exact totals plus any
+  // shipped instances of symbols that were NOT truncated.
+  const truncatedSymbols = new Set(truncated.map((t) => t.symbol));
+  const totalAvailable =
+    truncated.reduce((sum, t) => sum + t.total, 0) +
+    node.symbol_instances.filter((inst) => !truncatedSymbols.has(inst.symbol)).length;
+  const hasMoreInstances = truncated.some(({ symbol }) => {
+    const page = fetchedPages.get(symbol);
+    return !page || !page.loaded || page.next !== null;
+  });
+
   // For group nodes, separate directory instances from real code references
   const realInstances = isGroupNode
-    ? node.symbol_instances.filter((inst) => !isDirectoryInstance(inst))
-    : node.symbol_instances;
+    ? allInstances.filter((inst) => !isDirectoryInstance(inst))
+    : allInstances;
   const selfRefInstance = isGroupNode
     ? node.symbol_instances.find((inst) => isSelfReference(inst)) ?? node.symbol_instances.find((inst) => isDirectoryInstance(inst))
     : undefined;
@@ -363,12 +465,43 @@ export function NodeHover({
             key={typeName}
             sectionName={capitalizeInstanceType(typeName)}
             instances={instances}
-            graph={graph}
+            graph={hoverGraph}
             setCodeFocus={setCodeFocus}
             fileContents={fileContents}
             onAction={onAction}
           />
         ))}
+        {truncated.length > 0 && (
+          <tbody data-testid="load-instances-row">
+            {instancesError && (
+              <tr>
+                <td colSpan={3} data-testid="instances-error">
+                  {instancesError}
+                </td>
+              </tr>
+            )}
+            <tr>
+              <td colSpan={3}>
+                <span>{formatMoreInstancesLabel(allInstances.length, totalAvailable)}</span>
+                {hasMoreInstances && (
+                  <button
+                    type="button"
+                    className="node-hover-text-btn"
+                    data-testid="load-instances-more"
+                    disabled={instancesLoading}
+                    style={{ marginLeft: '0.5rem' }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void loadMoreInstances();
+                    }}
+                  >
+                    {instancesLoading ? 'Loading…' : 'Load more'}
+                  </button>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        )}
       </table>
       {hiddenRefEdges && hiddenRefEdges.length > 0 && (
         <HiddenReferencesSection
@@ -379,7 +512,149 @@ export function NodeHover({
           onAction={onAction}
         />
       )}
+      {(truncatedRefSymbols ?? []).map((symbol) => (
+        <MoreReferencesSection
+          key={symbol}
+          symbol={symbol}
+          fileContents={fileContents}
+          ensureFileContent={ensureFileContent}
+          setCodeFocus={setCodeFocus}
+          onAction={onAction}
+        />
+      ))}
     </div>
+  );
+}
+
+/**
+ * Fetch-more affordance for a symbol whose implicit out-edges the server
+ * capped (`edges_truncated`).  Pages the A2 references endpoint with its
+ * keyset cursor; rows land here in the hover only — the graph itself is
+ * never mutated, so no re-layout and no node-identity churn.
+ */
+function MoreReferencesSection({
+  symbol,
+  fileContents,
+  ensureFileContent,
+  setCodeFocus,
+  onAction,
+}: {
+  symbol: string;
+  fileContents: Map<string, string>;
+  ensureFileContent: (objectId: string) => void;
+  setCodeFocus: (type: CodeFocus) => void;
+  onAction?: () => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [rows, setRows] = useState<Array<SymbolReferenceRow>>([]);
+  const [next, setNext] = useState<string | null>(null);
+  const [count, setCount] = useState<number | null>(null);
+  const [countCapped, setCountCapped] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadPage(after: string | null) {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetchSymbolReferences(symbol, after);
+      if (!response.ok) {
+        throw new Error(`references request failed (${response.status})`);
+      }
+      const data: SymbolReferencesResponse = await response.json();
+      setRows((prev) => (after ? [...prev, ...data.rows] : data.rows));
+      setNext(data.next);
+      setCount(data.count);
+      setCountCapped(data.count_capped);
+      setLoaded(true);
+      // Same prefetch discipline as the instance rows: line/column need the
+      // file contents.
+      for (const row of data.rows) {
+        ensureFileContent(row.object_id);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return; // superseded by a newer fetch — not an error state
+      }
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <table data-testid={`more-references-${symbol}`}>
+      <SectionHeader
+        name={formatMoreReferencesLabel(count, countCapped)}
+        expanded={expanded}
+        onToggle={() => setExpanded(!expanded)}
+      />
+      {expanded && (
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={`${row.from_instance_id}-${row.to_symbol}-${row.start_offset}`}
+              className="declaration-hover"
+              data-testid={`reference-row-${row.to_symbol}-${row.start_offset}`}
+              onClick={() => {
+                setCodeFocus({
+                  object_id: row.object_id,
+                  start_offset: row.start_offset,
+                  end_offset: row.end_offset,
+                });
+              }}
+            >
+              <td title={row.path}>{row.to_symbol_name}</td>
+              <td>{formatOffsetLocation(fileContents.get(row.object_id), row.start_offset)}</td>
+              <td className="node-hover-actions-cell">
+                <button
+                  type="button"
+                  className="node-hover-icon"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setCodeFocus({
+                      object_id: row.object_id,
+                      start_offset: row.start_offset,
+                      end_offset: row.end_offset,
+                    });
+                    onAction?.();
+                  }}
+                  title="Open call site in editor"
+                >
+                  <LuArrowUpRight />
+                </button>
+              </td>
+            </tr>
+          ))}
+          {error && (
+            <tr className="declaration-hover">
+              <td colSpan={3} data-testid={`references-error-${symbol}`}>
+                {error}
+              </td>
+            </tr>
+          )}
+          {(!loaded || next) && (
+            <tr className="declaration-hover">
+              <td colSpan={3}>
+                <button
+                  type="button"
+                  className="node-hover-text-btn"
+                  data-testid={`load-references-${symbol}`}
+                  disabled={loading}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void loadPage(loaded ? next : null);
+                  }}
+                >
+                  {loading ? 'Loading…' : loaded ? 'Load more' : 'Load references'}
+                </button>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      )}
+    </table>
   );
 }
 

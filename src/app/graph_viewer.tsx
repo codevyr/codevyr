@@ -163,7 +163,7 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
   const setActiveMenu = menuContext?.setActiveMenu;
-  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, revealQueryRange, hiddenRefEdges } = data;
+  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, revealQueryRange, hiddenRefEdges, truncatedRefSymbols, truncatedInstances } = data;
   const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
     ? ({ '--graph-node-color': node.color } as React.CSSProperties)
@@ -173,7 +173,9 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
   const instanceCount = node.symbol_instances.length;
   const isDirectoryNode = isGroupNode || node.symbol_instances.every((inst) => isDirectoryInstance(inst));
 
-  const hasHiddenRefs = (hiddenRefEdges?.length ?? 0) > 0;
+  const hasHiddenRefs = (hiddenRefEdges?.length ?? 0) > 0
+    || (truncatedRefSymbols?.length ?? 0) > 0
+    || (truncatedInstances?.length ?? 0) > 0;
 
   const closeMenu = useCallback(() => dismissContextMenu(), []);
 
@@ -311,6 +313,8 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
             isGroupNode={isDirectoryNode}
             revealDirectory={wrappedRevealDirectory}
             hiddenRefEdges={hiddenRefEdges}
+            truncatedRefSymbols={truncatedRefSymbols}
+            truncatedInstances={truncatedInstances}
             revealQueryRange={revealQueryRange}
             onAction={closeMenu}
           />

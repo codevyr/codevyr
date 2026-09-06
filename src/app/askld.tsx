@@ -86,6 +86,111 @@ export function fetchQueryMarkdown(query: string, projection: Projection): Promi
   });
 }
 
+/** One row of a `kind=refs` references page (see askld A2). */
+export interface SymbolReferenceRow {
+  to_symbol: string;
+  to_symbol_name: string;
+  to_instance_id: string;
+  from_instance_id: string;
+  object_id: string;
+  path: string;
+  project_id: string | null;
+  start_offset: number;
+  end_offset: number;
+}
+
+export interface SymbolReferencesResponse {
+  kind: string;
+  rows: SymbolReferenceRow[];
+  /** Opaque cursor for the next page; null when done. */
+  next: string | null;
+  /** Row count of this kind; read as `count`+ when `count_capped`. */
+  count: number;
+  count_capped: boolean;
+}
+
+/** Build the query string for a references page request. Pure, for testing. */
+export function referencesQueryParams(after?: string | null, limit?: number): string {
+  const params = new URLSearchParams();
+  if (after) params.set('after', after);
+  if (limit !== undefined) params.set('limit', String(limit));
+  return params.toString();
+}
+
+let referencesAbortController: AbortController | null = null;
+
+/**
+ * Page the references out of a symbol the server reported as edge-truncated.
+ * Separate abort controller: fetching more must never cancel the main graph
+ * query (and a new main query aborts a stale fetch-more via a fresh call).
+ */
+export function fetchSymbolReferences(
+  symbolId: string,
+  after?: string | null,
+  limit?: number,
+): Promise<Response> {
+  if (referencesAbortController) {
+    referencesAbortController.abort();
+  }
+  referencesAbortController = new AbortController();
+  const qs = referencesQueryParams(after, limit);
+  const suffix = qs ? `?${qs}` : '';
+  return fetch(`${askldUrl}/v1/symbol/${symbolId}/references${suffix}`, {
+    method: 'GET',
+    signal: referencesAbortController.signal,
+  });
+}
+
+/** One row of an instances page (see askld B2). */
+export interface SymbolInstancePageRowJson {
+  id: string;
+  instance_type: string;
+  object_id: string;
+  path: string;
+  project_id: string | null;
+  start_offset: number;
+  end_offset: number;
+}
+
+export interface SymbolInstancesResponse {
+  rows: SymbolInstancePageRowJson[];
+  /** Instance-id cursor for the next page; null when done. */
+  next: string | number | null;
+  /** Exact instance count for the symbol. */
+  total: number;
+}
+
+/** Build the query string for an instances page request. Pure, for testing. */
+export function instancesQueryParams(after?: string | number | null, limit?: number): string {
+  const params = new URLSearchParams();
+  if (after !== undefined && after !== null) params.set('after', String(after));
+  if (limit !== undefined) params.set('limit', String(limit));
+  return params.toString();
+}
+
+let instancesAbortController: AbortController | null = null;
+
+/**
+ * Page the instances of a symbol whose list the /query response truncated.
+ * Own abort controller for the same reason as fetchSymbolReferences.
+ */
+export function fetchSymbolInstances(
+  symbolId: string,
+  after?: string | number | null,
+  limit?: number,
+): Promise<Response> {
+  if (instancesAbortController) {
+    instancesAbortController.abort();
+  }
+  instancesAbortController = new AbortController();
+  const qs = instancesQueryParams(after, limit);
+  const suffix = qs ? `?${qs}` : '';
+  return fetch(`${askldUrl}/v1/symbol/${symbolId}/instances${suffix}`, {
+    method: 'GET',
+    signal: instancesAbortController.signal,
+  });
+}
+
 export function fetchProjects(): Promise<Response> {
   return fetch(`${askldUrl}/v1/index/projects`, {
     method: 'GET',

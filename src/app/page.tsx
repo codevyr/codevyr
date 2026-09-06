@@ -123,6 +123,8 @@ export default function Home() {
     edges: new Map<string, Array<Edge>>(),
     has_edges: [],
     objects: new Map<string, GraphObject>(),
+    edges_truncated: new Set<string>(),
+    instances_truncated: new Map<string, number>(),
   });
   const [problems, setProblems] = useState<Problem[]>([]);
   const [lastRunQuery, setLastRunQuery] = useState('');
