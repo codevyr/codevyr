@@ -31,6 +31,34 @@ test('get started', async ({ page }) => {
   await expect(tabSets).toHaveCount(4);
 });
 
+test('a share link beats the saved query from localStorage', async ({ page }) => {
+  const sharedQuery = '"from_share_link"';
+  const decoy = '"saved_in_local_storage"';
+  const encoded = encodeQuery(sharedQuery);
+  // Seed the saved query BEFORE the app loads — the exact scenario where
+  // the share link used to lose the race and the editor opened the decoy.
+  await page.addInitScript((saved) => {
+    window.localStorage.setItem('askl-last-query', saved);
+  }, decoy);
+  await page.route('**/v1/index/projects**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
+  });
+  await page.goto(`./#q=${encoded}`);
+  await ensureEditorApis(page);
+
+  // No retry on purpose: with the hash resolved BEFORE first render
+  // (resolveInitialQuery), the editor's very first value is the shared
+  // query — the decoy must never appear, not merely be replaced later.
+  // (The priority order itself is pinned deterministically in
+  // src/app/lib/initial_query.test.ts; this is the wiring net.)
+  const first = await page.evaluate(() => (window as any).__asklGetQuery());
+  expect(first).toBe(sharedQuery);
+});
+
 test('loads query from share link hash', async ({ page }) => {
   const sharedQuery = 'graph {\\n  foo -> bar\\n}';
   const encoded = encodeQuery(sharedQuery);

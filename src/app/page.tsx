@@ -7,13 +7,12 @@ import { EditorComponent, EditorHandle } from './editor';
 import { Graph, GraphObject, Node, Edge } from './graph';
 import { CodeViewer, CodeFocus } from './code_viewer';
 import { GraphViewer, type GraphViewerHandle } from './graph_viewer';
-import { DEFAULT_QUERY } from './default-queries';
 import { Problems, Problem } from './problems';
 import { MarkdownReport } from './markdown_report';
 import { getLineColumnFromOffset } from './lib/offsets';
 import { UnifiedToolbar, type ShareStatus } from './unified_toolbar';
-import { readLastQuery } from './lib/last_query';
 import { buildShareUrl, getQueryFromHash } from './lib/query_share';
+import { resolveInitialQuery } from './lib/initial_query';
 import { FileExplorer } from './file_explorer';
 import { useFileTreeCache } from './lib/file_tree_cache';
 import { revealFile } from './lib/navigation';
@@ -117,7 +116,7 @@ const initialLayout: IJsonModel = {
 
 export default function Home() {
   const [model] = useState(() => Model.fromJson(initialLayout));
-  const [query, setQuery] = useState(() => readLastQuery() ?? DEFAULT_QUERY);
+  const [query, setQuery] = useState(resolveInitialQuery);
   const [queryGraph, setQueryGraph] = useState<Graph>({
     nodes: new Map<string, Node>(),
     edges: new Map<string, Array<Edge>>(),
