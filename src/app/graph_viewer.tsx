@@ -66,6 +66,23 @@ function dismissContextMenu() {
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 }
 
+// Radix's menu closes itself on EVERY `window` blur — switching windows or
+// tabs while inspecting a node dismissed the context menu mid-read. The
+// menus are therefore CONTROLLED, and a close request that immediately
+// follows a window blur is ignored. Our listener is registered at
+// GraphViewer mount, before any menu opens, so it timestamps the blur
+// before Radix's per-open listener reacts to it; Escape and outside clicks
+// do not involve a window blur and close normally.
+let lastWindowBlurAt = 0;
+
+function trackWindowBlur() {
+  lastWindowBlurAt = Date.now();
+}
+
+function isWindowBlurClose(): boolean {
+  return Date.now() - lastWindowBlurAt < 150;
+}
+
 function triggerContextMenu(event: React.MouseEvent<Element>) {
   event.preventDefault();
   event.stopPropagation();
@@ -260,13 +277,16 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
+      if (!open && isWindowBlurClose()) {
+        return; // a window switch is not a dismissal
+      }
       setActiveMenu?.(open ? { kind: 'node', id } : null);
     },
     [id, setActiveMenu],
   );
 
   return (
-    <ContextMenu.Root onOpenChange={handleOpenChange}>
+    <ContextMenu.Root open={isOpen} onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         <div
           className={isGroupNode
@@ -453,6 +473,9 @@ function GraphEdgeComponent({
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
+      if (!open && isWindowBlurClose()) {
+        return; // a window switch is not a dismissal
+      }
       setActiveMenu?.(open ? { kind: 'edge', id } : null);
     },
     [id, setActiveMenu],
@@ -463,7 +486,7 @@ function GraphEdgeComponent({
   }
 
   return (
-    <ContextMenu.Root onOpenChange={handleOpenChange}>
+    <ContextMenu.Root open={isOpen} onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         <g
           className={`graph-edge${isSelected ? ' graph-edge-selected' : ''}`}
@@ -513,6 +536,14 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
 }, ref) {
   const nodeTypes = useMemo(() => ({ graphNode: GraphNodeComponent }), []);
   const edgeTypes = useMemo(() => ({ graphEdge: GraphEdgeComponent }), []);
+
+  // Registered at mount — before any menu opens — so the blur timestamp is
+  // written before Radix's per-open blur listener fires (see
+  // isWindowBlurClose).
+  useEffect(() => {
+    window.addEventListener('blur', trackWindowBlur);
+    return () => window.removeEventListener('blur', trackWindowBlur);
+  }, []);
 
   const {
     nodes, edges, setNodes,
