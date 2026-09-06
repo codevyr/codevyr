@@ -32,6 +32,10 @@ export interface Node {
     symbol_instances: Array<SymbolInstance>;
     query_statements?: Array<QueryStatement>;
     color?: string;
+    /** Server capped this node's instance list (fetch the rest per symbol). */
+    instances_truncated?: boolean;
+    /** Exact instance count in the result before capping. */
+    total_instances?: number;
 }
 
 export interface Edge {
@@ -61,6 +65,69 @@ export interface Graph {
     edges: Map<string, Array<Edge>>;
     has_edges: Array<HasEdge>;
     objects: Map<string, GraphObject>;
+    /**
+     * Raw symbol ids whose implicit out-edge list the server capped
+     * (assembly capping — the node set is complete, only the edge listing is
+     * paged).  Keyed by SYMBOL, not node id: split/merged node ids diverge
+     * from server ids, but every node's `symbol_instances[*].symbol` still
+     * carries the raw id, so membership is resolved per node through its
+     * instances.  Carried verbatim through the graph transforms.
+     */
+    edges_truncated: Set<string>;
+    /**
+     * Symbol id → exact total for nodes whose instance list the server
+     * capped.  Same symbol-keyed design as `edges_truncated`, same carry
+     * rule through the transforms.
+     */
+    instances_truncated: Map<string, number>;
+}
+
+/**
+ * The raw symbol ids of `node` whose out-edge list the server truncated —
+ * resolved through the node's instances so it survives node splitting (same
+ * symbol, suffixed id) and same-name merging (several symbols, one node).
+ * Empty array when nothing is truncated.
+ */
+export function truncatedSymbolsForNode(node: Node, graph: Graph): Array<string> {
+    if (graph.edges_truncated.size === 0) {
+        return [];
+    }
+    const seen = new Set<string>();
+    const result: Array<string> = [];
+    for (const inst of node.symbol_instances) {
+        if (!seen.has(inst.symbol)) {
+            seen.add(inst.symbol);
+            if (graph.edges_truncated.has(inst.symbol)) {
+                result.push(inst.symbol);
+            }
+        }
+    }
+    return result;
+}
+
+/**
+ * The (symbol, total) pairs of `node` whose instance list the server capped —
+ * resolved through the node's instances, like [`truncatedSymbolsForNode`].
+ */
+export function truncatedInstanceSymbols(
+    node: Node,
+    graph: Graph,
+): Array<{ symbol: string; total: number }> {
+    if (graph.instances_truncated.size === 0) {
+        return [];
+    }
+    const seen = new Set<string>();
+    const result: Array<{ symbol: string; total: number }> = [];
+    for (const inst of node.symbol_instances) {
+        if (!seen.has(inst.symbol)) {
+            seen.add(inst.symbol);
+            const total = graph.instances_truncated.get(inst.symbol);
+            if (total !== undefined) {
+                result.push({ symbol: inst.symbol, total });
+            }
+        }
+    }
+    return result;
 }
 
 export interface HierarchyInfo {
@@ -457,6 +524,8 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         edges: newEdges,
         has_edges: newHasEdges,
         objects: graph.objects,
+        edges_truncated: graph.edges_truncated,
+        instances_truncated: graph.instances_truncated,
     };
 }
 
@@ -578,6 +647,8 @@ export function mergeSameNameNodes(graph: Graph): Graph {
         edges: newEdges,
         has_edges: newHasEdges,
         objects: graph.objects,
+        edges_truncated: graph.edges_truncated,
+        instances_truncated: graph.instances_truncated,
     };
 }
 

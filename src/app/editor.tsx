@@ -36,6 +36,19 @@ interface RustGraph {
     has_edges?: Array<HasEdge>;
     objects: Array<RustGraphObjectEntry>;
     warnings?: QueryDiagnostic[];
+    /** Symbol ids whose out-edge list the server capped (fetch-more). */
+    edges_truncated?: Array<string>;
+}
+
+/** Symbol → exact total for nodes whose instance list the server capped. */
+function collectInstanceTruncations(nodes: Map<string, Node>): Map<string, number> {
+    const truncated = new Map<string, number>();
+    nodes.forEach((node) => {
+        if (node.instances_truncated && node.total_instances !== undefined) {
+            truncated.set(node.id, node.total_instances);
+        }
+    });
+    return truncated;
 }
 
 interface QueryDiagnostic {
@@ -310,7 +323,14 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
 
             console.log("OBJECTS", objects, edgeMap, nodes)
             onGraphChange(
-                { nodes: nodes, edges: edgeMap, has_edges: data.has_edges ?? [], objects: objects }
+                {
+                    nodes: nodes,
+                    edges: edgeMap,
+                    has_edges: data.has_edges ?? [],
+                    objects: objects,
+                    edges_truncated: new Set(data.edges_truncated ?? []),
+                    instances_truncated: collectInstanceTruncations(nodes),
+                }
             );
             onQueryRun?.(queryText);
             clearEditorErrorMarker(monacoRef.current, ed);

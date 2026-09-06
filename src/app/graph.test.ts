@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, mergeSameNameNodes, splitMultiParentNodes, Edge, FilteredEdgesResult, Graph, HasEdge, HierarchyInfo, Node, QueryStatement, SymbolInstance } from './graph';
+import { alignToPreservedPositions, buildHierarchy, filterRedundantEdges, getPreservableNodeIds, mergeSameNameNodes, splitMultiParentNodes, Edge, FilteredEdgesResult, Graph, HasEdge, HierarchyInfo, Node, QueryStatement, SymbolInstance, truncatedInstanceSymbols, truncatedSymbolsForNode } from './graph';
 import { adjustParentDimensions, measureGroupHeaderWidth, GROUP_PAD_BOTTOM, GROUP_PAD_LEFT, GROUP_PAD_RIGHT, GROUP_PAD_TOP } from './lib/graph_layout';
 import type { Node as FlowNode } from 'reactflow';
 
@@ -450,7 +450,7 @@ function makeGraph(opts: {
     }
     return makeHasEdge(tuple[0], tuple[1]);
   });
-  return { nodes, edges, has_edges, objects: new Map() };
+  return { nodes, edges, has_edges, objects: new Map(), edges_truncated: new Set<string>(), instances_truncated: new Map<string, number>() };
 }
 
 describe('splitMultiParentNodes', () => {
@@ -1160,6 +1160,8 @@ describe('mergeSameNameNodes', () => {
       edges: opts.edges ?? new Map(),
       has_edges: opts.has_edges ?? [],
       objects: new Map(),
+      edges_truncated: new Set<string>(),
+      instances_truncated: new Map<string, number>(),
     };
   }
   it('returns same reference when no merge needed (unique labels)', () => {
@@ -1326,5 +1328,79 @@ describe('mergeSameNameNodes', () => {
     expect(edgeArr).toBeDefined();
     expect(edgeArr!.length).toBe(2);
     expect(edgeArr!.every(e => e.from === 'C' && e.to === 'A')).toBe(true);
+  });
+});
+
+describe('edges_truncated threading', () => {
+  it('survives splitMultiParentNodes and mergeSameNameNodes (both rebuild Graph literals)', () => {
+    const graph = makeGraph({
+      nodes: [
+        makeNodeWithInstances('p', [makeInstance('p', 'o1')]),
+        makeNodeWithInstances('a', [makeInstance('a', 'o1')]),
+        makeNodeWithInstances('b', [makeInstance('b', 'o1')]),
+      ],
+      hasEdges: [
+        ['p', 'a'],
+        ['p', 'b'],
+      ],
+    });
+    graph.edges_truncated = new Set(['a']);
+    const split = splitMultiParentNodes(graph);
+    expect(split.edges_truncated).toBe(graph.edges_truncated);
+    const merged = mergeSameNameNodes(split);
+    expect(merged.edges_truncated).toBe(graph.edges_truncated);
+  });
+
+  it('resolves per-node truncated symbols through instances, so split and merged ids still match', () => {
+    const inst = (id: string, symbol: string) => ({
+      id,
+      symbol,
+      object_id: 'o1',
+      symbol_type: 'function',
+      instance_type: 'definition',
+      start_offset: 0,
+      end_offset: 1,
+    });
+    // A split node keeps its symbol through its instances even though its
+    // node id gained a context suffix; a merged node carries instances of
+    // SEVERAL symbols and reports exactly the truncated ones.
+    const splitNode = { id: 'sym1\u0000contained-by:parent', label: 'f', symbol_instances: [inst('i1', 'sym1')] };
+    const mergedNode = {
+      id: 'sym1',
+      label: 'f',
+      symbol_instances: [inst('i1', 'sym1'), inst('i2', 'sym2'), inst('i3', 'sym3')],
+    };
+    const graph = {
+      nodes: new Map(),
+      edges: new Map(),
+      has_edges: [],
+      objects: new Map(),
+      edges_truncated: new Set(['sym1', 'sym3']),
+      instances_truncated: new Map<string, number>(),
+    };
+    expect(truncatedSymbolsForNode(splitNode, graph)).toEqual(['sym1']);
+    expect(truncatedSymbolsForNode(mergedNode, graph)).toEqual(['sym1', 'sym3']);
+    graph.edges_truncated = new Set();
+    expect(truncatedSymbolsForNode(mergedNode, graph)).toEqual([]);
+  });
+});
+
+describe('instances_truncated threading', () => {
+  it('survives the graph transforms and resolves per node through instances', () => {
+    const graph = makeGraph({
+      nodes: [
+        makeNodeWithInstances('p', [makeInstance('p', 'o1')]),
+        makeNodeWithInstances('a', [makeInstance('a', 'o1')]),
+      ],
+      hasEdges: [['p', 'a']],
+    });
+    graph.instances_truncated = new Map([['a', 931]]);
+    const merged = mergeSameNameNodes(splitMultiParentNodes(graph));
+    expect(merged.instances_truncated).toBe(graph.instances_truncated);
+
+    const aNode = { id: 'a\u0000contained-by:p', label: 'a', symbol_instances: [makeInstance('a', 'o1')] };
+    expect(truncatedInstanceSymbols(aNode, merged)).toEqual([{ symbol: 'a', total: 931 }]);
+    const pNode = { id: 'p', label: 'p', symbol_instances: [makeInstance('p', 'o1')] };
+    expect(truncatedInstanceSymbols(pNode, merged)).toEqual([]);
   });
 });

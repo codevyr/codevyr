@@ -18,6 +18,8 @@ import {
   filterRedundantEdges,
   splitMultiParentNodes,
   mergeSameNameNodes,
+  truncatedSymbolsForNode,
+  truncatedInstanceSymbols,
 } from '../graph';
 import type { CodeFocus } from '../code_viewer';
 import {
@@ -41,6 +43,10 @@ export type GraphNodeData = {
   revealQueryRange?: (start: number, end: number) => void;
   isGroupNode?: boolean;
   hiddenRefEdges?: Array<GraphEdge>;
+  /** Raw symbol ids of this node whose out-edges the server truncated. */
+  truncatedRefSymbols?: Array<string>;
+  /** (symbol, exact total) pairs whose instance list the server truncated. */
+  truncatedInstances?: Array<{ symbol: string; total: number }>;
 };
 
 export type GraphEdgeData = {
@@ -428,6 +434,8 @@ export function useGraphLayout({
           revealQueryRange,
           isGroupNode: isGroup,
           hiddenRefEdges: hiddenByHas.get(node.id),
+          truncatedRefSymbols: truncatedSymbolsForNode(node, mergedGraph),
+          truncatedInstances: truncatedInstanceSymbols(node, mergedGraph),
         },
       };
       if (parentId) {
