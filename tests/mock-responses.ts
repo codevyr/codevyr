@@ -114,22 +114,8 @@ RESPONSES[normalizeQuery(BASE_QUERY)] = {
     },
   ],
   edges: [
-    {
-      id: '1-4',
-      from: '1',
-      to: '4',
-      from_object: '1',
-      from_offset_start: offsetSpanForLine('1', 36).start,
-      from_offset_end: offsetSpanForLine('1', 36).end,
-    },
-    {
-      id: '4-22',
-      from: '4',
-      to: '22',
-      from_object: '4',
-      from_offset_start: offsetSpanForLine('4', 44).start,
-      from_offset_end: offsetSpanForLine('4', 44).end,
-    },
+    { from: '1', to: '4', occurrence_count: 1, from_objects: ['1'] },
+    { from: '4', to: '22', occurrence_count: 1, from_objects: ['4'] },
   ],
   objects: [
     { object_id: '4', path: '/mock/run.go', project_id: '1' },
@@ -201,46 +187,9 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
     },
   ],
   edges: [
-    {
-      id: '22-201',
-      from: '22',
-      to: '201',
-      from_object: '4',
-      from_offset_start: offsetSpanForLine('4', 132).start,
-      from_offset_end: offsetSpanForLine('4', 132).end,
-    },
-    {
-      id: '22-201',
-      from: '22',
-      to: '201',
-      from_object: '4',
-      from_offset_start: offsetSpanForLine('4', 138).start,
-      from_offset_end: offsetSpanForLine('4', 138).end,
-    },
-    {
-      id: '22-201',
-      from: '22',
-      to: '201',
-      from_object: '4',
-      from_offset_start: offsetSpanForLine('4', 125).start,
-      from_offset_end: offsetSpanForLine('4', 125).end,
-    },
-    {
-      id: '4-22',
-      from: '4',
-      to: '22',
-      from_object: '4',
-      from_offset_start: offsetSpanForLine('4', 44).start,
-      from_offset_end: offsetSpanForLine('4', 44).end,
-    },
-    {
-      id: '1-4',
-      from: '1',
-      to: '4',
-      from_object: '1',
-      from_offset_start: offsetSpanForLine('1', 36).start,
-      from_offset_end: offsetSpanForLine('1', 36).end,
-    },
+    { from: '22', to: '201', occurrence_count: 3, from_objects: ['4'] },
+    { from: '4', to: '22', occurrence_count: 1, from_objects: ['4'] },
+    { from: '1', to: '4', occurrence_count: 1, from_objects: ['1'] },
   ],
   objects: [
     { object_id: '4', path: '/mock/run.go', project_id: '1' },
@@ -251,6 +200,36 @@ RESPONSES[normalizeQuery(INIT_LOGS_QUERY)] = {
 
 export const getMockResponseForQuery = (query: string): MockGraphResponse | undefined =>
   RESPONSES[normalizeQuery(query)];
+
+/**
+ * Call sites per edge, served by the mocked
+ * `/v1/edge/{from}/{to}/occurrences`. `/query` ships only pairs + counts, so
+ * anything that opens an edge (or clicks a single-call-site one) reads these.
+ */
+const occurrence = (fileId: string, line: number, refId: string) => ({
+  ref_id: refId,
+  from_instance_id: `inst-${refId}`,
+  object_id: fileId,
+  path: fileId === '1' ? '/mock/kubelet.go' : '/mock/run.go',
+  project_id: '1',
+  start_offset: offsetSpanForLine(fileId, line).start,
+  end_offset: offsetSpanForLine(fileId, line).end,
+});
+
+const EDGE_OCCURRENCES: Record<string, ReturnType<typeof occurrence>[]> = {
+  '1-4': [occurrence('1', 36, 'r1')],
+  '4-22': [occurrence('4', 44, 'r2')],
+  '22-201': [
+    occurrence('4', 125, 'r3'),
+    occurrence('4', 132, 'r4'),
+    occurrence('4', 138, 'r5'),
+  ],
+};
+
+export const getMockEdgeOccurrences = (from: string, to: string) => ({
+  rows: EDGE_OCCURRENCES[`${from}-${to}`] ?? [],
+  next: null,
+});
 
 export const SUBMIT_QUERY = BASE_QUERY;
 export const SUBMIT_QUERY_INIT_LOGS = INIT_LOGS_QUERY;

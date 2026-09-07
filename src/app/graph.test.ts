@@ -8,7 +8,15 @@ function makeNode(id: string): Node {
 }
 
 function makeEdge(from: string, to: string): Edge {
-  return { id: `${from}-${to}`, from, to, from_offset_start: 0, from_offset_end: 1 };
+  return {
+    id: `${from}-${to}`,
+    from,
+    to,
+    from_symbol: from,
+    to_symbol: to,
+    occurrence_count: 1,
+    from_objects: [],
+  };
 }
 
 function makeNodes(...ids: string[]): Map<string, Node> {
@@ -441,7 +449,15 @@ function makeGraph(opts: {
   const edges = new Map<string, Array<Edge>>();
   for (const [from, to, from_object] of (opts.edges ?? [])) {
     const id = `${from}-${to}`;
-    const edge: Edge = { id, from, to, from_object, from_offset_start: 0, from_offset_end: 1 };
+    const edge: Edge = {
+      id,
+      from,
+      to,
+      from_symbol: from,
+      to_symbol: to,
+      occurrence_count: 1,
+      from_objects: from_object ? [from_object] : [],
+    };
     edges.set(id, [edge]);
   }
   const has_edges: HasEdge[] = (opts.hasEdges ?? []).map((tuple) => {

@@ -14,6 +14,7 @@ import ReactFlow, {
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { type Edge as GraphEdge, type Graph, type HierarchyInfo, type Node as GraphNode, isDirectoryInstance, isSelfReference } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
+import { fetchEdgeOccurrences, type EdgeOccurrencesResponse } from './askld';
 import { CodeFocus } from './code_viewer';
 import { GraphSearchBar } from './graph_search';
 import { useGraphSearch } from './lib/use_graph_search';
@@ -167,14 +168,6 @@ function darkenColor(color: string, amount: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function resolveEdgeObjectId(edge: GraphEdge, graph: Graph): string | null {
-  if (edge.from_object) {
-    return edge.from_object;
-  }
-
-  const node = graph.nodes.get(edge.from);
-  return node?.symbol_instances[0]?.object_id ?? null;
-}
 
 function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
   const menuContext = useContext(MenuContext);
@@ -443,21 +436,35 @@ function GraphEdgeComponent({
         return;
       }
 
-      if (edgesList.length === 1) {
-        const edge = edgesList[0];
-        if (!graph || !selectFile) {
-          return;
-        }
-        const objectId = resolveEdgeObjectId(edge, graph);
-        if (!objectId) {
-          return;
-        }
-        selectFile({
-          object_id: objectId,
-          start_offset: edge.from_offset_start,
-          end_offset: edge.from_offset_end,
-        });
-        setActiveMenu?.(null);
+      // An edge carries no call site inline. With exactly ONE call site
+      // there is nothing to choose, so fetch it and jump — the direct
+      // navigation is preserved without the response ever guessing a
+      // representative occurrence. With several, open the menu and let the
+      // user pick from the loaded list.
+      const edge = edgesList[0];
+      if (edgesList.length === 1 && edge.occurrence_count === 1 && selectFile) {
+        void (async () => {
+          try {
+            const response = await fetchEdgeOccurrences(
+              edge.from_symbol,
+              edge.to_symbol,
+              null,
+              1,
+            );
+            if (!response.ok) return;
+            const data: EdgeOccurrencesResponse = await response.json();
+            const row = data.rows[0];
+            if (!row) return;
+            selectFile({
+              object_id: row.object_id,
+              start_offset: row.start_offset,
+              end_offset: row.end_offset,
+            });
+            setActiveMenu?.(null);
+          } catch {
+            // Navigation is best-effort; the menu remains available.
+          }
+        })();
         return;
       }
 
@@ -468,7 +475,7 @@ function GraphEdgeComponent({
 
       triggerContextMenu(event);
     },
-    [edgesList, graph, isOpen, selectFile, setActiveMenu],
+    [edgesList, isOpen, selectFile, setActiveMenu],
   );
 
   const handleOpenChange = useCallback(

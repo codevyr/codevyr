@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { LuArrowUpRight, LuChevronDown, LuChevronRight, LuCopy, LuFocus, LuFolderOpen } from 'react-icons/lu';
 import { CodeFocus } from './code_viewer';
 import { Edge, SymbolInstance, QueryStatement, Node, Graph, isDirectoryInstance, isSelfReference } from './graph';
 import { copyToClipboard } from './lib/clipboard';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
 import {
+  fetchEdgeOccurrences,
   fetchSymbolInstances,
   fetchSymbolReferences,
+  type EdgeOccurrenceRowJson,
+  type EdgeOccurrencesResponse,
   type SymbolInstancePageRowJson,
   type SymbolInstancesResponse,
   type SymbolReferenceRow,
@@ -402,6 +405,9 @@ export function NodeHover({
     instancesByType.get(type)!.push(instance);
   });
 
+  // Warm the file cache for the instances rendered here. Hidden-reference
+  // call sites are no longer prefetched: they arrive with their own
+  // `ensureFileContent` when their edge is expanded.
   useEffect(() => {
     const seen = new Set<string>();
     realInstances.forEach((instance) => {
@@ -411,14 +417,7 @@ export function NodeHover({
       seen.add(instance.object_id);
       ensureFileContent(instance.object_id);
     });
-    hiddenRefEdges?.forEach((edge) => {
-      const objectId = resolveEdgeObjectId(edge, graph);
-      if (objectId && !seen.has(objectId)) {
-        seen.add(objectId);
-        ensureFileContent(objectId);
-      }
-    });
-  }, [node, ensureFileContent, realInstances, hiddenRefEdges, graph]);
+  }, [node, ensureFileContent, realInstances]);
 
   const dirPath = selfRefInstance
     ? graph.objects.get(selfRefInstance.object_id)?.path
@@ -509,6 +508,7 @@ export function NodeHover({
           graph={graph}
           setCodeFocus={setCodeFocus}
           fileContents={fileContents}
+          ensureFileContent={ensureFileContent}
           onAction={onAction}
         />
       )}
@@ -658,120 +658,145 @@ function MoreReferencesSection({
   );
 }
 
-function HiddenReferencesSection({
-  edges,
-  graph,
-  setCodeFocus,
+/**
+ * The call sites of ONE edge, loaded on demand.
+ *
+ * `/query` ships an edge as a (from, to) symbol pair plus a count; the call
+ * sites live behind `/v1/edge/{from}/{to}/occurrences` and are fetched when
+ * the edge is opened (mounting this list IS the intent to see them). Rows
+ * arrive in display order — the endpoint pages on `(object, offset, id)` —
+ * so each page appends contiguously and no client-side sort is needed.
+ */
+function EdgeOccurrenceRows({
+  from,
+  to,
   fileContents,
+  ensureFileContent,
+  setCodeFocus,
   onAction,
 }: {
-  edges: Array<Edge>;
-  graph: Graph;
-  setCodeFocus: (type: CodeFocus) => void;
+  from: string;
+  to: string;
   fileContents: Map<string, string>;
+  ensureFileContent: (objectId: string) => void;
+  setCodeFocus: (type: CodeFocus) => void;
   onAction?: () => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [rows, setRows] = useState<Array<EdgeOccurrenceRowJson>>([]);
+  const [next, setNext] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const loadPage = useCallback(
+    async (after: string | null) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetchEdgeOccurrences(from, to, after);
+        if (!response.ok) {
+          throw new Error(`edge occurrences failed (${response.status})`);
+        }
+        const data: EdgeOccurrencesResponse = await response.json();
+        setRows((prev) => (after ? [...prev, ...data.rows] : data.rows));
+        setNext(data.next);
+        setLoaded(true);
+        for (const row of data.rows) {
+          ensureFileContent(row.object_id);
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return; // superseded by a newer fetch — not an error state
+        }
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [from, to, ensureFileContent],
+  );
+
+  useEffect(() => {
+    void loadPage(null);
+  }, [loadPage]);
+
   return (
-    <table>
-      <SectionHeader name="References" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
-      {expanded && (
-        <tbody>
-          {[...edges]
-            .sort((a, b) => compareEdges(a, b, graph, fileContents))
-            .map((edge) => (
-              <EdgeHover
-                key={`${edge.id}-${edge.from_offset_start}`}
-                edge={edge}
-                graph={graph}
-                setCodeFocus={setCodeFocus}
-                fileContents={fileContents}
-                onAction={onAction}
-              />
-            ))}
-        </tbody>
+    <>
+      {rows.map((row) => (
+        <EdgeOccurrenceRow
+          key={row.ref_id}
+          row={row}
+          fileContents={fileContents}
+          setCodeFocus={setCodeFocus}
+          onAction={onAction}
+        />
+      ))}
+      {error && (
+        <tr className="declaration-hover">
+          <td colSpan={3} data-testid="edge-occurrences-error">
+            {error}
+          </td>
+        </tr>
       )}
-    </table>
+      {(loading || next) && (
+        <tr className="declaration-hover">
+          <td colSpan={3}>
+            {loading ? (
+              <span>Loading…</span>
+            ) : (
+              <button
+                type="button"
+                className="node-hover-text-btn"
+                data-testid={`load-edge-occurrences-${from}-${to}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void loadPage(next);
+                }}
+              >
+                Load more
+              </button>
+            )}
+          </td>
+        </tr>
+      )}
+      {loaded && !loading && rows.length === 0 && !error && (
+        <tr className="declaration-hover">
+          <td colSpan={3}>No call sites</td>
+        </tr>
+      )}
+    </>
   );
 }
 
-interface EdgeHoverProps {
-  edge: Edge;
-  graph: Graph;
-  setCodeFocus: (type: CodeFocus) => void;
+/** One fetched call site: path, location, open/copy actions. */
+function EdgeOccurrenceRow({
+  row,
+  fileContents,
+  setCodeFocus,
+  onAction,
+}: {
+  row: EdgeOccurrenceRowJson;
   fileContents: Map<string, string>;
+  setCodeFocus: (type: CodeFocus) => void;
   onAction?: () => void;
-}
-
-function resolveEdgeObjectId(edge: Edge, graph: Graph): string | null {
-  if (edge.from_object) {
-    return edge.from_object;
-  }
-
-  const node = graph.nodes.get(edge.from);
-  return node?.symbol_instances[0]?.object_id ?? null;
-}
-
-function resolveEdgeSortInfo(
-  edge: Edge,
-  graph: Graph,
-  fileContents: Map<string, string>,
-) {
-  const objectId = resolveEdgeObjectId(edge, graph);
-  const path = objectId ? graph.objects.get(objectId)?.path ?? objectId : 'Undefined';
-  const content = objectId ? fileContents.get(objectId) : undefined;
-  const location = content ? getLineColumnFromOffset(content, edge.from_offset_start) : null;
-  const line = location?.lineNumber ?? Number.MAX_SAFE_INTEGER;
-  const column = location?.column ?? Number.MAX_SAFE_INTEGER;
-  const offset = parseOffset(edge.from_offset_start) ?? Number.MAX_SAFE_INTEGER;
-  return { path, line, column, offset };
-}
-
-function compareEdges(
-  left: Edge,
-  right: Edge,
-  graph: Graph,
-  fileContents: Map<string, string>,
-) {
-  const leftInfo = resolveEdgeSortInfo(left, graph, fileContents);
-  const rightInfo = resolveEdgeSortInfo(right, graph, fileContents);
-  const pathCompare = leftInfo.path.localeCompare(rightInfo.path);
-  if (pathCompare !== 0) {
-    return pathCompare;
-  }
-  if (leftInfo.line !== rightInfo.line) {
-    return leftInfo.line - rightInfo.line;
-  }
-  if (leftInfo.column !== rightInfo.column) {
-    return leftInfo.column - rightInfo.column;
-  }
-  return leftInfo.offset - rightInfo.offset;
-}
-
-function EdgeHover({ edge, graph, setCodeFocus, fileContents, onAction }: EdgeHoverProps) {
-  const objectId = resolveEdgeObjectId(edge, graph);
-  const filePath = objectId ? graph.objects.get(objectId)?.path ?? objectId : 'Undefined';
-  const location = formatOffsetLocation(objectId ? fileContents.get(objectId) : undefined, edge.from_offset_start);
+}) {
+  const location = formatOffsetLocation(fileContents.get(row.object_id), row.start_offset);
 
   function openInEditor() {
-    if (!objectId) {
-      return;
-    }
     setCodeFocus({
-      object_id: objectId,
-      start_offset: edge.from_offset_start,
-      end_offset: edge.from_offset_end,
+      object_id: row.object_id,
+      start_offset: row.start_offset,
+      end_offset: row.end_offset,
     });
   }
 
-  function copyPath() {
-    void copyToClipboard(filePath);
-    onAction?.();
-  }
-
   return (
-    <tr className="declaration-hover" onClick={openInEditor}>
-      <td>{filePath}</td>
+    <tr
+      className="declaration-hover"
+      data-testid={`edge-occurrence-${row.ref_id}`}
+      onClick={openInEditor}
+    >
+      <td>{row.path}</td>
       <td>{location}</td>
       <td className="node-hover-actions-cell">
         <button
@@ -790,7 +815,8 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents, onAction }: EdgeHo
           className="node-hover-icon"
           onClick={(event) => {
             event.stopPropagation();
-            copyPath();
+            void copyToClipboard(row.path);
+            onAction?.();
           }}
           title="Copy path"
         >
@@ -798,6 +824,83 @@ function EdgeHover({ edge, graph, setCodeFocus, fileContents, onAction }: EdgeHo
         </button>
       </td>
     </tr>
+  );
+}
+
+/**
+ * Reference edges hidden by the redundancy filter, shown on the node hover.
+ * Each entry is a (from, to) pair with its call-site count; expanding one
+ * loads its call sites.
+ */
+function HiddenReferencesSection({
+  edges,
+  graph,
+  setCodeFocus,
+  fileContents,
+  ensureFileContent,
+  onAction,
+}: {
+  edges: Array<Edge>;
+  graph: Graph;
+  setCodeFocus: (type: CodeFocus) => void;
+  fileContents: Map<string, string>;
+  ensureFileContent: (objectId: string) => void;
+  onAction?: () => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [openPairs, setOpenPairs] = useState<Set<string>>(new Set());
+
+  function togglePair(id: string) {
+    setOpenPairs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <table>
+      <SectionHeader name="References" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
+      {expanded && (
+        <tbody>
+          {edges.map((edge) => {
+            const targetLabel = graph.nodes.get(edge.to)?.label ?? edge.to;
+            const isOpen = openPairs.has(edge.id);
+            return (
+              <React.Fragment key={edge.id}>
+                <tr
+                  className="declaration-hover"
+                  data-testid={`hidden-ref-${edge.id}`}
+                  onClick={() => togglePair(edge.id)}
+                >
+                  <td colSpan={2}>
+                    <span className="section-header-chevron">
+                      {isOpen ? <LuChevronDown /> : <LuChevronRight />}
+                    </span>
+                    {targetLabel}
+                  </td>
+                  <td>{edge.occurrence_count}</td>
+                </tr>
+                {isOpen && (
+                  <EdgeOccurrenceRows
+                    from={edge.from_symbol}
+                    to={edge.to_symbol}
+                    fileContents={fileContents}
+                    ensureFileContent={ensureFileContent}
+                    setCodeFocus={setCodeFocus}
+                    onAction={onAction}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      )}
+    </table>
   );
 }
 
@@ -810,20 +913,16 @@ export interface EdgesHoverProps {
   onAction?: () => void;
 }
 
-export function EdgesHover({ edges, setCodeFocus, graph, fileContents, ensureFileContent, onAction }: EdgesHoverProps) {
-  useEffect(() => {
-    edges.forEach((edge) => {
-      const objectId = resolveEdgeObjectId(edge, graph);
-      if (objectId) {
-        ensureFileContent(objectId);
-      }
-    });
-  }, [edges, graph, ensureFileContent]);
-
-  const sortedEdges = [...edges].sort((left, right) =>
-    compareEdges(left, right, graph, fileContents),
-  );
-  const headerEdge = sortedEdges[0];
+/** The edge context menu: which symbols it connects, and its call sites. */
+export function EdgesHover({
+  edges,
+  setCodeFocus,
+  graph,
+  fileContents,
+  ensureFileContent,
+  onAction,
+}: EdgesHoverProps) {
+  const headerEdge = edges[0];
   const fromLabel = headerEdge ? graph.nodes.get(headerEdge.from)?.label ?? headerEdge.from : null;
   const toLabel = headerEdge ? graph.nodes.get(headerEdge.to)?.label ?? headerEdge.to : null;
 
@@ -847,16 +946,16 @@ export function EdgesHover({ edges, setCodeFocus, graph, fileContents, ensureFil
       )}
       <table>
         <tbody>
-          {sortedEdges.map((edge) => (
-            <EdgeHover
-              key={`${edge.id}-${edge.from_offset_start}`}
-              edge={edge}
-              graph={graph}
-              setCodeFocus={setCodeFocus}
+          {headerEdge && (
+            <EdgeOccurrenceRows
+              from={headerEdge.from_symbol}
+              to={headerEdge.to_symbol}
               fileContents={fileContents}
+              ensureFileContent={ensureFileContent}
+              setCodeFocus={setCodeFocus}
               onAction={onAction}
             />
-          ))}
+          )}
         </tbody>
       </table>
     </div>
