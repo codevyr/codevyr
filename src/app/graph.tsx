@@ -38,13 +38,31 @@ export interface Node {
     total_instances?: number;
 }
 
+/**
+ * One edge of the graph: a (from, to) SYMBOL pair plus how many call sites it
+ * has.  Individual call sites are display detail, not structure — they are
+ * paged from `/v1/edge/{from}/{to}/occurrences` when the edge is opened.
+ * `id` is computed client-side as `${from}-${to}`.
+ */
 export interface Edge {
     id: string;
+    /** Display endpoints — rewritten by the split/merge transforms. */
     from: string;
     to: string;
-    from_object?: string;
-    from_offset_start: OffsetValue;
-    from_offset_end: OffsetValue;
+    /**
+     * The RAW symbol pair this edge came from, preserved verbatim through
+     * every transform. `from`/`to` become split or merged node ids, but the
+     * detail endpoint (`/v1/edge/{from}/{to}/occurrences`) is keyed by symbol.
+     */
+    from_symbol: string;
+    to_symbol: string;
+    occurrence_count: number;
+    /**
+     * Distinct files this pair's call sites live in — structural, used by
+     * [`splitMultiParentNodes`] to route an edge to the split whose files
+     * contain its call sites. Not display detail.
+     */
+    from_objects: Array<string>;
 }
 
 export interface HasEdge {
@@ -436,13 +454,11 @@ export function splitMultiParentNodes(graph: Graph): Graph {
         if (fromSplits && !toSplits) {
             // "from" is split: match from_object to the split that contains it
             let matchedSplitId: string | undefined;
-            if (edge.from_object) {
-                for (const splitId of fromSplits) {
-                    const objIds = splitObjectIds.get(splitId);
-                    if (objIds && objIds.has(edge.from_object)) {
-                        matchedSplitId = splitId;
-                        break;
-                    }
+            for (const splitId of fromSplits) {
+                const objIds = splitObjectIds.get(splitId);
+                if (objIds && edge.from_objects.some((o) => objIds.has(o))) {
+                    matchedSplitId = splitId;
+                    break;
                 }
             }
             if (!matchedSplitId) matchedSplitId = fromSplits[0];
@@ -492,9 +508,9 @@ export function splitMultiParentNodes(graph: Graph): Graph {
                 }
                 if (!matchedToSplit) matchedToSplit = toSplits[0];
 
-                if (edge.from_object) {
+                if (edge.from_objects.length > 0) {
                     const objIds = splitObjectIds.get(fromSplitId);
-                    if (!objIds || !objIds.has(edge.from_object)) continue;
+                    if (!objIds || !edge.from_objects.some((o) => objIds.has(o))) continue;
                 }
 
                 const newEdgeId = `${edgeId}\0${fromSplitId}\0${matchedToSplit}`;

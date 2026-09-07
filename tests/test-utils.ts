@@ -1,7 +1,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { getMockResponseForQuery, SUBMIT_QUERY } from './mock-responses';
+import { getMockEdgeOccurrences, getMockResponseForQuery, SUBMIT_QUERY } from './mock-responses';
 
 const mockDir = resolve(__dirname, 'mock');
 const queryUrlPattern = /\/query(?:\?.*)?$/;
@@ -20,6 +20,22 @@ export const fileContents: Record<string, string> = {
 };
 
 export async function interceptGraphEndpoints(page: Page) {
+  // `/query` ships edges as (from, to) pairs + a count; call sites come from
+  // this endpoint when an edge is opened or clicked.
+  await page.route('**/v1/edge/**/occurrences**', async route => {
+    const match = new URL(route.request().url()).pathname.match(
+      /\/v1\/edge\/([^/]+)\/([^/]+)\/occurrences/,
+    );
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(
+        match ? getMockEdgeOccurrences(match[1], match[2]) : { rows: [], next: null },
+      ),
+    });
+  });
+
   await page.route(queryUrlPattern, async route => {
     const body = route.request().postData() ?? '';
     const mockResponse = getMockResponseForQuery(body);

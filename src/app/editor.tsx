@@ -312,16 +312,25 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 });
             });
 
+            // The server ships one edge per (from, to) pair; the id is
+            // computed here. The Map stays keyed by id with an array value so
+            // the split transform (which forks one pair into several) and the
+            // renderer keep their existing shape.
             const edgeMap: Map<string, Array<Edge>> = new Map();
 
             data.edges.forEach(edge => {
-                if (!edgeMap.has(edge.id)) {
-                    edgeMap.set(edge.id, []);
-                }
-                edgeMap.get(edge.id)!.push(edge);
+                const id = `${edge.from}-${edge.to}`;
+                edgeMap.set(id, [{
+                    ...edge,
+                    id,
+                    // The raw pair, kept for the detail endpoint: the split and
+                    // merge transforms rewrite from/to into node ids.
+                    from_symbol: edge.from,
+                    to_symbol: edge.to,
+                    from_objects: edge.from_objects ?? [],
+                }]);
             });
 
-            console.log("OBJECTS", objects, edgeMap, nodes)
             onGraphChange(
                 {
                     nodes: nodes,

@@ -191,6 +191,48 @@ export function fetchSymbolInstances(
   });
 }
 
+/** One call site of an edge (see /v1/edge/{from}/{to}/occurrences). */
+export interface EdgeOccurrenceRowJson {
+  ref_id: string;
+  from_instance_id: string;
+  object_id: string;
+  path: string;
+  project_id: string | null;
+  start_offset: number;
+  end_offset: number;
+}
+
+export interface EdgeOccurrencesResponse {
+  rows: EdgeOccurrenceRowJson[];
+  /** Opaque display-order cursor for the next page; null when done. */
+  next: string | null;
+}
+
+let edgeOccurrencesAbortController: AbortController | null = null;
+
+/**
+ * Page the call sites of one edge. `/query` ships only the (from, to) pair and
+ * a count; the call sites load when the edge is opened. Own abort controller
+ * so it never cancels the main query or another detail fetch.
+ */
+export function fetchEdgeOccurrences(
+  fromSymbol: string,
+  toSymbol: string,
+  after?: string | null,
+  limit?: number,
+): Promise<Response> {
+  if (edgeOccurrencesAbortController) {
+    edgeOccurrencesAbortController.abort();
+  }
+  edgeOccurrencesAbortController = new AbortController();
+  const qs = instancesQueryParams(after, limit);
+  const suffix = qs ? `?${qs}` : '';
+  return fetch(
+    `${askldUrl}/v1/edge/${fromSymbol}/${toSymbol}/occurrences${suffix}`,
+    { method: 'GET', signal: edgeOccurrencesAbortController.signal },
+  );
+}
+
 export function fetchProjects(): Promise<Response> {
   return fetch(`${askldUrl}/v1/index/projects`, {
     method: 'GET',
