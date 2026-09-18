@@ -6,6 +6,7 @@ import {
   setEditorQuery,
   submitQuery,
   waitForGraphNodeCount,
+  skeletonFromFixture,
 } from './test-utils';
 
 // HUB's out-edges were capped by the server: one edge (HUB→T1) shipped, the
@@ -73,11 +74,29 @@ async function interceptGraph(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(graphResponse),
+      body: JSON.stringify(skeletonFromFixture(graphResponse as any)),
     });
   });
   await page.route('**/source/**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'text/plain', body: 'package main\n' });
+  });
+  await page.route('**/v1/symbol/**/instances**', async (route) => {
+    const m = new URL(route.request().url()).pathname.match(/\/v1\/symbol\/([^/]+)\/instances/);
+    const node = (graphResponse as any).nodes.find((n: any) => n.id === m?.[1]);
+    const rows = (node?.symbol_instances ?? []).map((i: any) => ({
+      id: i.id,
+      instance_type: i.instance_type,
+      object_id: i.object_id,
+      path: 'mock/a.go',
+      project_id: i.project_id ?? '1',
+      start_offset: i.start_offset,
+      end_offset: i.end_offset,
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ rows, next: null, total: rows.length }),
+    });
   });
 }
 

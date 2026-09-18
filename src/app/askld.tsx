@@ -45,8 +45,9 @@ export function fetchQuery(query: string): Promise<Response> {
     queryAbortController.abort();
   }
   queryAbortController = new AbortController();
-  console.log(`${askldUrl}`, query);
-  return fetch(`${askldUrl}/query`, {
+  // The interactive client asks for the skeleton: symbol relationships only.
+  // Instances and call sites load per node/edge when opened.
+  return fetch(`${askldUrl}/query?detail=skeleton`, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain'
@@ -160,11 +161,22 @@ export interface SymbolInstancesResponse {
   total: number;
 }
 
-/** Build the query string for an instances page request. Pure, for testing. */
-export function instancesQueryParams(after?: string | number | null, limit?: number): string {
+/**
+ * Build the query string for an instances page request. Pure, for testing.
+ *
+ * `parent` scopes the listing to one containment context — the same symbol
+ * can appear under several parents as separate nodes, and each must page
+ * only its own instances.
+ */
+export function instancesQueryParams(
+  after?: string | number | null,
+  limit?: number,
+  parent?: string | null,
+): string {
   const params = new URLSearchParams();
   if (after !== undefined && after !== null) params.set('after', String(after));
   if (limit !== undefined) params.set('limit', String(limit));
+  if (parent) params.set('parent', parent);
   return params.toString();
 }
 
@@ -178,12 +190,13 @@ export function fetchSymbolInstances(
   symbolId: string,
   after?: string | number | null,
   limit?: number,
+  parent?: string | null,
 ): Promise<Response> {
   if (instancesAbortController) {
     instancesAbortController.abort();
   }
   instancesAbortController = new AbortController();
-  const qs = instancesQueryParams(after, limit);
+  const qs = instancesQueryParams(after, limit, parent);
   const suffix = qs ? `?${qs}` : '';
   return fetch(`${askldUrl}/v1/symbol/${symbolId}/instances${suffix}`, {
     method: 'GET',

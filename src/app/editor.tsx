@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Editor, Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditor, IRange } from 'monaco-editor';
-import { Node, Edge, HasEdge, Graph, GraphObject } from './graph';
+import { Node, Edge, Graph, GraphObject, QueryStatement } from './graph';
 import { setupEditorTestApis } from './testing/editor_test_utils';
 
 import { fetchQuery } from './askld';
@@ -28,27 +28,38 @@ interface EditorProps {
     onQueryRun?: (queryText: string) => void;
 }
 
-type RustGraphObjectEntry = { object_id: string; path: string; project_id?: string | null };
+/**
+ * The skeleton wire shape (`/query?detail=skeleton`): symbol relationships
+ * only. Nodes carry no instances and edges no call sites — both are fetched
+ * per node/edge when opened. There is no `objects` map either; detail rows
+ * carry their own paths.
+ */
+interface SkeletonNode {
+    id: string;
+    symbol_ids: Array<string>;
+    label: string;
+    symbol_type?: string;
+    is_directory: boolean;
+    instance_count: number;
+    parent_symbol?: string | null;
+    query_statements?: Array<QueryStatement>;
+}
+
+interface SkeletonEdge {
+    from: string;
+    to: string;
+    from_symbol: string;
+    to_symbol: string;
+    occurrence_count: number;
+}
 
 interface RustGraph {
-    nodes: Map<string, Node>;
-    edges: Set<Edge>;
-    has_edges?: Array<HasEdge>;
-    objects: Array<RustGraphObjectEntry>;
+    nodes: Array<SkeletonNode>;
+    edges: Array<SkeletonEdge>;
+    has_edges?: Array<{ parent: string; child: string }>;
     warnings?: QueryDiagnostic[];
     /** Symbol ids whose out-edge list the server capped (fetch-more). */
     edges_truncated?: Array<string>;
-}
-
-/** Symbol → exact total for nodes whose instance list the server capped. */
-function collectInstanceTruncations(nodes: Map<string, Node>): Map<string, number> {
-    const truncated = new Map<string, number>();
-    nodes.forEach((node) => {
-        if (node.instances_truncated && node.total_instances !== undefined) {
-            truncated.set(node.id, node.total_instances);
-        }
-    });
-    return truncated;
 }
 
 interface QueryDiagnostic {
@@ -292,42 +303,37 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
 
             const data: RustGraph = await response.json();
             console.log('data is', data);
-            let nodes = new Map<string, Node>()
+            const nodes = new Map<string, Node>();
             data.nodes.forEach((node) => {
-                nodes.set(node.id, node)
-            })
-
-            let objects = new Map<string, GraphObject>()
-            data.objects.forEach((entry) => {
-                if (!entry || typeof entry !== 'object') {
-                    return;
-                }
-                const info = entry as { object_id?: unknown; path?: unknown; project_id?: unknown };
-                if (typeof info.object_id !== 'string' || typeof info.path !== 'string') {
-                    return;
-                }
-                objects.set(info.object_id, {
-                    path: info.path,
-                    project_id: typeof info.project_id === 'string' ? info.project_id : null,
+                nodes.set(node.id, {
+                    id: node.id,
+                    symbol_ids: node.symbol_ids,
+                    label: node.label,
+                    symbol_type: node.symbol_type,
+                    is_directory: node.is_directory,
+                    instance_count: node.instance_count,
+                    ...(node.parent_symbol ? { parent_symbol: node.parent_symbol } : {}),
+                    ...(node.query_statements ? { query_statements: node.query_statements } : {}),
                 });
             });
 
-            // The server ships one edge per (from, to) pair; the id is
-            // computed here. The Map stays keyed by id with an array value so
-            // the split transform (which forks one pair into several) and the
-            // renderer keep their existing shape.
-            const edgeMap: Map<string, Array<Edge>> = new Map();
+            // Files are learned as detail loads — every instance/occurrence
+            // row carries its own path — so the graph starts with none.
+            const objects = new Map<string, GraphObject>();
 
+            // One edge per (from, to) pair; the id is computed here. The Map
+            // stays keyed by id with an array value because the renderer and
+            // the merge transform expect that shape.
+            const edgeMap: Map<string, Array<Edge>> = new Map();
             data.edges.forEach(edge => {
                 const id = `${edge.from}-${edge.to}`;
                 edgeMap.set(id, [{
-                    ...edge,
                     id,
-                    // The raw pair, kept for the detail endpoint: the split and
-                    // merge transforms rewrite from/to into node ids.
-                    from_symbol: edge.from,
-                    to_symbol: edge.to,
-                    from_objects: edge.from_objects ?? [],
+                    from: edge.from,
+                    to: edge.to,
+                    from_symbol: edge.from_symbol,
+                    to_symbol: edge.to_symbol,
+                    occurrence_count: edge.occurrence_count,
                 }]);
             });
 
@@ -335,10 +341,17 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                 {
                     nodes: nodes,
                     edges: edgeMap,
-                    has_edges: data.has_edges ?? [],
+                    has_edges: (data.has_edges ?? []).map((he) => ({
+                        id: `has-${he.parent}-${he.child}`,
+                        parent: he.parent,
+                        child: he.child,
+                        // Instance-level containment lived here only for the
+                        // client split, which the server now does.
+                        parent_instance: '',
+                        child_instance: '',
+                    })),
                     objects: objects,
                     edges_truncated: new Set(data.edges_truncated ?? []),
-                    instances_truncated: collectInstanceTruncations(nodes),
                 }
             );
             onQueryRun?.(queryText);

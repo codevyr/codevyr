@@ -10,6 +10,14 @@ export interface CodeFocus {
     object_id: string;
     start_offset: OffsetValue;
     end_offset?: OffsetValue | null;
+    /**
+     * File identity carried from the detail row that produced this focus.
+     * The skeleton ships no objects map, and registering one is a state
+     * update that lands a tick too late for navigation — so the row passes
+     * what it already knows.
+     */
+    path?: string | null;
+    project_id?: string | null;
 }
 
 export interface EditorParams {

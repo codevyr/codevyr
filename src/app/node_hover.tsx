@@ -67,25 +67,23 @@ function compareSymbolInstances(
 }
 
 interface SymbolInstanceHoverProps {
-  instance: SymbolInstance;
-  graph: Graph;
+  row: SymbolInstancePageRowJson;
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
   onAction?: () => void;
 }
 
-function SymbolInstanceHover({ instance, graph, setCodeFocus, fileContents, onAction }: SymbolInstanceHoverProps) {
-  const filePath = graph.objects.get(instance.object_id)?.path ?? 'Undefined';
-  const location = formatOffsetLocation(
-    fileContents.get(instance.object_id),
-    instance.start_offset,
-  );
+function SymbolInstanceHover({ row, setCodeFocus, fileContents, onAction }: SymbolInstanceHoverProps) {
+  // The row carries its own path — no objects map needed.
+  const filePath = row.path;
+  const location = formatOffsetLocation(fileContents.get(row.object_id), row.start_offset);
+  const instance = row;
 
   function openInEditor() {
     setCodeFocus({
-      object_id: instance.object_id,
-      start_offset: instance.start_offset,
-      end_offset: instance.end_offset,
+      object_id: row.object_id,
+      start_offset: row.start_offset,
+      end_offset: row.end_offset,
     });
   }
 
@@ -147,8 +145,8 @@ function SectionHeader({ name, expanded, onToggle }: { name: string; expanded: b
 
 interface NodeHoverSectionProps {
   sectionName: string;
-  instances: SymbolInstance[];
-  graph: Graph;
+  /** Fetched instance rows, already in the server's display order. */
+  rows: SymbolInstancePageRowJson[];
   setCodeFocus: (type: CodeFocus) => void;
   fileContents: Map<string, string>;
   onAction?: () => void;
@@ -160,32 +158,27 @@ function capitalizeInstanceType(type: string): string {
 
 function NodeHoverSection({
   sectionName,
-  instances,
-  graph,
+  rows,
   setCodeFocus,
   fileContents,
   onAction,
 }: NodeHoverSectionProps) {
   const [expanded, setExpanded] = useState(true);
 
-  if (instances.length === 0) {
+  if (rows.length === 0) {
     return null;
   }
 
-  const sortedInstances = [...instances].sort((left, right) =>
-    compareSymbolInstances(left, right, graph, fileContents),
-  );
-
+  // No client-side sort: the endpoint pages in display order already.
   return (
     <>
       <SectionHeader name={sectionName} expanded={expanded} onToggle={() => setExpanded(!expanded)} />
       {expanded && (
         <tbody>
-          {sortedInstances.map((instance) => (
+          {rows.map((row) => (
             <SymbolInstanceHover
-              key={instance.id}
-              instance={instance}
-              graph={graph}
+              key={row.id}
+              row={row}
               setCodeFocus={setCodeFocus}
               fileContents={fileContents}
               onAction={onAction}
@@ -283,12 +276,12 @@ export interface NodeHoverProps {
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
   isGroupNode?: boolean;
-  revealDirectory?: (objectId: string) => void;
+  revealDirectory?: (objectId: string, path?: string | null, projectId?: string | null) => void;
   hiddenRefEdges?: Array<Edge>;
   /** Raw symbol ids whose out-edges the server truncated (fetch-more). */
   truncatedRefSymbols?: Array<string>;
-  /** (symbol, exact total) pairs whose instance list the server truncated. */
-  truncatedInstances?: Array<{ symbol: string; total: number }>;
+  /** Learn a file's path/project as detail rows arrive (no objects map). */
+  registerObject?: (objectId: string, path: string, projectId: string | null) => void;
   revealQueryRange?: (start: number, end: number) => void;
   onAction?: () => void;
 }
@@ -304,124 +297,78 @@ export function NodeHover({
   revealDirectory,
   hiddenRefEdges,
   truncatedRefSymbols,
-  truncatedInstances,
+  registerObject,
   revealQueryRange,
   onAction,
 }: NodeHoverProps) {
-  // Fetched instance pages, keyed by truncated symbol. ONE load control
-  // serves the whole hover: instances render grouped by type, so a per-type
-  // or per-symbol button would be meaningless — fetched rows merge into the
-  // typed sections below and every truncated symbol pages together.
-  const [fetchedPages, setFetchedPages] = useState<
-    Map<string, { rows: SymbolInstancePageRowJson[]; next: string | number | null; loaded: boolean }>
-  >(new Map());
-  const [instancesLoading, setInstancesLoading] = useState(false);
-  const [instancesError, setInstancesError] = useState<string | null>(null);
-  const truncated = truncatedInstances ?? [];
+  // Instances are NOT in the skeleton — they load here, on open. There is
+  // no inlined list to reconcile against, which is what used to make a
+  // directory node's list render empty: every shipped instance was filtered
+  // out as a "directory instance" and the fetched pages were deduped away.
+  // Now the hover simply renders what the endpoint returns.
+  const symbolIds = node.symbol_ids;
+  const parentSymbol = node.parent_symbol;
+  const [rows, setRows] = useState<Array<SymbolInstancePageRowJson>>([]);
+  const [next, setNext] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function loadMoreInstances() {
-    setInstancesLoading(true);
-    setInstancesError(null);
-    try {
-      const nextPages = new Map(fetchedPages);
-      for (const { symbol } of truncated) {
-        const page = nextPages.get(symbol);
-        if (page && page.loaded && page.next === null) {
-          continue; // this symbol's listing is exhausted
-        }
-        const after = page?.loaded ? page.next : null;
-        const response = await fetchSymbolInstances(symbol, after);
+  const loadPage = useCallback(
+    async (after: string | null) => {
+      setLoading(true);
+      setError(null);
+      try {
+        // One symbol per node normally; a merged node pages its first symbol
+        // and offers the rest through "Load more".
+        const response = await fetchSymbolInstances(symbolIds[0], after, undefined, parentSymbol);
         if (!response.ok) {
           throw new Error(`instances request failed (${response.status})`);
         }
         const data: SymbolInstancesResponse = await response.json();
-        nextPages.set(symbol, {
-          rows: [...(page?.rows ?? []), ...data.rows],
-          next: data.next,
-          loaded: true,
-        });
+        setRows((prev) => (after ? [...prev, ...data.rows] : data.rows));
+        setNext(typeof data.next === 'string' ? data.next : null);
+        setTotal(data.total);
+        for (const row of data.rows) {
+          ensureFileContent(row.object_id);
+          registerObject?.(row.object_id, row.path, row.project_id);
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return; // superseded by a newer fetch — not an error state
+        }
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
       }
-      setFetchedPages(nextPages);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return; // superseded by a newer fetch — not an error state
-      }
-      setInstancesError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setInstancesLoading(false);
+    },
+    [symbolIds, parentSymbol, ensureFileContent, registerObject],
+  );
+
+  useEffect(() => {
+    void loadPage(null);
+  }, [loadPage]);
+
+  // Group the loaded instances by type, exactly as before — but from the
+  // fetched rows, and WITHOUT the group-node filter that hid them.
+  const instancesByType = new Map<string, SymbolInstancePageRowJson[]>();
+  for (const row of rows) {
+    if (row.instance_type === 'unspecified') continue;
+    const bucket = instancesByType.get(row.instance_type);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      instancesByType.set(row.instance_type, [row]);
     }
   }
 
-  // Merge fetched rows into the node's instances, deduped by id (the
-  // shipped instances are priority-ordered, pages are id-ordered — overlap
-  // is expected, not a bug).
-  const allFetchedRows: SymbolInstancePageRowJson[] = [];
-  fetchedPages.forEach((page) => allFetchedRows.push(...page.rows));
-  const knownIds = new Set(node.symbol_instances.map((inst) => inst.id));
-  const fetchedInstances: SymbolInstance[] = [];
-  fetchedPages.forEach((page, symbol) => {
-    for (const row of page.rows) {
-      if (!knownIds.has(row.id)) {
-        knownIds.add(row.id);
-        fetchedInstances.push(instanceRowToSymbolInstance(row, symbol));
-      }
-    }
-  });
-  const allInstances = [...node.symbol_instances, ...fetchedInstances];
-  // Fetched rows may reference files the graph never shipped; overlay their
-  // paths so rendering and sorting resolve.
-  const hoverGraph =
-    allFetchedRows.length > 0
-      ? { ...graph, objects: overlayObjects(graph.objects, allFetchedRows) }
-      : graph;
-
-  // "N of M shown": M sums the truncated symbols' exact totals plus any
-  // shipped instances of symbols that were NOT truncated.
-  const truncatedSymbols = new Set(truncated.map((t) => t.symbol));
-  const totalAvailable =
-    truncated.reduce((sum, t) => sum + t.total, 0) +
-    node.symbol_instances.filter((inst) => !truncatedSymbols.has(inst.symbol)).length;
-  const hasMoreInstances = truncated.some(({ symbol }) => {
-    const page = fetchedPages.get(symbol);
-    return !page || !page.loaded || page.next !== null;
-  });
-
-  // For group nodes, separate directory instances from real code references
-  const realInstances = isGroupNode
-    ? allInstances.filter((inst) => !isDirectoryInstance(inst))
-    : allInstances;
-  const selfRefInstance = isGroupNode
-    ? node.symbol_instances.find((inst) => isSelfReference(inst)) ?? node.symbol_instances.find((inst) => isDirectoryInstance(inst))
+  // A directory's own object is its self-reference (the empty 1..0 range).
+  const dirRow = node.is_directory
+    ? rows.find((r) => r.start_offset === 1 && r.end_offset === 0) ?? rows[0]
     : undefined;
-
-  // Group instances by instance_type, skipping "unspecified"
-  const instancesByType = new Map<string, SymbolInstance[]>();
-  realInstances.forEach((instance) => {
-    const type = instance.instance_type;
-    if (type === 'unspecified') return;
-    if (!instancesByType.has(type)) {
-      instancesByType.set(type, []);
-    }
-    instancesByType.get(type)!.push(instance);
-  });
-
-  // Warm the file cache for the instances rendered here. Hidden-reference
-  // call sites are no longer prefetched: they arrive with their own
-  // `ensureFileContent` when their edge is expanded.
-  useEffect(() => {
-    const seen = new Set<string>();
-    realInstances.forEach((instance) => {
-      if (seen.has(instance.object_id)) {
-        return;
-      }
-      seen.add(instance.object_id);
-      ensureFileContent(instance.object_id);
-    });
-  }, [node, ensureFileContent, realInstances]);
-
-  const dirPath = selfRefInstance
-    ? graph.objects.get(selfRefInstance.object_id)?.path
-    : undefined;
+  const dirPath = dirRow?.path;
+  const dirObjectId = dirRow?.object_id;
+  const dirProjectId = dirRow?.project_id;
 
   return (
     <div className="node-hover">
@@ -429,11 +376,11 @@ export function NodeHover({
         <div className="node-hover-title" title={node.label}>
           {node.label}
         </div>
-        {isGroupNode && revealDirectory && selfRefInstance && (
+        {node.is_directory && revealDirectory && dirObjectId && (
           <button
             type="button"
             className="node-hover-icon"
-            onClick={() => revealDirectory(selfRefInstance.object_id)}
+            onClick={() => revealDirectory(dirObjectId, dirPath, dirProjectId)}
             title="Reveal in tree"
           >
             <LuFolderOpen />
@@ -446,7 +393,7 @@ export function NodeHover({
           <LuCopy />
         </button>
       </div>
-      {isGroupNode && realInstances.length === 0 && dirPath && (
+      {node.is_directory && dirPath && (
         <div className="node-hover-dir-path">{dirPath}</div>
       )}
       <table>
@@ -459,48 +406,49 @@ export function NodeHover({
         )}
         {Array.from(instancesByType.entries())
           .sort(([a], [b]) => (INSTANCE_TYPE_ORDER[a] ?? 99) - (INSTANCE_TYPE_ORDER[b] ?? 99))
-          .map(([typeName, instances]) => (
+          .map(([typeName, typeRows]) => (
           <NodeHoverSection
             key={typeName}
             sectionName={capitalizeInstanceType(typeName)}
-            instances={instances}
-            graph={hoverGraph}
+            rows={typeRows}
             setCodeFocus={setCodeFocus}
             fileContents={fileContents}
             onAction={onAction}
           />
         ))}
-        {truncated.length > 0 && (
-          <tbody data-testid="load-instances-row">
-            {instancesError && (
-              <tr>
-                <td colSpan={3} data-testid="instances-error">
-                  {instancesError}
-                </td>
-              </tr>
-            )}
+        <tbody data-testid="load-instances-row">
+          {error && (
             <tr>
-              <td colSpan={3}>
-                <span>{formatMoreInstancesLabel(allInstances.length, totalAvailable)}</span>
-                {hasMoreInstances && (
-                  <button
-                    type="button"
-                    className="node-hover-text-btn"
-                    data-testid="load-instances-more"
-                    disabled={instancesLoading}
-                    style={{ marginLeft: '0.5rem' }}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void loadMoreInstances();
-                    }}
-                  >
-                    {instancesLoading ? 'Loading…' : 'Load more'}
-                  </button>
-                )}
+              <td colSpan={3} data-testid="instances-error">
+                {error}
               </td>
             </tr>
-          </tbody>
-        )}
+          )}
+          <tr>
+            <td colSpan={3}>
+              <span>
+                {loading && rows.length === 0
+                  ? 'Loading instances…'
+                  : formatMoreInstancesLabel(rows.length, total ?? rows.length)}
+              </span>
+              {next && (
+                <button
+                  type="button"
+                  className="node-hover-text-btn"
+                  data-testid="load-instances-more"
+                  disabled={loading}
+                  style={{ marginLeft: '0.5rem' }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void loadPage(next);
+                  }}
+                >
+                  {loading ? 'Loading…' : 'Load more'}
+                </button>
+              )}
+            </td>
+          </tr>
+        </tbody>
       </table>
       {hiddenRefEdges && hiddenRefEdges.length > 0 && (
         <HiddenReferencesSection
@@ -787,6 +735,8 @@ function EdgeOccurrenceRow({
       object_id: row.object_id,
       start_offset: row.start_offset,
       end_offset: row.end_offset,
+      path: row.path,
+      project_id: row.project_id,
     });
   }
 

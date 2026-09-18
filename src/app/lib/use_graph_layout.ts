@@ -16,10 +16,8 @@ import {
   type Node as GraphNode,
   buildHierarchy,
   filterRedundantEdges,
-  splitMultiParentNodes,
   mergeSameNameNodes,
   truncatedSymbolsForNode,
-  truncatedInstanceSymbols,
 } from '../graph';
 import type { CodeFocus } from '../code_viewer';
 import {
@@ -39,14 +37,13 @@ export type GraphNodeData = {
   ensureFileContent: (objectId: string) => void;
   selectFile: (codeFocus: CodeFocus) => void;
   focusNode: (nodeId: string) => void;
-  revealDirectory: (objectId: string) => void;
+  registerObject?: (objectId: string, path: string, projectId: string | null) => void;
+  revealDirectory: (objectId: string, path?: string | null, projectId?: string | null) => void;
   revealQueryRange?: (start: number, end: number) => void;
   isGroupNode?: boolean;
   hiddenRefEdges?: Array<GraphEdge>;
   /** Raw symbol ids of this node whose out-edges the server truncated. */
   truncatedRefSymbols?: Array<string>;
-  /** (symbol, exact total) pairs whose instance list the server truncated. */
-  truncatedInstances?: Array<{ symbol: string; total: number }>;
 };
 
 export type GraphEdgeData = {
@@ -303,8 +300,9 @@ interface UseGraphLayoutOptions {
   selectFile: (codeFocus: CodeFocus) => void;
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
-  revealDirectory: (objectId: string) => void;
+  revealDirectory: (objectId: string, path?: string | null, projectId?: string | null) => void;
   revealQueryRange?: (start: number, end: number) => void;
+  registerObject?: (objectId: string, path: string, projectId: string | null) => void;
   autoMerge?: boolean;
 }
 
@@ -313,6 +311,7 @@ export function useGraphLayout({
   selectFile,
   fileContents,
   ensureFileContent,
+  registerObject,
   revealDirectory,
   revealQueryRange,
   autoMerge = true,
@@ -326,10 +325,11 @@ export function useGraphLayout({
   const [layoutGen, setLayoutGen] = useState(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
 
-  const splitGraph = useMemo(() => splitMultiParentNodes(graph), [graph]);
+  // The server delivers already-split nodes (one per containment context);
+  // merging same-name nodes stays a client-side view toggle.
   const mergedGraph = useMemo(
-    () => autoMerge ? mergeSameNameNodes(splitGraph) : splitGraph,
-    [splitGraph, autoMerge],
+    () => autoMerge ? mergeSameNameNodes(graph) : graph,
+    [graph, autoMerge],
   );
   const displayLabels = useMemo(() => buildDisplayLabelMap(mergedGraph), [mergedGraph]);
 
@@ -428,6 +428,7 @@ export function useGraphLayout({
           graph: mergedGraph,
           fileContents,
           ensureFileContent,
+          registerObject,
           selectFile,
           focusNode,
           revealDirectory,
@@ -435,7 +436,6 @@ export function useGraphLayout({
           isGroupNode: isGroup,
           hiddenRefEdges: hiddenByHas.get(node.id),
           truncatedRefSymbols: truncatedSymbolsForNode(node, mergedGraph),
-          truncatedInstances: truncatedInstanceSymbols(node, mergedGraph),
         },
       };
       if (parentId) {
@@ -485,7 +485,7 @@ export function useGraphLayout({
     });
 
     return { nextNodes, nextEdges, hierarchy };
-  }, [mergedGraph, displayLabels, fileContents, ensureFileContent, selectFile, focusNode, revealDirectory, revealQueryRange]);
+  }, [mergedGraph, displayLabels, fileContents, ensureFileContent, registerObject, selectFile, focusNode, revealDirectory, revealQueryRange]);
 
   // ── Main layout effect ─────────────────────────────────────────────
 

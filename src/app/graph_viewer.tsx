@@ -14,7 +14,12 @@ import ReactFlow, {
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { type Edge as GraphEdge, type Graph, type HierarchyInfo, type Node as GraphNode, isDirectoryInstance, isSelfReference } from './graph';
 import { EdgesHover, NodeHover } from './node_hover';
-import { fetchEdgeOccurrences, type EdgeOccurrencesResponse } from './askld';
+import {
+  fetchEdgeOccurrences,
+  fetchSymbolInstances,
+  type EdgeOccurrencesResponse,
+  type SymbolInstancesResponse,
+} from './askld';
 import { CodeFocus } from './code_viewer';
 import { GraphSearchBar } from './graph_search';
 import { useGraphSearch } from './lib/use_graph_search';
@@ -43,7 +48,9 @@ export interface GraphProps {
   selectFile: (codeFocus: CodeFocus) => void;
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
-  revealDirectory: (objectId: string) => void;
+  /** Learn a file's path/project from a fetched detail row. */
+  registerObject?: (objectId: string, path: string, projectId: string | null) => void;
+  revealDirectory: (objectId: string, path?: string | null, projectId?: string | null) => void;
   revealQueryRange?: (start: number, end: number) => void;
   autoMerge: boolean;
   effectiveMode: InteractionMode;
@@ -173,19 +180,19 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
   const menuContext = useContext(MenuContext);
   const activeMenu = menuContext?.activeMenu ?? null;
   const setActiveMenu = menuContext?.setActiveMenu;
-  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, revealQueryRange, hiddenRefEdges, truncatedRefSymbols, truncatedInstances } = data;
+  const { node, graph, fileContents, ensureFileContent, selectFile, isGroupNode, revealDirectory, revealQueryRange, hiddenRefEdges, truncatedRefSymbols, registerObject } = data;
   const displayLabel = data.label ?? node.label;
   const nodeStyle = node.color
     ? ({ '--graph-node-color': node.color } as React.CSSProperties)
     : undefined;
   const isOpen = activeMenu?.kind === 'node' && activeMenu.id === id;
   const isSelected = selected ?? false;
-  const instanceCount = node.symbol_instances.length;
-  const isDirectoryNode = isGroupNode || node.symbol_instances.every((inst) => isDirectoryInstance(inst));
+  // Skeleton nodes carry counts and a container flag, not instances.
+  const instanceCount = node.instance_count;
+  const isDirectoryNode = isGroupNode || node.is_directory;
 
   const hasHiddenRefs = (hiddenRefEdges?.length ?? 0) > 0
-    || (truncatedRefSymbols?.length ?? 0) > 0
-    || (truncatedInstances?.length ?? 0) > 0;
+    || (truncatedRefSymbols?.length ?? 0) > 0;
 
   const closeMenu = useCallback(() => dismissContextMenu(), []);
 
@@ -206,8 +213,8 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
   );
 
   const wrappedRevealDirectory = useCallback(
-    (objectId: string) => {
-      revealDirectory(objectId);
+    (objectId: string, path?: string | null, projectId?: string | null) => {
+      revealDirectory(objectId, path, projectId);
       closeMenu();
     },
     [revealDirectory, closeMenu],
@@ -217,55 +224,79 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (event.shiftKey || event.ctrlKey || event.metaKey) return;
 
-      if (isDirectoryNode) {
-        const realInstances = node.symbol_instances.filter((inst) => !isDirectoryInstance(inst));
-        if (realInstances.length === 1 && !hasHiddenRefs) {
-          const inst = realInstances[0];
-          selectFile({
-            object_id: inst.object_id,
-            start_offset: inst.start_offset,
-            end_offset: inst.end_offset,
-          });
-          setActiveMenu?.(null);
-          return;
-        }
-        if (realInstances.length > 1 || hasHiddenRefs) {
-          if (isOpen) {
+      // A node carries no instance inline, so any direct action fetches
+      // first. A container node reveals itself in the file tree; a node with
+      // exactly ONE instance jumps to it (nothing to choose, same rule as a
+      // single-call-site edge). Anything else opens the menu, which loads
+      // the instances and lets the user pick — guessing a representative is
+      // what made a directory node's list render empty.
+      // Only a filesystem symbol is revealable in the tree. A module also
+      // renders as a group, but it is a logical grouping — clicking it
+      // should open its hover, not jump the file tree.
+      const revealable = node.symbol_type === 'Directory' || node.symbol_type === 'File';
+      if (revealable && !hasHiddenRefs) {
+        void (async () => {
+          try {
+            const response = await fetchSymbolInstances(
+              node.symbol_ids[0],
+              null,
+              undefined,
+              node.parent_symbol,
+            );
+            if (!response.ok) return;
+            const data: SymbolInstancesResponse = await response.json();
+            // A directory's own object is its self-reference (the empty
+            // 1..0 range), not whichever instance sorts first — those point
+            // at the files it contains.
+            const row =
+              data.rows.find((r) => r.start_offset === 1 && r.end_offset === 0) ?? data.rows[0];
+            if (!row) return;
+            registerObject?.(row.object_id, row.path, row.project_id);
+            revealDirectory(row.object_id, row.path, row.project_id);
             setActiveMenu?.(null);
-            return;
+          } catch {
+            // Best-effort; the menu's "Reveal in tree" remains.
           }
-          triggerContextMenu(event);
-          return;
-        }
-        // Only directory instances — reveal directory in tree
-        const selfRef = node.symbol_instances.find((inst) => isSelfReference(inst)) ?? node.symbol_instances[0];
-        if (selfRef) {
-          revealDirectory(selfRef.object_id);
-        }
-        setActiveMenu?.(null);
+        })();
         return;
       }
 
       if (instanceCount === 1 && !hasHiddenRefs) {
-        const inst = node.symbol_instances[0];
-        selectFile({
-          object_id: inst.object_id,
-          start_offset: inst.start_offset,
-          end_offset: inst.end_offset,
-        });
-        setActiveMenu?.(null);
+        void (async () => {
+          try {
+            const response = await fetchSymbolInstances(
+              node.symbol_ids[0],
+              null,
+              1,
+              node.parent_symbol,
+            );
+            if (!response.ok) return;
+            const data: SymbolInstancesResponse = await response.json();
+            const row = data.rows[0];
+            if (!row) return;
+            registerObject?.(row.object_id, row.path, row.project_id);
+            selectFile({
+              object_id: row.object_id,
+              start_offset: row.start_offset,
+              end_offset: row.end_offset,
+              path: row.path,
+              project_id: row.project_id,
+            });
+            setActiveMenu?.(null);
+          } catch {
+            // Best-effort navigation; the menu stays available.
+          }
+        })();
         return;
       }
 
-      if (instanceCount > 1 || hasHiddenRefs) {
-        if (isOpen) {
-          setActiveMenu?.(null);
-          return;
-        }
-        triggerContextMenu(event);
+      if (isOpen) {
+        setActiveMenu?.(null);
+        return;
       }
+      triggerContextMenu(event);
     },
-    [instanceCount, isDirectoryNode, isOpen, hasHiddenRefs, node, revealDirectory, selectFile, setActiveMenu],
+    [instanceCount, hasHiddenRefs, node, isOpen, registerObject, revealDirectory, selectFile, setActiveMenu],
   );
 
   const handleOpenChange = useCallback(
@@ -327,7 +358,7 @@ function GraphNodeComponent({ id, data, selected }: GraphNodeProps) {
             revealDirectory={wrappedRevealDirectory}
             hiddenRefEdges={hiddenRefEdges}
             truncatedRefSymbols={truncatedRefSymbols}
-            truncatedInstances={truncatedInstances}
+            registerObject={registerObject}
             revealQueryRange={revealQueryRange}
             onAction={closeMenu}
           />
@@ -459,6 +490,8 @@ function GraphEdgeComponent({
               object_id: row.object_id,
               start_offset: row.start_offset,
               end_offset: row.end_offset,
+              path: row.path,
+              project_id: row.project_id,
             });
             setActiveMenu?.(null);
           } catch {
@@ -534,6 +567,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
   selectFile,
   fileContents,
   ensureFileContent,
+  registerObject,
   revealDirectory,
   revealQueryRange,
   autoMerge,
@@ -560,7 +594,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
     reactFlowInstanceRef,
     focusNode,
     handleRelayout,
-  } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, revealDirectory, revealQueryRange, autoMerge });
+  } = useGraphLayout({ graph, selectFile, fileContents, ensureFileContent, registerObject, revealDirectory, revealQueryRange, autoMerge });
 
   const [renderAllForCapture, setRenderAllForCapture] = useState(false);
   const handleScreenshot = useScreenshot({ nodesRef, renderAllForCapture, setRenderAll: setRenderAllForCapture, reactFlowInstanceRef });

@@ -26,16 +26,32 @@ export interface QueryStatement {
     text: string;
 }
 
+/**
+ * A node of the skeleton graph: a symbol (in one containment context) and
+ * the counts needed to draw it. Instances are NOT here — they are display
+ * detail fetched per node when the hover opens.
+ */
 export interface Node {
+    /** Display id: the symbol id, or `{symbol}\0{context}` when split. */
     id: string;
+    /**
+     * Raw symbol id(s) this node covers — the key the detail endpoints take.
+     * One for a server-split node; several after same-name merging.
+     */
+    symbol_ids: Array<string>;
     label: string;
-    symbol_instances: Array<SymbolInstance>;
+    symbol_type?: string;
+    /** Container symbol (module/directory/file) — from the SYMBOL type. */
+    is_directory: boolean;
+    /** Instances in the RESULT (the node badge), not the symbol's total. */
+    instance_count: number;
+    /**
+     * Containment context this node was split into: the parent SYMBOL id, or
+     * undefined at top level. Scopes the node's instance listing.
+     */
+    parent_symbol?: string;
     query_statements?: Array<QueryStatement>;
     color?: string;
-    /** Server capped this node's instance list (fetch the rest per symbol). */
-    instances_truncated?: boolean;
-    /** Exact instance count in the result before capping. */
-    total_instances?: number;
 }
 
 /**
@@ -58,11 +74,10 @@ export interface Edge {
     to_symbol: string;
     occurrence_count: number;
     /**
-     * Distinct files this pair's call sites live in — structural, used by
-     * [`splitMultiParentNodes`] to route an edge to the split whose files
-     * contain its call sites. Not display detail.
+     * Distinct files this pair's call sites live in. The server routes split
+     * edges with it; kept on the wire for `detail=full` clients.
      */
-    from_objects: Array<string>;
+    from_objects?: Array<string>;
 }
 
 export interface HasEdge {
@@ -86,66 +101,23 @@ export interface Graph {
     /**
      * Raw symbol ids whose implicit out-edge list the server capped
      * (assembly capping — the node set is complete, only the edge listing is
-     * paged).  Keyed by SYMBOL, not node id: split/merged node ids diverge
-     * from server ids, but every node's `symbol_instances[*].symbol` still
-     * carries the raw id, so membership is resolved per node through its
-     * instances.  Carried verbatim through the graph transforms.
+     * paged).  Keyed by SYMBOL, not node id: split and merged node ids
+     * diverge from server ids, so membership is resolved per node through
+     * its `symbol_ids`.
      */
     edges_truncated: Set<string>;
-    /**
-     * Symbol id → exact total for nodes whose instance list the server
-     * capped.  Same symbol-keyed design as `edges_truncated`, same carry
-     * rule through the transforms.
-     */
-    instances_truncated: Map<string, number>;
 }
 
 /**
- * The raw symbol ids of `node` whose out-edge list the server truncated —
- * resolved through the node's instances so it survives node splitting (same
- * symbol, suffixed id) and same-name merging (several symbols, one node).
- * Empty array when nothing is truncated.
+ * The raw symbol ids of `node` whose out-edge list the server truncated.
+ * Read straight off `symbol_ids`, which the server sets per node (one entry
+ * for a split node) and merging unions — no id parsing anywhere.
  */
 export function truncatedSymbolsForNode(node: Node, graph: Graph): Array<string> {
     if (graph.edges_truncated.size === 0) {
         return [];
     }
-    const seen = new Set<string>();
-    const result: Array<string> = [];
-    for (const inst of node.symbol_instances) {
-        if (!seen.has(inst.symbol)) {
-            seen.add(inst.symbol);
-            if (graph.edges_truncated.has(inst.symbol)) {
-                result.push(inst.symbol);
-            }
-        }
-    }
-    return result;
-}
-
-/**
- * The (symbol, total) pairs of `node` whose instance list the server capped —
- * resolved through the node's instances, like [`truncatedSymbolsForNode`].
- */
-export function truncatedInstanceSymbols(
-    node: Node,
-    graph: Graph,
-): Array<{ symbol: string; total: number }> {
-    if (graph.instances_truncated.size === 0) {
-        return [];
-    }
-    const seen = new Set<string>();
-    const result: Array<{ symbol: string; total: number }> = [];
-    for (const inst of node.symbol_instances) {
-        if (!seen.has(inst.symbol)) {
-            seen.add(inst.symbol);
-            const total = graph.instances_truncated.get(inst.symbol);
-            if (total !== undefined) {
-                result.push({ symbol: inst.symbol, total });
-            }
-        }
-    }
-    return result;
+    return node.symbol_ids.filter((symbol) => graph.edges_truncated.has(symbol));
 }
 
 export interface HierarchyInfo {
@@ -265,285 +237,6 @@ export function buildPreservedPositionsMap(
     return result;
 }
 
-/**
- * Split nodes based on instance-level containment from has_edges.
- *
- * Each has_edge now carries parent_instance and child_instance IDs, enabling
- * precise per-instance grouping. A node is split when its instances fall into
- * different containment contexts (different parents, or some contained and some
- * not, or some acting as groups and some not).
- *
- * Split node IDs use `${nodeId}\0${contextKey}` (NUL separator avoids collisions).
- */
-export function splitMultiParentNodes(graph: Graph): Graph {
-    // 1. Build instance-level containment map from has_edges
-    // childInstToParent: which parent instance contains this child instance
-    const childInstToParent = new Map<string, { parentSymbol: string; parentInstance: string }>();
-
-    for (const he of graph.has_edges) {
-        if (!graph.nodes.has(he.parent) || !graph.nodes.has(he.child)) continue;
-        childInstToParent.set(he.child_instance, {
-            parentSymbol: he.parent,
-            parentInstance: he.parent_instance,
-        });
-    }
-
-    // 2. Classify each instance into a context key based on containment only.
-    // Instances with different parents get different keys; instances with the
-    // same parent (or all at root) share a key — regardless of which children
-    // they contain.  This avoids needlessly splitting a directory node whose
-    // instances parent different files.
-    //
-    // context = `contained-by:{parentSymbol}` | `root`
-
-    // instanceToContext: instanceId → contextKey
-    const instanceToContext = new Map<string, string>();
-
-    // Track which nodes need splitting (have multiple context keys)
-    const nodeContextKeys = new Map<string, Set<string>>(); // nodeId → set of context keys
-
-    graph.nodes.forEach((node, nodeId) => {
-        const contextKeys = new Set<string>();
-        for (const inst of node.symbol_instances) {
-            const parentInfo = childInstToParent.get(inst.id);
-            const contextKey = parentInfo
-                ? `contained-by:${parentInfo.parentSymbol}`
-                : 'root';
-            instanceToContext.set(inst.id, contextKey);
-            contextKeys.add(contextKey);
-        }
-        nodeContextKeys.set(nodeId, contextKeys);
-    });
-
-    // 3. Fast path: no node has multiple context keys → return graph unchanged
-    let needsSplit = false;
-    for (const keys of Array.from(nodeContextKeys.values())) {
-        if (keys.size > 1) { needsSplit = true; break; }
-    }
-    if (!needsSplit) return graph;
-
-    // 4. Build split nodes, new has_edges, and remapping info
-    const newNodes = new Map<string, Node>();
-    // instanceId → splitNodeId (for edge remapping)
-    const instanceToSplit = new Map<string, string>();
-    // splitId → set of object_ids in that split (for edge remapping)
-    const splitObjectIds = new Map<string, Set<string>>();
-    // splitId → parentSymbol (for "to" edge routing)
-    const splitParent = new Map<string, string>();
-    // originalId → splitId[]
-    const splitLookup = new Map<string, string[]>();
-
-    function collectObjectIds(instances: SymbolInstance[]): Set<string> {
-        const ids = new Set<string>();
-        for (const inst of instances) ids.add(inst.object_id);
-        return ids;
-    }
-
-    graph.nodes.forEach((node, nodeId) => {
-        const contextKeys = nodeContextKeys.get(nodeId)!;
-
-        if (contextKeys.size <= 1) {
-            // No split needed — keep original node
-            newNodes.set(nodeId, node);
-            for (const inst of node.symbol_instances) {
-                instanceToSplit.set(inst.id, nodeId);
-            }
-            return;
-        }
-
-        // Group instances by context key
-        const groups = new Map<string, SymbolInstance[]>();
-        for (const inst of node.symbol_instances) {
-            const ctx = instanceToContext.get(inst.id)!;
-            let arr = groups.get(ctx);
-            if (!arr) {
-                arr = [];
-                groups.set(ctx, arr);
-            }
-            arr.push(inst);
-        }
-
-        const splits: string[] = [];
-        groups.forEach((instances, contextKey) => {
-            const splitId = `${nodeId}\0${contextKey}`;
-            splits.push(splitId);
-            newNodes.set(splitId, {
-                id: splitId,
-                label: node.label,
-                symbol_instances: instances,
-                query_statements: node.query_statements,
-                color: node.color,
-            });
-            splitObjectIds.set(splitId, collectObjectIds(instances));
-            for (const inst of instances) {
-                instanceToSplit.set(inst.id, splitId);
-            }
-            // Record parent for containment routing
-            const parentInfo = childInstToParent.get(instances[0].id);
-            if (parentInfo) {
-                splitParent.set(splitId, parentInfo.parentSymbol);
-            }
-        });
-        splitLookup.set(nodeId, splits);
-    });
-
-    // 5. Create has_edges between split nodes using instanceToSplit lookup
-    const hasEdgePairsSeen = new Set<string>();
-    const newHasEdges: HasEdge[] = [];
-
-    for (const he of graph.has_edges) {
-        const parentSplitId = instanceToSplit.get(he.parent_instance);
-        const childSplitId = instanceToSplit.get(he.child_instance);
-        if (!parentSplitId || !childSplitId) continue;
-        const pairKey = `${parentSplitId}\0${childSplitId}`;
-        if (hasEdgePairsSeen.has(pairKey)) continue;
-        hasEdgePairsSeen.add(pairKey);
-        newHasEdges.push({
-            id: `has-${parentSplitId}-${childSplitId}`,
-            parent: parentSplitId,
-            child: childSplitId,
-            parent_instance: he.parent_instance,
-            child_instance: he.child_instance,
-        });
-    }
-
-    // 6. Remap ref edges using instanceToSplit and object_id matching
-    // Build childToParent from newHasEdges for ancestor walking
-    const newChildToParent = new Map<string, string>();
-    for (const he of newHasEdges) {
-        newChildToParent.set(he.child, he.parent);
-    }
-
-    function getAncestors(nodeId: string): Set<string> {
-        const result = new Set<string>();
-        let current = newChildToParent.get(nodeId);
-        while (current && !result.has(current)) {
-            result.add(current);
-            current = newChildToParent.get(current);
-        }
-        return result;
-    }
-
-    const newEdges = new Map<string, Array<Edge>>();
-
-    graph.edges.forEach((edgeArray, edgeId) => {
-        const edge = edgeArray[0];
-        if (!edge) return;
-
-        const fromSplits = splitLookup.get(edge.from);
-        const toSplits = splitLookup.get(edge.to);
-
-        if (!fromSplits && !toSplits) {
-            newEdges.set(edgeId, edgeArray);
-            return;
-        }
-
-        // Self-loop on a split node: duplicate to each split
-        if (edge.from === edge.to && fromSplits) {
-            for (const splitId of fromSplits) {
-                const newEdgeId = `${edgeId}\0${splitId}`;
-                newEdges.set(newEdgeId, edgeArray.map(e => ({
-                    ...e,
-                    from: splitId,
-                    to: splitId,
-                })));
-            }
-            return;
-        }
-
-        if (fromSplits && !toSplits) {
-            // "from" is split: match from_object to the split that contains it
-            let matchedSplitId: string | undefined;
-            for (const splitId of fromSplits) {
-                const objIds = splitObjectIds.get(splitId);
-                if (objIds && edge.from_objects.some((o) => objIds.has(o))) {
-                    matchedSplitId = splitId;
-                    break;
-                }
-            }
-            if (!matchedSplitId) matchedSplitId = fromSplits[0];
-            const newEdgeId = `${edgeId}\0${matchedSplitId}`;
-            newEdges.set(newEdgeId, edgeArray.map(e => ({ ...e, from: matchedSplitId! })));
-            return;
-        }
-
-        if (!fromSplits && toSplits) {
-            // "to" is split: route to the split sharing containment parent with "from"
-            const fromAncestors = getAncestors(edge.from);
-            fromAncestors.add(edge.from);
-            let matchedSplitId: string | undefined;
-            for (const splitId of toSplits) {
-                const pid = splitParent.get(splitId);
-                if (pid && fromAncestors.has(pid)) {
-                    matchedSplitId = splitId;
-                    break;
-                }
-            }
-            if (matchedSplitId) {
-                const newEdgeId = `${edgeId}\0${matchedSplitId}`;
-                newEdges.set(newEdgeId, edgeArray.map(e => ({ ...e, to: matchedSplitId! })));
-            } else {
-                for (const splitId of toSplits) {
-                    const newEdgeId = `${edgeId}\0${splitId}`;
-                    newEdges.set(newEdgeId, edgeArray.map(e => ({ ...e, to: splitId })));
-                }
-            }
-            return;
-        }
-
-        // Both from and to are split
-        if (fromSplits && toSplits) {
-            let createdEdge = false;
-            for (const fromSplitId of fromSplits) {
-                const fromPid = splitParent.get(fromSplitId);
-                let matchedToSplit: string | undefined;
-                if (fromPid) {
-                    for (const toSplitId of toSplits) {
-                        const toPid = splitParent.get(toSplitId);
-                        if (toPid === fromPid) {
-                            matchedToSplit = toSplitId;
-                            break;
-                        }
-                    }
-                }
-                if (!matchedToSplit) matchedToSplit = toSplits[0];
-
-                if (edge.from_objects.length > 0) {
-                    const objIds = splitObjectIds.get(fromSplitId);
-                    if (!objIds || !edge.from_objects.some((o) => objIds.has(o))) continue;
-                }
-
-                const newEdgeId = `${edgeId}\0${fromSplitId}\0${matchedToSplit}`;
-                newEdges.set(newEdgeId, edgeArray.map(e => ({
-                    ...e,
-                    from: fromSplitId,
-                    to: matchedToSplit!,
-                })));
-                createdEdge = true;
-            }
-            // Fallback: if from_object didn't match any split, route from first split
-            if (!createdEdge) {
-                const matchedToSplit = toSplits[0];
-                const newEdgeId = `${edgeId}\0${fromSplits[0]}\0${matchedToSplit}`;
-                newEdges.set(newEdgeId, edgeArray.map(e => ({
-                    ...e,
-                    from: fromSplits[0],
-                    to: matchedToSplit,
-                })));
-            }
-            return;
-        }
-    });
-
-    return {
-        nodes: newNodes,
-        edges: newEdges,
-        has_edges: newHasEdges,
-        objects: graph.objects,
-        edges_truncated: graph.edges_truncated,
-        instances_truncated: graph.instances_truncated,
-    };
-}
 
 /**
  * Merge nodes with the same label at the same effective nesting depth.
@@ -588,7 +281,12 @@ export function mergeSameNameNodes(graph: Graph): Graph {
         // Canonical = first ID lexicographically
         ids.sort();
         const canonicalId = ids[0];
-        const mergedInstances: SymbolInstance[] = [];
+        // Merging is a pure skeleton operation: union the symbols, sum the
+        // counts, OR the container flag. No instances are involved.
+        const mergedSymbolIds: string[] = [];
+        const symbolIdsSeen = new Set<string>();
+        let mergedInstanceCount = 0;
+        let mergedIsDirectory = false;
         const mergedQueryStatements: QueryStatement[] = [];
         const qsKeys = new Set<string>();
         let color: string | undefined;
@@ -596,7 +294,14 @@ export function mergeSameNameNodes(graph: Graph): Graph {
         for (const id of ids) {
             if (id !== canonicalId) idRemap.set(id, canonicalId);
             const node = graph.nodes.get(id)!;
-            mergedInstances.push(...node.symbol_instances);
+            for (const symbol of node.symbol_ids) {
+                if (!symbolIdsSeen.has(symbol)) {
+                    symbolIdsSeen.add(symbol);
+                    mergedSymbolIds.push(symbol);
+                }
+            }
+            mergedInstanceCount += node.instance_count;
+            mergedIsDirectory = mergedIsDirectory || node.is_directory;
             if (node.query_statements) {
                 for (const qs of node.query_statements) {
                     const key = `${qs.start}:${qs.end}`;
@@ -609,10 +314,15 @@ export function mergeSameNameNodes(graph: Graph): Graph {
             if (!color && node.color) color = node.color;
         }
 
+        const canonical = graph.nodes.get(canonicalId)!;
         newNodes.set(canonicalId, {
             id: canonicalId,
-            label: graph.nodes.get(canonicalId)!.label,
-            symbol_instances: mergedInstances,
+            label: canonical.label,
+            symbol_ids: mergedSymbolIds,
+            symbol_type: canonical.symbol_type,
+            is_directory: mergedIsDirectory,
+            instance_count: mergedInstanceCount,
+            ...(canonical.parent_symbol ? { parent_symbol: canonical.parent_symbol } : {}),
             ...(mergedQueryStatements.length > 0 ? { query_statements: mergedQueryStatements } : {}),
             ...(color ? { color } : {}),
         });
@@ -664,7 +374,6 @@ export function mergeSameNameNodes(graph: Graph): Graph {
         has_edges: newHasEdges,
         objects: graph.objects,
         edges_truncated: graph.edges_truncated,
-        instances_truncated: graph.instances_truncated,
     };
 }
 

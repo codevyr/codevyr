@@ -7,6 +7,7 @@ import {
   submitQuery,
   tapGraphNodeAndWaitForSource,
   waitForGraphNodeCount,
+  skeletonFromFixture,
 } from './test-utils';
 
 const PROJECT_ID = '1';
@@ -212,9 +213,29 @@ async function interceptGraphEndpoint(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(graphResponse),
+      body: JSON.stringify(skeletonFromFixture(graphResponse as any)),
     });
   });
+
+  await page.route('**/v1/symbol/**/instances**', async (route) => {
+    const m = new URL(route.request().url()).pathname.match(/\/v1\/symbol\/([^/]+)\/instances/);
+    const node = (graphResponse as any).nodes?.find((n: any) => n.id === m?.[1]);
+    const rows = (node?.symbol_instances ?? []).map((i: any) => ({
+      id: i.id,
+      instance_type: i.instance_type,
+      object_id: i.object_id,
+      path: ((graphResponse as any).objects ?? []).find((o: any) => o.object_id === i.object_id)?.path ?? `mock/${i.object_id}`,
+      project_id: i.project_id ?? '1',
+      start_offset: i.start_offset,
+      end_offset: i.end_offset,
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ rows, next: null, total: rows.length }),
+    });
+  });
+
 }
 
 async function stubClipboard(page: Page) {
