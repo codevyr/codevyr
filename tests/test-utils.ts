@@ -19,6 +19,8 @@ export const fileContents: Record<string, string> = {
   '22': readFileSync(resolve(mockDir, 'run.go'), 'utf-8'),
 };
 
+let lastQueryBody = '';
+
 export async function interceptGraphEndpoints(page: Page) {
   // `/query` ships edges as (from, to) pairs + a count; call sites come from
   // this endpoint when an edge is opened or clicked.
@@ -38,6 +40,7 @@ export async function interceptGraphEndpoints(page: Page) {
 
   await page.route(queryUrlPattern, async route => {
     const body = route.request().postData() ?? '';
+    lastQueryBody = body;
     const mockResponse = getMockResponseForQuery(body);
 
     if (!mockResponse) {
@@ -49,7 +52,21 @@ export async function interceptGraphEndpoints(page: Page) {
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(mockResponse),
+      body: JSON.stringify(skeletonFromFixture(mockResponse as never)),
+    });
+  });
+
+  // The same fixture answers the instances endpoint the hover now uses.
+  await page.route('**/v1/symbol/**/instances**', async route => {
+    const m = new URL(route.request().url()).pathname.match(/\/v1\/symbol\/([^/]+)\/instances/);
+    const fixture = getMockResponseForQuery(lastQueryBody) as never;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(
+        fixture && m ? instancesFromFixture(fixture, m[1]) : { rows: [], next: null, total: 0 },
+      ),
     });
   });
 
@@ -285,4 +302,146 @@ export async function setupGraph(page: Page) {
 
 export function toolbarButton(page: Page, label: string): Locator {
   return page.locator('.toolbar-btn', { hasText: label });
+}
+
+// --- skeleton conversion -----------------------------------------------
+//
+// Specs declare fixtures the readable way — nodes WITH their instances —
+// while the wire now carries a skeleton (relationships only) plus detail
+// endpoints. Rather than restate every fixture, convert at the boundary:
+// the skeleton is derived here, and the same instances are served back from
+// the instances endpoint. One fixture, both shapes, no duplication.
+
+type FixtureInstance = {
+  id: string;
+  symbol?: string;
+  object_id: string;
+  project_id?: string;
+  symbol_type?: string;
+  instance_type: string;
+  start_offset: number;
+  end_offset: number;
+};
+
+type FixtureNode = {
+  id: string;
+  label: string;
+  symbol_instances?: FixtureInstance[];
+  color?: string;
+  query_statements?: Array<{ start: number; end: number; text: string }>;
+};
+
+type FixtureGraph = {
+  nodes: FixtureNode[];
+  edges?: Array<Record<string, unknown>>;
+  has_edges?: Array<{ parent: string; child: string }>;
+  objects?: Array<{ object_id: string; path: string; project_id?: string }>;
+  warnings?: unknown[];
+  edges_truncated?: string[];
+};
+
+const DIRECTORY_INSTANCE_TYPES = new Set(['sentinel', 'containment']);
+
+/** Derive the skeleton the server would send for a fixture graph. */
+export function skeletonFromFixture(fixture: FixtureGraph) {
+  const pairs = new Map<string, { from: string; to: string; count: number }>();
+  for (const edge of fixture.edges ?? []) {
+    const from = String(edge.from);
+    const to = String(edge.to);
+    const key = `${from}-${to}`;
+    const existing = pairs.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      pairs.set(key, { from, to, count: Number(edge.occurrence_count ?? 1) });
+    }
+  }
+
+  return {
+    nodes: fixture.nodes.map((node) => {
+      const instances = node.symbol_instances ?? [];
+      return {
+        id: node.id,
+        symbol_ids: [node.id],
+        label: node.label,
+        symbol_type: instances[0]?.symbol_type ?? 'Function',
+        is_directory:
+          instances.length > 0 && instances.every((i) => DIRECTORY_INSTANCE_TYPES.has(i.instance_type)),
+        instance_count: instances.length,
+        parent_symbol:
+          (fixture.has_edges ?? []).find((he) => he.child === node.id)?.parent ?? null,
+        query_statements: node.query_statements ?? [],
+        ...(node.color ? { color: node.color } : {}),
+      };
+    }),
+    edges: Array.from(pairs.values()).map((p) => ({
+      from: p.from,
+      to: p.to,
+      from_symbol: p.from,
+      to_symbol: p.to,
+      occurrence_count: p.count,
+    })),
+    has_edges: (fixture.has_edges ?? []).map((he) => ({ parent: he.parent, child: he.child })),
+    warnings: fixture.warnings ?? [],
+    truncated: false,
+    total_symbols: fixture.nodes.length,
+    edges_truncated: fixture.edges_truncated ?? [],
+  };
+}
+
+/** Serve a fixture's instances back through the instances endpoint. */
+function instancesFromFixture(fixture: FixtureGraph, symbolId: string) {
+  const node = fixture.nodes.find((n) => n.id === symbolId);
+  const pathOf = (objectId: string) =>
+    fixture.objects?.find((o) => o.object_id === objectId)?.path ?? `mock/${objectId}`;
+  const rows = (node?.symbol_instances ?? []).map((inst) => ({
+    id: inst.id,
+    instance_type: inst.instance_type,
+    object_id: inst.object_id,
+    path: pathOf(inst.object_id),
+    project_id: inst.project_id ?? '1',
+    start_offset: inst.start_offset,
+    end_offset: inst.end_offset,
+  }));
+  return { rows, next: null, total: rows.length };
+}
+
+/**
+ * Serve a fixture graph across every endpoint the client now uses: the
+ * skeleton from `/query`, instances per node, and (empty) edge occurrences.
+ */
+export async function interceptFixtureGraph(page: Page, fixture: FixtureGraph) {
+  await page.route('**/query**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(skeletonFromFixture(fixture)),
+    });
+  });
+
+  await page.route('**/v1/symbol/**/instances**', async (route) => {
+    const match = new URL(route.request().url()).pathname.match(/\/v1\/symbol\/([^/]+)\/instances/);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(
+        match ? instancesFromFixture(fixture, match[1]) : { rows: [], next: null, total: 0 },
+      ),
+    });
+  });
+
+  await page.route('**/v1/edge/**/occurrences**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ rows: [], next: null }),
+    });
+  });
+
+  await page.route('**/source/**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'text/plain', body: 'package main\n' });
+  });
 }

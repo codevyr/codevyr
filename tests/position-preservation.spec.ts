@@ -6,6 +6,7 @@ import {
   setEditorQuery,
   submitQuery,
   waitForGraphNodeCount,
+  skeletonFromFixture,
 } from './test-utils';
 
 // First query: hierarchy A contains B and C, plus standalone D.
@@ -378,8 +379,9 @@ const complexLiberatedResponse = {
   warnings: [],
 };
 
-// Split scenario: B has instances both inside group A and standalone.
-// splitMultiParentNodes will split B into B\0contained-by:A and B\0root.
+// Split scenario: the SERVER splits B (instances both inside group A and
+// standalone) into B\0contained-by:A and B\0root, and ships them as
+// separate nodes. The client renders what it is given.
 const splitHierarchyResponse = {
   nodes: [
     {
@@ -390,10 +392,16 @@ const splitHierarchyResponse = {
       ],
     },
     {
-      id: 'B',
+      id: 'B\u0000contained-by:A',
       label: 'B',
       symbol_instances: [
         { id: 'si_B1', symbol: 'B', object_id: 'obj_A', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 50 },
+      ],
+    },
+    {
+      id: 'B\u0000root',
+      label: 'B',
+      symbol_instances: [
         { id: 'si_B2', symbol: 'B', object_id: 'obj_other', symbol_type: 'Function', instance_type: 'definition', start_offset: 0, end_offset: 50 },
       ],
     },
@@ -406,10 +414,10 @@ const splitHierarchyResponse = {
     },
   ],
   edges: [
-    { id: 'B-D', from: 'B', to: 'D', from_object: 'obj_other', from_offset_start: 0, from_offset_end: 1 },
+    { from: 'B\u0000root', to: 'D', occurrence_count: 1 },
   ],
   has_edges: [
-    { id: 'has-A-B', parent: 'A', child: 'B', parent_instance: 'si_A', child_instance: 'si_B1' },
+    { parent: 'A', child: 'B\u0000contained-by:A' },
   ],
   objects: [
     { object_id: 'obj_A', path: 'mock/a.go' },
@@ -597,9 +605,29 @@ async function setupSequentialMocks(page: Page, responses: object[]) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(response),
+      body: JSON.stringify(skeletonFromFixture(response as any)),
     });
   });
+
+  await page.route('**/v1/symbol/**/instances**', async (route) => {
+    const m = new URL(route.request().url()).pathname.match(/\/v1\/symbol\/([^/]+)\/instances/);
+    const node = (responses[Math.max(0, queryCount - 1)] as any).nodes?.find((n: any) => n.id === m?.[1]);
+    const rows = (node?.symbol_instances ?? []).map((i: any) => ({
+      id: i.id,
+      instance_type: i.instance_type,
+      object_id: i.object_id,
+      path: ((responses[Math.max(0, queryCount - 1)] as any).objects ?? []).find((o: any) => o.object_id === i.object_id)?.path ?? `mock/${i.object_id}`,
+      project_id: i.project_id ?? '1',
+      start_offset: i.start_offset,
+      end_offset: i.end_offset,
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ rows, next: null, total: rows.length }),
+    });
+  });
+
 
   await page.route('**/source/**', async (route) => {
     await route.fulfill({

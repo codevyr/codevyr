@@ -123,8 +123,24 @@ export default function Home() {
     has_edges: [],
     objects: new Map<string, GraphObject>(),
     edges_truncated: new Set<string>(),
-    instances_truncated: new Map<string, number>(),
   });
+  /**
+   * Learn a file's identity from a detail row. The skeleton ships no objects
+   * map — instance and call-site rows carry their own path/project — so the
+   * graph's objects fill in as detail loads, keeping navigation working.
+   */
+  const registerObject = useCallback(
+    (objectId: string, path: string, projectId: string | null) => {
+      setQueryGraph((prev) => {
+        if (prev.objects.has(objectId)) return prev;
+        const objects = new Map(prev.objects);
+        objects.set(objectId, { path, project_id: projectId });
+        return { ...prev, objects };
+      });
+    },
+    [],
+  );
+
   const [problems, setProblems] = useState<Problem[]>([]);
   const [lastRunQuery, setLastRunQuery] = useState('');
   const editorHandleRef = useRef<EditorHandle | null>(null);
@@ -266,8 +282,8 @@ export default function Home() {
   const handleSelectFile = useCallback((focus: CodeFocus) => {
     const { object_id: objectId, start_offset: startOffset, end_offset: endOffset } = focus;
     const objectInfo = queryGraph.objects.get(objectId);
-    const filePath = objectInfo?.path ?? null;
-    const projectId = objectInfo?.project_id ?? null;
+    const filePath = focus.path ?? objectInfo?.path ?? null;
+    const projectId = focus.project_id ?? objectInfo?.project_id ?? null;
     void revealFile(
       { fileId: objectId, path: filePath, projectId, startOffset, endOffset: endOffset ?? null },
       { cache: fileTreeCache, openFileById },
@@ -284,10 +300,16 @@ export default function Home() {
     });
   }, [fileTreeCache, openFileById, queryGraph]);
 
-  const handleRevealDirectory = useCallback((objectId: string) => {
+  const handleRevealDirectory = useCallback((
+    objectId: string,
+    knownPath?: string | null,
+    knownProject?: string | null,
+  ) => {
+    // Same reason as CodeFocus.path: the skeleton has no objects map, and
+    // registering one is a state update that lands after this runs.
     const objectInfo = queryGraph.objects.get(objectId);
-    const filePath = objectInfo?.path ?? null;
-    const projectId = objectInfo?.project_id ?? null;
+    const filePath = knownPath ?? objectInfo?.path ?? null;
+    const projectId = knownProject ?? objectInfo?.project_id ?? null;
     if (!projectId || !filePath) return;
     fileTreeCache.registerFileLocation(objectId, projectId, filePath);
     void fileTreeCache.ensurePath(projectId, filePath).then(() => {
@@ -380,6 +402,7 @@ export default function Home() {
             selectFile={handleSelectFile}
             fileContents={fileContents}
             ensureFileContent={ensureFileContent}
+            registerObject={registerObject}
             revealDirectory={handleRevealDirectory}
             revealQueryRange={handleRevealQueryRange}
             autoMerge={autoMerge}

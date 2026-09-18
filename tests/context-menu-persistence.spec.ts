@@ -6,6 +6,7 @@ import {
   setEditorQuery,
   submitQuery,
   waitForGraphNodeCount,
+  skeletonFromFixture,
 } from './test-utils';
 
 // A node with two instances so a click opens the context menu.
@@ -32,7 +33,7 @@ test.describe('context menu persistence', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(graphResponse),
+        body: JSON.stringify(skeletonFromFixture(graphResponse as any)),
       });
     });
     await page.route('**/source/**', async (route) => {
@@ -68,4 +69,6 @@ test.describe('context menu persistence', () => {
     await page.mouse.click(40, 400);
     await expect(menu).not.toBeVisible();
   });
+
+
 });
