@@ -418,7 +418,7 @@ export default function Home() {
       default:
         return null;
     }
-  }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRevealQueryRange, handleSelectFile, lastRunQuery, panOnDrag, problems, query, queryGraph, selectionOnDrag]);
+  }, [activeFileId, activeFileNonce, autoMerge, codeTabs, codeTabsRef, effectiveMode, ensureFileContent, explorerReveal, fileContents, fileTreeCache, handleOpenFileFromExplorer, handleProblemSelect, handleProblemsChange, handleRevealDirectory, handleRevealQueryRange, handleSelectFile, lastRunQuery, panOnDrag, problems, query, queryGraph, registerObject, selectionOnDrag]);
 
   return (
     <main className="flex h-full flex-col">
