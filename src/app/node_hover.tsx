@@ -286,6 +286,95 @@ export interface NodeHoverProps {
   onAction?: () => void;
 }
 
+type PagedResult<R> = {
+  rows: R[];
+  next: string | null;
+  total: number | null;
+};
+
+type PagedState<R> = {
+  /** The inputs this result answers; a result for other inputs is stale. */
+  key: string;
+  page: PagedResult<R>;
+  error: string | null;
+};
+
+function isAbort(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A list that arrives in pages: the first page is requested when `key`
+ * changes, further pages through `loadMore`.
+ *
+ * "Loading" is DERIVED -- the stored result does not answer the current key
+ * -- rather than tracked by a setState inside the effect. The lint rule
+ * `react-hooks/set-state-in-effect` treats any setState reachable from an
+ * effect body as a cascading render, and it follows local functions, so a
+ * `loadPage` callback invoked from the effect is flagged no matter how many
+ * awaits precede its setState calls. Only the promise callbacks touch state,
+ * which is the shape markdown_report.tsx already uses for the same reason.
+ *
+ * `fetchPage` must be referentially stable (a `useCallback`); it changes
+ * together with `key`, and either change discards the stored result.
+ */
+function usePagedList<R>(key: string, fetchPage: (after: string | null) => Promise<PagedResult<R>>) {
+  const [state, setState] = useState<PagedState<R> | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPage(null)
+      .then((page) => {
+        if (cancelled) return;
+        setState({ key, page, error: null });
+      })
+      .catch((err: unknown) => {
+        if (cancelled || isAbort(err)) return; // superseded by a newer fetch -- not an error state
+        setState({ key, page: { rows: [], next: null, total: null }, error: errorText(err) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, fetchPage]);
+
+  const current = state !== null && state.key === key ? state : null;
+  const next = current?.page.next ?? null;
+
+  const loadMore = useCallback(() => {
+    if (next === null) return;
+    setLoadingMore(true);
+    fetchPage(next)
+      .then((page) => {
+        setState((prev) =>
+          prev !== null && prev.key === key
+            ? { key, page: { rows: [...prev.page.rows, ...page.rows], next: page.next, total: page.total }, error: null }
+            : prev,
+        );
+      })
+      .catch((err: unknown) => {
+        if (isAbort(err)) return;
+        setState((prev) => (prev !== null && prev.key === key ? { ...prev, error: errorText(err) } : prev));
+      })
+      .finally(() => setLoadingMore(false));
+  }, [key, fetchPage, next]);
+
+  return {
+    rows: current?.page.rows ?? [],
+    next,
+    total: current?.page.total ?? null,
+    error: current?.error ?? null,
+    /** The first page for the current key has arrived (or failed). */
+    loaded: current !== null,
+    loading: current === null || loadingMore,
+    loadMore,
+  };
+}
+
 export function NodeHover({
   node,
   setCodeFocus,
@@ -308,46 +397,27 @@ export function NodeHover({
   // Now the hover simply renders what the endpoint returns.
   const symbolIds = node.symbol_ids;
   const parentSymbol = node.parent_symbol;
-  const [rows, setRows] = useState<Array<SymbolInstancePageRowJson>>([]);
-  const [next, setNext] = useState<string | null>(null);
-  const [total, setTotal] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadPage = useCallback(
-    async (after: string | null) => {
-      setLoading(true);
-      setError(null);
-      try {
-        // One symbol per node normally; a merged node pages its first symbol
-        // and offers the rest through "Load more".
-        const response = await fetchSymbolInstances(symbolIds[0], after, undefined, parentSymbol);
-        if (!response.ok) {
-          throw new Error(`instances request failed (${response.status})`);
-        }
-        const data: SymbolInstancesResponse = await response.json();
-        setRows((prev) => (after ? [...prev, ...data.rows] : data.rows));
-        setNext(typeof data.next === 'string' ? data.next : null);
-        setTotal(data.total);
-        for (const row of data.rows) {
-          ensureFileContent(row.object_id);
-          registerObject?.(row.object_id, row.path, row.project_id);
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return; // superseded by a newer fetch — not an error state
-        }
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
+  // One symbol per node normally; a merged node pages its first symbol and
+  // offers the rest through "Load more".
+  const fetchPage = useCallback(
+    async (after: string | null): Promise<PagedResult<SymbolInstancePageRowJson>> => {
+      const response = await fetchSymbolInstances(symbolIds[0], after, undefined, parentSymbol);
+      if (!response.ok) {
+        throw new Error(`instances request failed (${response.status})`);
       }
+      const data: SymbolInstancesResponse = await response.json();
+      for (const row of data.rows) {
+        ensureFileContent(row.object_id);
+        registerObject?.(row.object_id, row.path, row.project_id);
+      }
+      return { rows: data.rows, next: typeof data.next === 'string' ? data.next : null, total: data.total };
     },
     [symbolIds, parentSymbol, ensureFileContent, registerObject],
   );
-
-  useEffect(() => {
-    void loadPage(null);
-  }, [loadPage]);
+  const { rows, next, total, error, loading, loadMore } = usePagedList(
+    `${symbolIds[0]}\u0000${parentSymbol ?? ''}`,
+    fetchPage,
+  );
 
   // Group the loaded instances by type, exactly as before — but from the
   // fetched rows, and WITHOUT the group-node filter that hid them.
@@ -440,7 +510,7 @@ export function NodeHover({
                   style={{ marginLeft: '0.5rem' }}
                   onClick={(event) => {
                     event.stopPropagation();
-                    void loadPage(next);
+                    loadMore();
                   }}
                 >
                   {loading ? 'Loading…' : 'Load more'}
@@ -630,43 +700,21 @@ function EdgeOccurrenceRows({
   setCodeFocus: (type: CodeFocus) => void;
   onAction?: () => void;
 }) {
-  const [rows, setRows] = useState<Array<EdgeOccurrenceRowJson>>([]);
-  const [next, setNext] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  const loadPage = useCallback(
-    async (after: string | null) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetchEdgeOccurrences(from, to, after);
-        if (!response.ok) {
-          throw new Error(`edge occurrences failed (${response.status})`);
-        }
-        const data: EdgeOccurrencesResponse = await response.json();
-        setRows((prev) => (after ? [...prev, ...data.rows] : data.rows));
-        setNext(data.next);
-        setLoaded(true);
-        for (const row of data.rows) {
-          ensureFileContent(row.object_id);
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return; // superseded by a newer fetch — not an error state
-        }
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
+  const fetchPage = useCallback(
+    async (after: string | null): Promise<PagedResult<EdgeOccurrenceRowJson>> => {
+      const response = await fetchEdgeOccurrences(from, to, after);
+      if (!response.ok) {
+        throw new Error(`edge occurrences failed (${response.status})`);
       }
+      const data: EdgeOccurrencesResponse = await response.json();
+      for (const row of data.rows) {
+        ensureFileContent(row.object_id);
+      }
+      return { rows: data.rows, next: data.next, total: null };
     },
     [from, to, ensureFileContent],
   );
-
-  useEffect(() => {
-    void loadPage(null);
-  }, [loadPage]);
+  const { rows, next, error, loaded, loading, loadMore } = usePagedList(`${from}\u0000${to}`, fetchPage);
 
   return (
     <>
@@ -698,7 +746,7 @@ function EdgeOccurrenceRows({
                 data-testid={`load-edge-occurrences-${from}-${to}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  void loadPage(next);
+                  loadMore();
                 }}
               >
                 Load more
