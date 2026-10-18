@@ -422,6 +422,18 @@ export function useGraphLayout({
         position,
         ...(isGroup && existing?.style ? { style: existing.style } : {}),
         ...(existing?.selected != null ? { selected: existing.selected } : {}),
+        // Keep the measured size. React Flow does not store it for us: a
+        // node object without width/height replaces the measured one, and the
+        // edge renderer draws nothing between unmeasured nodes. Every edge
+        // would unmount until the ResizeObserver reports the sizes again --
+        // one frame of flicker, and an open edge menu (controlled, so it
+        // survives the remount) would come back anchored at (0,0) because
+        // Radix keeps the click point as state inside the remounted trigger.
+        // The observer stays attached to the DOM node, so a later size change
+        // still arrives as a dimensions change.
+        ...(existing?.width != null && existing?.height != null
+          ? { width: existing.width, height: existing.height }
+          : {}),
         data: {
           label: displayLabels.get(node.id),
           node,
