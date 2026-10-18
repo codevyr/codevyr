@@ -103,7 +103,7 @@ export function MarkdownReport({ query }: MarkdownReportProps) {
         <label htmlFor="report-projection" className="text-muted">Detail</label>
         <select
           id="report-projection"
-          className="rounded border border-gray-300 px-1 py-0.5 text-sm"
+          className="rounded-sm border border-gray-300 px-1 py-0.5 text-sm"
           value={projection}
           onChange={(e) => setProjection(e.target.value as Projection)}
         >
