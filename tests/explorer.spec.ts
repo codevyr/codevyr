@@ -298,3 +298,25 @@ test('graph click reveals explorer and opens editor', async ({ page }) => {
   const activeExplorerRow = page.locator('[data-testid="explorer-node"][data-node-path="/home/mplaneta/src/kubernetes/cmd/kubelet/kubelet.go"][data-active="true"]');
   await expect(activeExplorerRow).toBeVisible();
 });
+
+test('opening an instance from the node menu reveals it in the explorer', async ({ page }) => {
+  await interceptIndexEndpoints(page);
+  await interceptGraphEndpoint(page);
+  await loadApp(page, { mockProjects: false });
+  await ensureEditorApis(page);
+
+  await page.locator('.monaco-editor').click();
+  await setEditorQuery(page, 'graph { foo -> bar }');
+  await submitQuery(page);
+  await waitForGraphNodeCount(page, 2);
+  await ensureGraphApis(page);
+
+  // The skeleton has no objects map: the row is the only source of the
+  // file's path, so it must travel with the focus.
+  await page.locator('[data-testid="graph-node-201"]').click({ button: 'right' });
+  await page.locator('[data-testid="instance-row-201"]').click();
+
+  await expect(page.locator('[data-testid="code-viewer"][data-file-id="11"]')).toBeVisible();
+  const activeExplorerRow = page.locator(`[data-testid="explorer-node"][data-node-path="${fileIdToPath['11']}"][data-active="true"]`);
+  await expect(activeExplorerRow).toBeVisible();
+});
