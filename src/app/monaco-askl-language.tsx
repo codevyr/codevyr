@@ -107,7 +107,7 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                 [/(?:or|and|not)\b/, 'keyword.operator'],
 
                 // Known verb names (without @)
-                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|package|project|forced|label|use|preamble|has|refs|derive|unnest|any|loc|search|layer|ephemeral_symbol|ephemeral_instance|ephemeral_ref)\b/, {
+                [/(?:func|file|mod|dir|type|data|macro|field|method|select|filter|ignore|package|project|forced|label|use|preamble|has|refs|declares|holds|calls|writes|takes|reads|inherit|unnest|any|loc|search|layer|ephemeral_symbol|ephemeral_instance|ephemeral_ref)\b/, {
                     token: 'keyword', next: '@maybeCall',
                 }],
 
@@ -340,6 +340,76 @@ export function registerAskl(monaco: typeof import('monaco-editor')) {
                     insertText: 'method("${1:name}")',
                     insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                     detail: 'selector: interface method (alias for field)',
+                    range: range,
+                },
+                {
+                    label: 'has',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'has',
+                    detail: 'relationship: contains (`▸`)',
+                    range: range,
+                },
+                {
+                    label: 'refs',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'refs',
+                    detail: 'relationship: an ordinary reference (`→`)',
+                    range: range,
+                },
+                {
+                    label: 'declares',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'declares',
+                    detail: 'relationship: a macro invocation declared it (`↦`)',
+                    range: range,
+                },
+                {
+                    label: 'holds',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'holds',
+                    detail: 'relationship: a slot and what is stored in it (`⇢`)',
+                    range: range,
+                },
+                {
+                    label: 'calls',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'calls',
+                    detail: 'relationship: `refs` narrowed to references that call',
+                    range: range,
+                },
+                {
+                    label: 'writes',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'writes',
+                    detail: 'relationship: `refs` narrowed to references that assign',
+                    range: range,
+                },
+                {
+                    label: 'takes',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'takes',
+                    detail: 'relationship: `refs` narrowed to references that take the value or address',
+                    range: range,
+                },
+                {
+                    label: 'reads',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'reads',
+                    detail: 'relationship: `takes`, as it reads for data and fields',
+                    range: range,
+                },
+                {
+                    label: 'inherit(relationship)',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'inherit(relationship)',
+                    detail: 'verb: carry the relationship of this statement into the scopes below',
+                    range: range,
+                },
+                {
+                    label: 'inherit(type)',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'inherit(type)',
+                    detail: 'verb: carry the type of this statement into the scopes below',
                     range: range,
                 },
                 {
