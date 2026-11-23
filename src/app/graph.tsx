@@ -78,6 +78,14 @@ export interface Edge {
      * edges with it; kept on the wire for `detail=full` clients.
      */
     from_objects?: Array<string>;
+    /**
+     * What the pair's references state about the target (`calls`, `writes`,
+     * `takes`, `reads`, `declares`, `holds`); absent when nothing is stated.
+     * How a word is drawn is `lib/edge_kinds.ts`'s business alone.
+     */
+    kinds?: Array<string>;
+    /** False only for a pair no token of the source names; absent when true. */
+    refers?: boolean;
 }
 
 export interface HasEdge {

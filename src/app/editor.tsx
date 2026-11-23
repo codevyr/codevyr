@@ -51,6 +51,10 @@ interface SkeletonEdge {
     from_symbol: string;
     to_symbol: string;
     occurrence_count: number;
+    /** What the edge states; absent when nothing is. */
+    kinds?: Array<string>;
+    /** Absent when true. */
+    refers?: boolean;
 }
 
 interface RustGraph {
@@ -334,6 +338,8 @@ export const EditorComponent = React.forwardRef<EditorHandle, EditorProps>(funct
                     from_symbol: edge.from_symbol,
                     to_symbol: edge.to_symbol,
                     occurrence_count: edge.occurrence_count,
+                    ...(edge.kinds && edge.kinds.length > 0 ? { kinds: edge.kinds } : {}),
+                    ...(edge.refers === false ? { refers: false } : {}),
                 }]);
             });
 

@@ -3,6 +3,7 @@ import { LuArrowUpRight, LuChevronDown, LuChevronRight, LuCopy, LuFocus, LuFolde
 import { CodeFocus } from './code_viewer';
 import { Edge, SymbolInstance, QueryStatement, Node, Graph, isDirectoryInstance, isSelfReference } from './graph';
 import { copyToClipboard } from './lib/clipboard';
+import { edgeRelationships, edgeWordsLabel, unionStatements } from './lib/edge_kinds';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
 import {
   fetchEdgeOccurrences,
@@ -777,6 +778,8 @@ function EdgeOccurrenceRow({
   onAction?: () => void;
 }) {
   const location = formatOffsetLocation(fileContents.get(row.object_id), row.start_offset);
+  // What THIS call site does: the edge states the union over its sites.
+  const does = edgeWordsLabel(row.kinds);
 
   function openInEditor() {
     setCodeFocus({
@@ -795,7 +798,15 @@ function EdgeOccurrenceRow({
       onClick={openInEditor}
     >
       <td>{row.path}</td>
-      <td>{location}</td>
+      <td>
+        {location}
+        {does && (
+          <span className="edge-hover-does" data-testid={`edge-occurrence-does-${row.ref_id}`}>
+            {' · '}
+            {does}
+          </span>
+        )}
+      </td>
       <td className="node-hover-actions-cell">
         <button
           type="button"
@@ -880,6 +891,10 @@ function HiddenReferencesSection({
                       {isOpen ? <LuChevronDown /> : <LuChevronRight />}
                     </span>
                     {targetLabel}
+                    <span className="edge-hover-does" data-testid={`hidden-ref-does-${edge.id}`}>
+                      {' · '}
+                      {edgeRelationships(edge).join(', ')}
+                    </span>
                   </td>
                   <td>{edge.occurrence_count}</td>
                 </tr>
@@ -923,6 +938,9 @@ export function EdgesHover({
   const headerEdge = edges[0];
   const fromLabel = headerEdge ? graph.nodes.get(headerEdge.from)?.label ?? headerEdge.from : null;
   const toLabel = headerEdge ? graph.nodes.get(headerEdge.to)?.label ?? headerEdge.to : null;
+  // Nodes merged by name merge their edges; the menu says what any of them
+  // states, as the line does.
+  const relationships = edgeRelationships(unionStatements(edges));
 
   return (
     <div className="node-hover">
@@ -939,6 +957,10 @@ export function EdgesHover({
             <span className="edge-hover-value" title={toLabel ?? undefined}>
               {toLabel}
             </span>
+          </div>
+          <div className="edge-hover-line" data-testid="edge-hover-relationships">
+            <span className="edge-hover-key">Is</span>
+            <span className="edge-hover-value">{relationships.join(', ')}</span>
           </div>
         </div>
       )}
