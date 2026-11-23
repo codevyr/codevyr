@@ -5,6 +5,7 @@ import { Edge, SymbolInstance, QueryStatement, Node, Graph, isDirectoryInstance,
 import { copyToClipboard } from './lib/clipboard';
 import { edgeRelationships, edgeWordsLabel, unionStatements } from './lib/edge_kinds';
 import { formatOffsetLocation, getLineColumnFromOffset, parseOffset } from './lib/offsets';
+import { occurrencePlace, occurrenceSitesLabel } from './lib/occurrence_place';
 import {
   fetchEdgeOccurrences,
   fetchSymbolInstances,
@@ -709,7 +710,9 @@ function EdgeOccurrenceRows({
       }
       const data: EdgeOccurrencesResponse = await response.json();
       for (const row of data.rows) {
-        ensureFileContent(row.object_id);
+        // The file the row is listed in, which for a relation is its
+        // witness's and not the one its own span lies in.
+        ensureFileContent(occurrencePlace(row).object_id);
       }
       return { rows: data.rows, next: data.next, total: null };
     },
@@ -765,7 +768,11 @@ function EdgeOccurrenceRows({
   );
 }
 
-/** One fetched call site: path, location, open/copy actions. */
+/**
+ * One fetched occurrence: path, location, open/copy actions. All of them at
+ * the place it happened (`occurrencePlace`), with a word when that place is
+ * the first of several.
+ */
 function EdgeOccurrenceRow({
   row,
   fileContents,
@@ -777,18 +784,14 @@ function EdgeOccurrenceRow({
   setCodeFocus: (type: CodeFocus) => void;
   onAction?: () => void;
 }) {
-  const location = formatOffsetLocation(fileContents.get(row.object_id), row.start_offset);
+  const place = occurrencePlace(row);
+  const location = formatOffsetLocation(fileContents.get(place.object_id), place.start_offset);
   // What THIS call site does: the edge states the union over its sites.
   const does = edgeWordsLabel(row.kinds);
+  const sites = occurrenceSitesLabel(row);
 
   function openInEditor() {
-    setCodeFocus({
-      object_id: row.object_id,
-      start_offset: row.start_offset,
-      end_offset: row.end_offset,
-      path: row.path,
-      project_id: row.project_id,
-    });
+    setCodeFocus(place);
   }
 
   return (
@@ -797,13 +800,23 @@ function EdgeOccurrenceRow({
       data-testid={`edge-occurrence-${row.ref_id}`}
       onClick={openInEditor}
     >
-      <td>{row.path}</td>
+      <td>{place.path}</td>
       <td>
         {location}
         {does && (
           <span className="edge-hover-does" data-testid={`edge-occurrence-does-${row.ref_id}`}>
             {' · '}
             {does}
+          </span>
+        )}
+        {sites && (
+          <span
+            className="edge-hover-does"
+            data-testid={`edge-occurrence-sites-${row.ref_id}`}
+            title="The first place in file order that made it so; the others are not listed"
+          >
+            {' · '}
+            {sites}
           </span>
         )}
       </td>
@@ -824,7 +837,7 @@ function EdgeOccurrenceRow({
           className="node-hover-icon"
           onClick={(event) => {
             event.stopPropagation();
-            void copyToClipboard(row.path);
+            void copyToClipboard(place.path);
             onAction?.();
           }}
           title="Copy path"

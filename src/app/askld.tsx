@@ -204,7 +204,28 @@ export function fetchSymbolInstances(
   });
 }
 
-/** One call site of an edge (see /v1/edge/{from}/{to}/occurrences). */
+/**
+ * One place in the code that made a relation so, and how many there are: the
+ * store `.read = bt_bmc_read`, the invocation `DEFINE_MUTEX(lock)`, in Go the
+ * expression handed over where the interface was expected.
+ */
+export interface OccurrenceWitnessJson {
+  object_id: string;
+  path: string;
+  start_offset: number;
+  end_offset: number;
+  /** How many places made the relation; this is the first in file order. */
+  sites: number;
+}
+
+/**
+ * One occurrence of an edge (see /v1/edge/{from}/{to}/occurrences).
+ *
+ * `object_id`, `path` and the offsets are where the ROW lies, which for a
+ * relation (`declares`, `holds`) is the declaration of its source and not
+ * where it happened.  Nothing shows an occurrence from these fields: ask
+ * `occurrencePlace` (lib/occurrence_place.ts).
+ */
 export interface EdgeOccurrenceRowJson {
   ref_id: string;
   from_instance_id: string;
@@ -215,6 +236,8 @@ export interface EdgeOccurrenceRowJson {
   end_offset: number;
   /** What THIS call site does to the target; absent when nothing is stated. */
   kinds?: string[];
+  /** Where a relation happened; absent on a reference, and on a relation the index names no place for. */
+  witness?: OccurrenceWitnessJson | null;
 }
 
 export interface EdgeOccurrencesResponse {
