@@ -21,6 +21,7 @@ import {
   type SymbolInstancesResponse,
 } from './askld';
 import { CodeFocus } from './code_viewer';
+import { occurrencePlace } from './lib/occurrence_place';
 import { GraphSearchBar } from './graph_search';
 import { useGraphSearch } from './lib/use_graph_search';
 import { useScreenshot, type ScreenshotMode } from './lib/use_screenshot';
@@ -485,7 +486,9 @@ function GraphEdgeComponent({
       // there is nothing to choose, so fetch it and jump — the direct
       // navigation is preserved without the response ever guessing a
       // representative occurrence. With several, open the menu and let the
-      // user pick from the loaded list.
+      // user pick from the loaded list. The jump goes where the occurrence
+      // happened: for a relation that is its witness, the first of however
+      // many places made it so; the menu says how many.
       const edge = edgesList[0];
       if (edgesList.length === 1 && edge.occurrence_count === 1 && selectFile) {
         void (async () => {
@@ -500,13 +503,7 @@ function GraphEdgeComponent({
             const data: EdgeOccurrencesResponse = await response.json();
             const row = data.rows[0];
             if (!row) return;
-            selectFile({
-              object_id: row.object_id,
-              start_offset: row.start_offset,
-              end_offset: row.end_offset,
-              path: row.path,
-              project_id: row.project_id,
-            });
+            selectFile(occurrencePlace(row));
             setActiveMenu?.(null);
           } catch {
             // Navigation is best-effort; the menu remains available.
