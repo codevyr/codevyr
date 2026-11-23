@@ -33,6 +33,7 @@ import {
   resizeParentsForNodes,
   useGraphLayout,
 } from './lib/use_graph_layout';
+import { EDGE_LINE_STYLES, edgeLegend, unionStatements, type EdgeLine } from './lib/edge_kinds';
 
 export interface GraphViewerHandle {
   centerGraph: () => void;
@@ -405,13 +406,20 @@ function GraphEdgeComponent({
   );
 
   let edgePath = '';
+  // Where the edge's words are written: the middle of the curve.
+  let labelX = 0;
+  let labelY = 0;
   const edgeBaseColor =
     typeof style?.stroke === 'string'
       ? style.stroke
       : 'var(--graph-edge-color)';
-  const selectedEdgeColor = edgeBaseColor.startsWith('var(')
+  // A selected edge is its own colour, darker.  The unstated line keeps its
+  // token; the other tokens are darkened the way that token is defined.
+  const selectedEdgeColor = edgeBaseColor === 'var(--graph-edge-color)'
     ? 'var(--graph-edge-color-selected)'
-    : darkenColor(edgeBaseColor, 0.35);
+    : edgeBaseColor.startsWith('var(')
+      ? `color-mix(in srgb, ${edgeBaseColor} 70%, #000)`
+      : darkenColor(edgeBaseColor, 0.35);
   const baseStrokeWidth =
     typeof style?.strokeWidth === 'number' ? style.strokeWidth : 3;
   const edgeStyle = isSelected
@@ -432,6 +440,9 @@ function GraphEdgeComponent({
     const control2Y = targetY - loopOffsetY;
     edgePath = `M ${sourceX} ${sourceY}
       C ${control1X} ${control1Y} ${control2X} ${control2Y} ${targetX} ${targetY}`;
+    // The point of a cubic at its middle.
+    labelX = (sourceX + 3 * control1X + 3 * control2X + targetX) / 8;
+    labelY = (sourceY + 3 * control1Y + 3 * control2Y + targetY) / 8;
   } else {
     const entryOffset = 12;
     const targetDir = (() => {
@@ -449,7 +460,7 @@ function GraphEdgeComponent({
     })();
     const preTargetX = targetX + targetDir.x * entryOffset;
     const preTargetY = targetY + targetDir.y * entryOffset;
-    const [curvePath] = getBezierPath({
+    const [curvePath, curveX, curveY] = getBezierPath({
       sourceX,
       sourceY,
       sourcePosition,
@@ -458,7 +469,10 @@ function GraphEdgeComponent({
       targetPosition,
     });
     edgePath = `${curvePath} L ${targetX},${targetY}`;
+    labelX = curveX;
+    labelY = curveY;
   }
+  const label = data?.drawing?.label ?? null;
 
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
@@ -541,6 +555,18 @@ function GraphEdgeComponent({
             style={edgeStyle}
           />
           <path d={edgePath} className="graph-edge-hit" />
+          {label && (
+            <text
+              x={labelX}
+              y={labelY}
+              className="graph-edge-label"
+              data-testid={`graph-edge-label-${id}`}
+              textAnchor="middle"
+              dominantBaseline="central"
+            >
+              {label}
+            </text>
+          )}
         </g>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
@@ -559,6 +585,70 @@ function GraphEdgeComponent({
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
+  );
+}
+
+/** One line of the legend: the line as the graph draws it, and its words. */
+function LegendLine({ line }: { line: EdgeLine }) {
+  const look = EDGE_LINE_STYLES[line];
+  return (
+    <svg width="30" height="8" viewBox="0 0 38 10" aria-hidden="true">
+      <line
+        x1="1"
+        y1="5"
+        x2="28"
+        y2="5"
+        stroke={look.stroke}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={look.dash}
+      />
+      {look.arrow === 'closed' ? (
+        <polygon points="27,1 36,5 27,9" fill={look.stroke} />
+      ) : (
+        <polyline
+          points="28,1 36,5 28,9"
+          fill="none"
+          stroke={look.stroke}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
+}
+
+/**
+ * What the lines of this graph mean, in the report's words.  Shown only when
+ * some edge states something: a graph of an index that states nothing is
+ * drawn as it always was, legend and all.
+ */
+function GraphLegend({
+  lines,
+  contains,
+}: {
+  lines: Array<{ line: EdgeLine; text: string }>;
+  contains: boolean;
+}) {
+  if (lines.length === 0) {
+    return null;
+  }
+  return (
+    <div className="graph-legend" data-testid="graph-legend">
+      {lines.map((entry) => (
+        <div key={entry.line} className="graph-legend-row" data-testid={`graph-legend-${entry.line}`}>
+          <LegendLine line={entry.line} />
+          <span>{entry.text}</span>
+        </div>
+      ))}
+      {contains && (
+        <div className="graph-legend-row" data-testid="graph-legend-contains">
+          <span className="graph-legend-box" aria-hidden="true" />
+          <span>▸ contains: a box inside a box</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -797,6 +887,11 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
     [forwardPaneEventToGroup],
   );
 
+  const legendLines = useMemo(
+    () => edgeLegend(edges.map((edge) => unionStatements(edge.data?.edges ?? []))),
+    [edges],
+  );
+
   const shouldExposeMetadata = process.env.NODE_ENV !== 'production';
   const shouldOnlyRenderVisibleElements =
     typeof navigator === 'undefined' ? true : !navigator.webdriver;
@@ -853,6 +948,7 @@ export const GraphViewer = forwardRef<GraphViewerHandle, GraphProps>(function Gr
               <Background gap={20} color="var(--graph-grid-color)" />
             </ReactFlow>
         </MenuContext.Provider>
+        <GraphLegend lines={legendLines} contains={mergedGraph.has_edges.length > 0} />
       </div>
     </div>
   );

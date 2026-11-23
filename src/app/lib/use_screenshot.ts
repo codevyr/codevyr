@@ -199,9 +199,33 @@ function buildGraphSvg(
       markerRef = ` marker-end="url(#${markerId})"`;
     }
 
+    // The line's pattern is part of what the edge says (lib/edge_kinds.ts).
+    const dash = pathStyle.strokeDasharray;
+    const dashAttr = dash && dash !== 'none'
+      ? ` stroke-dasharray="${escapeXml(dash)}" stroke-linecap="${escapeXml(pathStyle.strokeLinecap || 'butt')}"`
+      : '';
+
     edgePaths.push(
       `<path d="${escapeXml(d)}" fill="none" stroke="${stroke}" ` +
-      `stroke-width="${strokeWidth}"${markerRef}/>`,
+      `stroke-width="${strokeWidth}"${dashAttr}${markerRef}/>`,
+    );
+  }
+
+  // The words written on the edges.
+  const labelEls = Array.from(flowEl.querySelectorAll('.graph-edge-label'));
+  for (const labelEl of labelEls) {
+    const x = labelEl.getAttribute('x');
+    const y = labelEl.getAttribute('y');
+    const text = labelEl.textContent;
+    if (!x || !y || !text) continue;
+    const labelStyle = getComputedStyle(labelEl as Element);
+    const fontSize = parseFloat(labelStyle.fontSize) || 11;
+    const fill = resolveColor(labelStyle.fill, '#475569');
+    edgePaths.push(
+      `<text x="${escapeXml(x)}" y="${escapeXml(y)}" text-anchor="middle" dominant-baseline="central" ` +
+      `font-family="system-ui, -apple-system, sans-serif" font-size="${fontSize}" ` +
+      `fill="${fill}" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" ` +
+      `paint-order="stroke">${escapeXml(text)}</text>`,
     );
   }
 

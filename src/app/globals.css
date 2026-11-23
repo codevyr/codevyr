@@ -40,6 +40,12 @@
   --background-end-rgb: 255, 255, 255;
   --graph-edge-color: #9dbaea;
   --graph-edge-color-selected: color-mix(in srgb, var(--graph-edge-color) 70%, #000);
+  /* What an edge states (lib/edge_kinds.ts): a call, a use that is not a
+     call, a relation no token spells.  The unstated edge keeps the colour
+     above. */
+  --graph-edge-call-color: #4f7fd6;
+  --graph-edge-use-color: #7a8699;
+  --graph-edge-relation-color: #9a6fd0;
   --graph-grid-color: #d4d8e1;
 }
 /* 
@@ -234,6 +240,68 @@ body {
   stroke: transparent;
   stroke-width: 16;
   pointer-events: stroke;
+}
+
+/* The words of an edge, written on it.  A white halo keeps them readable
+   where they cross the line. */
+.graph-edge-label {
+  font-size: 11px;
+  fill: #475569;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  pointer-events: none;
+  user-select: none;
+}
+
+.graph-edge-selected .graph-edge-label {
+  fill: #0f172a;
+  font-weight: 600;
+}
+
+/* One row along the bottom edge, wrapping where the pane is narrow, so it
+   takes as little of the graph as it can. */
+.graph-legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  /* Room on the right for the pane's own corner mark. */
+  max-width: calc(100% - 96px);
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #475569;
+  pointer-events: none;
+}
+
+.graph-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.graph-legend-box {
+  display: inline-block;
+  width: 24px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 1px dashed #93c5fd;
+  border-radius: 2px;
+  background: rgba(219, 234, 254, 0.5);
+}
+
+.edge-hover-does {
+  font-size: 0.8rem;
+  color: #475569;
 }
 
 /*

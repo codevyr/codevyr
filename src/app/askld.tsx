@@ -213,6 +213,8 @@ export interface EdgeOccurrenceRowJson {
   project_id: string | null;
   start_offset: number;
   end_offset: number;
+  /** What THIS call site does to the target; absent when nothing is stated. */
+  kinds?: string[];
 }
 
 export interface EdgeOccurrencesResponse {

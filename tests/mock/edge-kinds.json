@@ -1,0 +1,580 @@
+{
+ "captured_from": "three kernel translation units (drivers/char/ipmi/bt-bmc.c, kernel/module/main.c, drivers/base/platform.c) indexed by askl-clang-indexer d398e01 and served by askld 45b5482",
+ "query": "\"platform_probe\" \"__platform_driver_probe\" { field(\"platform_driver.probe\") { func } }\n\"platform_probe\" { func }\n\"platform_probe\" { macro(\"to_platform_driver\") type(\"platform_driver\") }",
+ "skeleton": {
+  "nodes": [
+   {
+    "id": "399432017796",
+    "symbol_ids": [
+     "399432017796"
+    ],
+    "label": "bt_bmc_probe",
+    "symbol_type": "Function",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 117,
+      "end": 122,
+      "text": "func "
+     }
+    ]
+   },
+   {
+    "id": "399432007371",
+    "symbol_ids": [
+     "399432007371"
+    ],
+    "label": "__platform_driver_probe",
+    "symbol_type": "Function",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 39,
+      "end": 82,
+      "text": "\"platform_probe\" \"__platform_driver_probe\" "
+     }
+    ]
+   },
+   {
+    "id": "399432011208",
+    "symbol_ids": [
+     "399432011208"
+    ],
+    "label": "dev_pm_domain_attach",
+    "symbol_type": "Function",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 145,
+      "end": 150,
+      "text": "func "
+     }
+    ]
+   },
+   {
+    "id": "399432007359",
+    "symbol_ids": [
+     "399432007359"
+    ],
+    "label": "platform_driver",
+    "symbol_type": "Type",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 171,
+      "end": 223,
+      "text": "macro(\"to_platform_driver\") type(\"platform_driver\") "
+     }
+    ]
+   },
+   {
+    "id": "399432017281",
+    "symbol_ids": [
+     "399432017281"
+    ],
+    "label": "platform_probe",
+    "symbol_type": "Function",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 39,
+      "end": 82,
+      "text": "\"platform_probe\" \"__platform_driver_probe\" "
+     },
+     {
+      "start": 126,
+      "end": 143,
+      "text": "\"platform_probe\" "
+     },
+     {
+      "start": 152,
+      "end": 169,
+      "text": "\"platform_probe\" "
+     }
+    ]
+   },
+   {
+    "id": "399432017257",
+    "symbol_ids": [
+     "399432017257"
+    ],
+    "label": "platform_probe_fail",
+    "symbol_type": "Function",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 117,
+      "end": 122,
+      "text": "func "
+     },
+     {
+      "start": 145,
+      "end": 150,
+      "text": "func "
+     }
+    ]
+   },
+   {
+    "id": "399431986913",
+    "symbol_ids": [
+     "399431986913"
+    ],
+    "label": "to_platform_driver",
+    "symbol_type": "Macro",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 171,
+      "end": 223,
+      "text": "macro(\"to_platform_driver\") type(\"platform_driver\") "
+     }
+    ]
+   },
+   {
+    "id": "399432016173",
+    "symbol_ids": [
+     "399432016173"
+    ],
+    "label": "of_clk_set_defaults",
+    "symbol_type": "Function",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": null,
+    "query_statements": [
+     {
+      "start": 145,
+      "end": 150,
+      "text": "func "
+     }
+    ]
+   },
+   {
+    "id": "399432007360",
+    "symbol_ids": [
+     "399432007360"
+    ],
+    "label": "platform_driver.probe",
+    "symbol_type": "Field",
+    "folded": false,
+    "is_directory": false,
+    "instance_count": 1,
+    "parent_symbol": "399432007359",
+    "query_statements": [
+     {
+      "start": 84,
+      "end": 115,
+      "text": "field(\"platform_driver.probe\") "
+     }
+    ]
+   }
+  ],
+  "edges": [
+   {
+    "from": "399431986913",
+    "to": "399432007359",
+    "from_symbol": "399431986913",
+    "to_symbol": "399432007359",
+    "occurrence_count": 1
+   },
+   {
+    "from": "399432007360",
+    "to": "399432017257",
+    "from_symbol": "399432007360",
+    "to_symbol": "399432017257",
+    "occurrence_count": 1,
+    "kinds": [
+     "holds"
+    ],
+    "refers": false
+   },
+   {
+    "from": "399432007360",
+    "to": "399432017796",
+    "from_symbol": "399432007360",
+    "to_symbol": "399432017796",
+    "occurrence_count": 1,
+    "kinds": [
+     "holds"
+    ],
+    "refers": false
+   },
+   {
+    "from": "399432007371",
+    "to": "399432007359",
+    "from_symbol": "399432007371",
+    "to_symbol": "399432007359",
+    "occurrence_count": 1
+   },
+   {
+    "from": "399432007371",
+    "to": "399432007360",
+    "from_symbol": "399432007371",
+    "to_symbol": "399432007360",
+    "occurrence_count": 2,
+    "kinds": [
+     "writes"
+    ]
+   },
+   {
+    "from": "399432007371",
+    "to": "399432017257",
+    "from_symbol": "399432007371",
+    "to_symbol": "399432017257",
+    "occurrence_count": 1,
+    "kinds": [
+     "takes"
+    ]
+   },
+   {
+    "from": "399432017281",
+    "to": "399431986913",
+    "from_symbol": "399432017281",
+    "to_symbol": "399431986913",
+    "occurrence_count": 1
+   },
+   {
+    "from": "399432017281",
+    "to": "399432007359",
+    "from_symbol": "399432017281",
+    "to_symbol": "399432007359",
+    "occurrence_count": 1
+   },
+   {
+    "from": "399432017281",
+    "to": "399432007360",
+    "from_symbol": "399432017281",
+    "to_symbol": "399432007360",
+    "occurrence_count": 3,
+    "kinds": [
+     "calls",
+     "reads"
+    ]
+   },
+   {
+    "from": "399432017281",
+    "to": "399432011208",
+    "from_symbol": "399432017281",
+    "to_symbol": "399432011208",
+    "occurrence_count": 1,
+    "kinds": [
+     "calls"
+    ]
+   },
+   {
+    "from": "399432017281",
+    "to": "399432016173",
+    "from_symbol": "399432017281",
+    "to_symbol": "399432016173",
+    "occurrence_count": 1,
+    "kinds": [
+     "calls"
+    ]
+   },
+   {
+    "from": "399432017281",
+    "to": "399432017257",
+    "from_symbol": "399432017281",
+    "to_symbol": "399432017257",
+    "occurrence_count": 1,
+    "kinds": [
+     "takes"
+    ]
+   }
+  ],
+  "has_edges": [
+   {
+    "parent": "399432007359",
+    "child": "399432007360"
+   }
+  ],
+  "warnings": [
+   {
+    "message": "`func` passed over 1 slot that `\"platform_probe\"` calls through: `platform_driver.probe`; follow it: `\"platform_probe\" calls { field holds { func } }`",
+    "location": {
+     "Span": [
+      145,
+      150
+     ]
+    },
+    "line_col": {
+     "Span": [
+      [
+       3,
+       20
+      ],
+      [
+       3,
+       25
+      ]
+     ]
+    },
+    "path": null,
+    "line": "\"platform_probe\" { func }"
+   }
+  ],
+  "truncated": false,
+  "total_symbols": 9,
+  "edges_truncated": []
+ },
+ "occurrences": {
+  "399431986913-399432007359": {
+   "rows": [
+    {
+     "ref_id": "249366146",
+     "from_instance_id": "128641588",
+     "object_id": "1549554",
+     "path": "/linux/include/linux/platform_device.h",
+     "project_id": "93",
+     "start_offset": 8362,
+     "end_offset": 8377
+    }
+   ],
+   "next": null
+  },
+  "399432007360-399432017257": {
+   "rows": [
+    {
+     "ref_id": "249366159",
+     "from_instance_id": "128641579",
+     "object_id": "1549554",
+     "path": "/linux/include/linux/platform_device.h",
+     "project_id": "93",
+     "start_offset": 7590,
+     "end_offset": 7628,
+     "kinds": [
+      "holds"
+     ]
+    }
+   ],
+   "next": null
+  },
+  "399432007360-399432017796": {
+   "rows": [
+    {
+     "ref_id": "249366168",
+     "from_instance_id": "128641579",
+     "object_id": "1549554",
+     "path": "/linux/include/linux/platform_device.h",
+     "project_id": "93",
+     "start_offset": 7590,
+     "end_offset": 7628,
+     "kinds": [
+      "holds"
+     ]
+    }
+   ],
+   "next": null
+  },
+  "399432007371-399432007359": {
+   "rows": [
+    {
+     "ref_id": "249361435",
+     "from_instance_id": "128622938",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 24831,
+     "end_offset": 24846
+    },
+    {
+     "ref_id": "249366118",
+     "from_instance_id": "128641593",
+     "object_id": "1549554",
+     "path": "/linux/include/linux/platform_device.h",
+     "project_id": "93",
+     "start_offset": 8984,
+     "end_offset": 8999
+    }
+   ],
+   "next": null
+  },
+  "399432007371-399432007360": {
+   "rows": [
+    {
+     "ref_id": "249361451",
+     "from_instance_id": "128622938",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 25626,
+     "end_offset": 25631,
+     "kinds": [
+      "writes"
+     ]
+    },
+    {
+     "ref_id": "249361453",
+     "from_instance_id": "128622938",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 25780,
+     "end_offset": 25785,
+     "kinds": [
+      "writes"
+     ]
+    }
+   ],
+   "next": null
+  },
+  "399432007371-399432017257": {
+   "rows": [
+    {
+     "ref_id": "249361454",
+     "from_instance_id": "128622938",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 25788,
+     "end_offset": 25807,
+     "kinds": [
+      "takes"
+     ]
+    }
+   ],
+   "next": null
+  },
+  "399432017281-399431986913": {
+   "rows": [
+    {
+     "ref_id": "249361026",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 35663,
+     "end_offset": 35681
+    }
+   ],
+   "next": null
+  },
+  "399432017281-399432007359": {
+   "rows": [
+    {
+     "ref_id": "249361622",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 35640,
+     "end_offset": 35655
+    }
+   ],
+   "next": null
+  },
+  "399432017281-399432007360": {
+   "rows": [
+    {
+     "ref_id": "249361625",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 36135,
+     "end_offset": 36140,
+     "kinds": [
+      "reads"
+     ]
+    },
+    {
+     "ref_id": "249361631",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 36389,
+     "end_offset": 36394,
+     "kinds": [
+      "reads"
+     ]
+    },
+    {
+     "ref_id": "249361632",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 36409,
+     "end_offset": 36414,
+     "kinds": [
+      "calls"
+     ]
+    }
+   ],
+   "next": null
+  },
+  "399432017281-399432011208": {
+   "rows": [
+    {
+     "ref_id": "249361630",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 36270,
+     "end_offset": 36290,
+     "kinds": [
+      "calls"
+     ]
+    }
+   ],
+   "next": null
+  },
+  "399432017281-399432016173": {
+   "rows": [
+    {
+     "ref_id": "249361627",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 36191,
+     "end_offset": 36210,
+     "kinds": [
+      "calls"
+     ]
+    }
+   ],
+   "next": null
+  },
+  "399432017281-399432017257": {
+   "rows": [
+    {
+     "ref_id": "249361626",
+     "from_instance_id": "128622978",
+     "object_id": "1549457",
+     "path": "/linux/drivers/base/platform.c",
+     "project_id": "93",
+     "start_offset": 36144,
+     "end_offset": 36163,
+     "kinds": [
+      "takes"
+     ]
+    }
+   ],
+   "next": null
+  }
+ }
+}

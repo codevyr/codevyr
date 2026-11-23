@@ -26,6 +26,7 @@ import {
   resizeSingleParent,
 } from './graph_layout';
 import { setupGraphTestApis } from '../testing/graph_test_utils';
+import { EDGE_LINE_STYLES, edgeDrawing, unionStatements, type EdgeDrawing } from './edge_kinds';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -48,6 +49,8 @@ export type GraphNodeData = {
 
 export type GraphEdgeData = {
   edges: Array<GraphEdge>;
+  /** How the edge is drawn, from what its pairs state (`lib/edge_kinds.ts`). */
+  drawing: EdgeDrawing;
   graph: Graph;
   fileContents: Map<string, string>;
   ensureFileContent: (objectId: string) => void;
@@ -469,6 +472,10 @@ export function useGraphLayout({
     filteredEdges.forEach((edgeArray, edgeId) => {
       const edge = edgeArray[0]!;
       const isSelfLoop = edge.from === edge.to;
+      // Nodes merged by name merge their edges: the drawn edge states what
+      // any of its pairs does.
+      const drawing = edgeDrawing(unionStatements(edgeArray));
+      const line = EDGE_LINE_STYLES[drawing.line];
       nextEdges.push({
         id: edgeId,
         type: 'graphEdge',
@@ -477,17 +484,22 @@ export function useGraphLayout({
         sourceHandle: isSelfLoop ? 'source-right' : 'source-bottom',
         targetHandle: isSelfLoop ? 'target-top-right' : 'target-top',
         markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: 'var(--graph-edge-color)',
+          type: line.arrow === 'closed' ? MarkerType.ArrowClosed : MarkerType.Arrow,
+          color: line.stroke,
           width: 10,
           height: 10,
           strokeWidth: 1,
           markerUnits: 'strokeWidth',
           orient: 'auto',
         },
-        style: { stroke: 'var(--graph-edge-color)', strokeWidth: 3 },
+        style: {
+          stroke: line.stroke,
+          strokeWidth: 3,
+          ...(line.dash ? { strokeDasharray: line.dash, strokeLinecap: 'round' as const } : {}),
+        },
         data: {
           edges: edgeArray,
+          drawing,
           graph: mergedGraph,
           fileContents,
           ensureFileContent,
